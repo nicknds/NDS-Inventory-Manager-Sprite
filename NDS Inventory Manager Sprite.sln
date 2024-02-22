@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34330.188
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NDS Inventory Manager Sprite", "NDS Inventory Manager Sprite\NDS Inventory Manager Sprite.csproj", "{AC2B771F-FDCA-4BEC-9AE7-F374FC8C09E2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AC2B771F-FDCA-4BEC-9AE7-F374FC8C09E2}.Debug|x64.ActiveCfg = Debug|x64
+		{AC2B771F-FDCA-4BEC-9AE7-F374FC8C09E2}.Debug|x64.Build.0 = Debug|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {AF8533A2-1D43-491A-BE4B-E6327C1BD854}
+	EndGlobalSection
+EndGlobal
