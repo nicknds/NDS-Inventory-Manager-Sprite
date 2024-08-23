@@ -2,19 +2,14 @@
 using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using VRage;
 using VRage.Game;
 using VRage.Game.GUI.TextPanel;
 using VRage.Game.ModAPI.Ingame;
 using VRage.Network;
-using VRage.ObjectBuilders;
-using VRage.Scripting;
 using VRageMath;
-using static IngameScript.Program;
 
 namespace IngameScript
 {
@@ -22,25 +17,69 @@ namespace IngameScript
     {
         #region mdk preserve
         double OverheatAverage = 0.085, ActionLimiterMultiplier = 0.005, RunTimeLimiter = 0.075;
-        int EchoDelay = 10;
+        int EchoDelay = 6;
         bool UseVanillaLibrary = true;
         #endregion
 
 
         #region Variables
 
+        #region Short Links
+
+        const string trueString = "true", falseString = "false";
+        const bool shortTrue = true, shortFalse = false;
 
         IMyGridTerminalSystem gtSystem;
 
-        SortedDictionary<string, SortedList<string, string>> settingDictionaryStrings = new SortedDictionary<string, SortedList<string, string>>
+        const MyAssemblerMode assemblyMode = MyAssemblerMode.Assembly, disassemblyMode = MyAssemblerMode.Disassembly;
+
+        const FunctionState stateActive = FunctionState.Active, stateContinue = FunctionState.Continue, stateUninitialized = FunctionState.Uninitialized, stateError = FunctionState.Error;
+
+        const TextAlignment leftAlignment = TextAlignment.LEFT, centerAlignment = TextAlignment.CENTER;
+
+        bool PauseTickRun { get { return UnavailableActions(); } }
+        bool IsStateRunning { get { return StateRunning(selfContainedIdentifier); } }
+        bool RunStateManager { get { return StateManager(selfContainedIdentifier); } }
+
+        double overheatAverage { get { return OverheatAverage; } set { OverheatAverage = value; } }
+        double actionLimiterMultiplier { get { return ActionLimiterMultiplier; } set { ActionLimiterMultiplier = value; } }
+        double runTimeLimiter { get { return RunTimeLimiter; } set { RunTimeLimiter = value; } }
+
+        int echoDelay { get { return EchoDelay; } }
+
+        static List<long> NewLongList { get { return new List<long>(); } }
+        static List<MyInventoryItem> NewItemList { get { return new List<MyInventoryItem>(); } }
+        static List<string> NewStringList { get { return new List<string>(); } }
+        static List<MyProductionItem> NewProductionList { get { return new List<MyProductionItem>(); } }
+        static ItemCollection NewCollection { get { return new ItemCollection(); } }
+        static StringBuilder NewBuilder { get { return new StringBuilder(); } }
+        static SortedList<long, double> NewSortedListLongDouble { get { return new SortedList<long, double>(); } }
+        static HashSet<long> NewHashSetLong { get { return new HashSet<long>(); } }
+        static HashSet<string> NewHashSetString { get { return new HashSet<string>(); } }
+        static DateTime Now { get { return DateTime.Now; } }
+        List<ItemDefinition> GetAllItems
+        {
+            get
+            {
+                if (itemListAllItems.Count > 0) return itemListAllItems;
+                itemListMain.Values.ToList().ForEach(b => itemListAllItems.AddRange(b.Values));
+                return itemListAllItems;
+            }
+        }
+
+        #endregion
+
+        #region Script Settings
+
+        SortedList<string, SortedList<string, string>> settingDictionaryStrings = new SortedList<string, SortedList<string, string>>
 {
-    { "A. Global Tags", new SortedList<string, string>
+    { "1/2 Global Tags", new SortedList<string, string>
         {
             { setKeyExclusion, "exclude" }, { setKeyIncludeGrid, "includeGrid" }, { setKeyCrossGrid, "crossGrid" },
             { setKeyPanel, "[nds]" }, { setKeyGlobalFilter, "" }, { setKeyExcludeGrid, "excludeGrid" }, { setKeyOptionBlockFilter, "" }
         }
     },
-    { "B. Default Categories", new SortedList<string, string>
+    { "2/2 Default Categories", new SortedList<string, string>
         {
             { setKeyIngot, "ingot" }, { setKeyOre, "ore" }, { setKeyComponent, "component" },
             { setKeyTool, "tool" }, { setKeyAmmo, "ammo" }
@@ -48,14 +87,9 @@ namespace IngameScript
     }
 };
 
-        SortedList<string, string>
-            stateErrorCodes = NewSortedListStringString,
-            modItemDictionary = NewSortedListStringString,
-            oreKeyedItemDictionary = NewSortedListStringString;
-
-        SortedDictionary<string, SortedList<string, double>> settingDictionaryDoubles = new SortedDictionary<string, SortedList<string, double>>
+        SortedList<string, SortedList<string, double>> settingDictionaryDoubles = new SortedList<string, SortedList<string, double>>
 {
-    { "A. Delays", new SortedList<string, double>
+    { "1/4 Delays", new SortedList<string, double>
         {
             { setKeyDelayScan, 10 }, { setKeyDelayProcessLimits, 20 }, { setKeyDelaySorting, 7.5 },
             { setKeyDelayDistribution, 20 }, { setKeyDelaySpreading, 15 }, { setKeyDelayQueueAssembly, 5 },
@@ -66,19 +100,19 @@ namespace IngameScript
             { setKeyDelaySortRefinery, 6 }, { setKeyDelayOrderCargo, 15 }
         }
     },
-    { "B. Performance", new SortedList<string, double>
+    { "2/4 Performance", new SortedList<string, double>
         {
             { setKeyActionLimiterMultiplier, 0.35 }, { setKeyRunTimeLimiter, 0.45 },
             { setKeyOverheatAverage, 0.6 }
         }
     },
-    { "C. Defaults", new SortedList<string, double>
+    { "3/4 Defaults", new SortedList<string, double>
         {
             { setKeyIcePerGenerator, 5000 }, { setKeyFuelPerReactor, 25 }, { setKeyAmmoPerGun, 40 },
             { setKeyCanvasPerParachute, 4 }
         }
     },
-    { "D. Adjustments", new SortedList<string, double>
+    { "4/4 Adjustments", new SortedList<string, double>
         {
             { setKeyBalanceRange, 0.05 }, { setKeyAllowedExcessPercent, 0.1 }, { setKeyDynamicQuotaPercentageIncrement, 0.05 },
             { setKeyDynamicuotaMaxMultiplier, 2.5 }, { setKeyDynamicQuotaNegativeThreshold, 3 }, { setKeyDynamicQuotaPositiveThreshold, 9 }
@@ -88,14 +122,14 @@ namespace IngameScript
 
         SortedList<string, SortedList<string, bool>> settingDictionaryBools = new SortedList<string, SortedList<string, bool>>
 {
-    { "A. Basic", new SortedList<string, bool>
+    { "1/3 Basic", new SortedList<string, bool>
         {
             { setKeyToggleCountItems, true }, { setKeyToggleCountBlueprints, true }, { setKeyToggleSortItems, true },
             { setKeyToggleQueueAssembly, true}, { setKeyToggleQueueDisassembly, true }, { setKeyToggleDistribution, true },
             { setKeyToggleAutoLoadSettings, true }
         }
     },
-    { "B. Advanced", new SortedList<string, bool>
+    { "2/3 Advanced", new SortedList<string, bool>
         {
             { setKeyToggleProcessLimits, true }, { setKeyToggleSpreadRefieries, true },
             { setKeyToggleSpreadReactors, true }, { setKeyToggleSpreadGuns, true }, { setKeyToggleSpreadGasGenerators, true },
@@ -106,7 +140,7 @@ namespace IngameScript
             { setKeyToggleOrderCargo, true }
         }
     },
-    { "C. Settings", new SortedList<string, bool>
+    { "3/3 Settings", new SortedList<string, bool>
         {
             { setKeyAutoConveyorRefineries, false }, { setKeyAutoConveyorReactors, false }, { setKeyAutoConveyorGasGenerators, false },
             { setKeyAutoConveyorGuns, false }, { setKeyToggleDynamicQuota, true }, { setKeyDynamicQuotaIncreaseWhenLow, true },
@@ -121,7 +155,7 @@ namespace IngameScript
     { setKeySurvivalKitQueuedIngots, 0 }, { setKeyAutoMergeLengthTolerance, 6 },
     { setKeyPrioritizedOreCount, 0 } };
 
-        static SortedList<string, List<string>> settingsListsStrings = new SortedList<string, List<string>>()
+        SortedList<string, List<string>> settingsListsStrings = new SortedList<string, List<string>>()
 {
     { setKeyExcludedDefinitions, new List<string>() { "LargeBlockBed", "LargeBlockLockerRoom",
         "LargeBlockLockerRoomCorner", "LargeBlockLockers", "PassengerSeatSmall", "PassengerSeatLarge", "LargeInteriorTurret" } },
@@ -132,15 +166,49 @@ namespace IngameScript
     }
 };
 
-        SortedList<string, ItemCollection> customItemGroups = new SortedList<string, ItemCollection>();
+        SortedList<string, SortedList<string, ItemDefinition>> itemListMain = new SortedList<string, SortedList<string, ItemDefinition>>();
 
-        static SortedList<string, SortedList<string, ItemDefinition>> itemListMain = new SortedList<string, SortedList<string, ItemDefinition>>();
+        #endregion
+
+        #region Lists
 
         SortedList<string, List<long>> indexesStorageLists = new SortedList<string, List<long>>();
 
         SortedList<string, List<PotentialAssembler>> potentialAssemblerList = new SortedList<string, List<PotentialAssembler>>();
 
-        static Dictionary<long, BlockDefinition> managedBlocks = new Dictionary<long, BlockDefinition>(1500);
+        SortedList<string, string>
+            modItemDictionary = new SortedList<string, string>(),
+            oreKeyedItemDictionary = new SortedList<string, string>();
+
+        SortedList<FunctionIdentifier, string> stateErrorCodes = new SortedList<FunctionIdentifier, string>();
+
+        SortedList<string, List<long>> typedIndexes = new SortedList<string, List<long>>
+        {
+            { setKeyIndexAssemblers, NewLongList },
+            { setKeyIndexGasGenerators, NewLongList },
+            { setKeyIndexGravelSifters, NewLongList },
+            { setKeyIndexGun, NewLongList },
+            { setKeyIndexHydrogenTank, NewLongList },
+            { setKeyIndexOxygenTank, NewLongList },
+            { setKeyIndexParachute, NewLongList },
+            { setKeyIndexReactor, NewLongList },
+            { setKeyIndexRefinery, NewLongList },
+            { setKeyIndexStorage, NewLongList },
+            { setKeyIndexSortable, NewLongList },
+            { setKeyIndexLoadout, NewLongList },
+            { setKeyIndexLogic, NewLongList },
+            { setKeyIndexPanel, NewLongList},
+            { setKeyIndexInventory, NewLongList },
+            { setKeyIndexLimit, NewLongList }
+        };
+
+        SortedList<FunctionIdentifier, TimeSpan> delaySpans = new SortedList<FunctionIdentifier, TimeSpan>();
+
+        SortedList<FunctionIdentifier, StateRecord> stateRecords = new SortedList<FunctionIdentifier, StateRecord>();
+
+        SortedList<long, double> tempDistributeItemIndexes;
+
+        Dictionary<long, BlockDefinition> managedBlocks = new Dictionary<long, BlockDefinition>(1500);
 
         Dictionary<string, Blueprint>
             blueprintList = new Dictionary<string, Blueprint>();
@@ -155,8 +223,6 @@ namespace IngameScript
                         assemblyNeededByMachine = NewHashSetString,
                         clearedSettingLists = NewHashSetString;
 
-        HashSet<IMyCubeGrid> gridList = new HashSet<IMyCubeGrid>(), excludedGridList = new HashSet<IMyCubeGrid>();
-
         HashSet<long> uniqueIndexSet = NewHashSetLong,
                       clonedEntityIDs = NewHashSetLong,
                       excludedIDs = NewHashSetLong,
@@ -164,39 +230,27 @@ namespace IngameScript
                       includedIDs = NewHashSetLong,
                       setRemoveIDs = NewHashSetLong;
 
+        HashSet<IMyCubeGrid> gridList = new HashSet<IMyCubeGrid>(), excludedGridList = new HashSet<IMyCubeGrid>();
+
+        List<LogicComparison> tempLogicComparisons;
+
         List<OutputObject> outputList = new List<OutputObject>(), outputErrorList = new List<OutputObject>();
 
-        static SortedList<string, List<long>> typedIndexes = new SortedList<string, List<long>>
-{
-    { setKeyIndexAssemblers, NewLongList },
-    { setKeyIndexGasGenerators, NewLongList },
-    { setKeyIndexGravelSifters, NewLongList },
-    { setKeyIndexGun, NewLongList },
-    { setKeyIndexHydrogenTank, NewLongList },
-    { setKeyIndexOxygenTank, NewLongList },
-    { setKeyIndexParachute, NewLongList },
-    { setKeyIndexReactor, NewLongList },
-    { setKeyIndexRefinery, NewLongList },
-    { setKeyIndexStorage, NewLongList },
-    { setKeyIndexSortable, NewLongList },
-    { setKeyIndexLoadout, NewLongList },
-    { setKeyIndexLogic, NewLongList },
-    { setKeyIndexPanel, NewLongList},
-    { setKeyIndexInventory, NewLongList },
-    { setKeyIndexLimit, NewLongList }
-};
+        List<Blueprint> tempAddAssemblyNeededList;
 
         List<string>
             fullExclude = new List<string> { setKeySameGridOnly, setKeySurvivalKitAssembly },
             itemCategoryList = NewStringList, modBlueprintList = NewStringList,
-            logicSetsList = NewStringList, tagTempStringList = NewStringList,
+            tagTempStringList = NewStringList,
             processBlockStorageList = NewStringList, processBlockOptionList = NewStringList;
 
-        List<long> tempBalanceItemIndexes;
+        List<long>
+            tempBalanceItemIndexes, tempOrderByPriorityIndexes, tempDistributeBlueprintIndexes,
+            tempSortCargoListIndexes, tempCountItemsInListIndexes;
 
-        List<SortableObject> sortableListDelayHelp = NewSortableObjectList,
-                             sortableListMain = NewSortableObjectList,
-                             sortableListAlternate = NewSortableObjectList;
+        List<SortableObject> sortableListMain = new List<SortableObject>(),
+                             sortableListAlternate = new List<SortableObject>(),
+                             tempOrderInventoryList;
 
         List<IMyBlockGroup> groupList = new List<IMyBlockGroup>();
 
@@ -204,36 +258,75 @@ namespace IngameScript
 
         List<ItemDefinition> itemListAllItems = new List<ItemDefinition>();
 
-        ItemCollection itemCollectionProcessSetting, itemCollectionMain,
-                       itemCollectionAlternate, itemCollectionProcessTotalLoadout;
+        List<MyInventoryItem> countByListA = NewItemList, amountContainedListA = NewItemList, mainFunctionItemList = NewItemList, tempStorageItemList;
 
-        TimeSpan scanSpan = ZeroSpan, fillBottleSpan = ZeroSpan;
+        List<MyProductionItem> blueprintListMain = NewProductionList;
 
-        SortedList<string, TimeSpan> delaySpans = new SortedList<string, TimeSpan>();
+        #endregion
 
-        SortedList<string, StateRecord> stateRecords = new SortedList<string, StateRecord>();
+        #region Constants
 
-        SortedList<long, double> tempDistributeItemIndexes;
+        Color defPanelForegroundColor = new Color(0.7019608f, 0.9294118f, 1f, 1f);
 
-        DateTime tickStartTime = Now, lastActionClearTime = Now;
+        enum EchoMode
+        {
+            Main,
+            MergeMenu,
+            MergeHelp,
+        };
 
-        static string currentMajorFunction = "Idle";
+        public enum DisplayType
+        {
+            Detailed,
+            CompactAmount,
+            Standard,
+            CompactPercent
+        };
 
-        string
-            currentFunction = "Program",
-            scriptName = "NDS Inventory Manager",
-            settingBackup = "", mergeItem = "",
-            stoneOreToIngotBasicID = PositionPrefix("0010", "StoneOreToIngotBasic"),
-            lastString = "", presetPanelOptions, itemCategoryString, selfContainedIdentifier = "",
-            tempItemSetting;
+        public enum PanelItemSorting
+        {
+            Alphabetical,
+            AscendingAmount,
+            DescendingAmount,
+            AscendingPercent,
+            DescendingPercent
+        };
 
-        static string
-            crossGridKeyword, includeGridKeyword,
-            excludeGridKeyword, exclusionKeyword,
-            ingotKeyword, oreKeyword,
-            componentKeyword, ammoKeyword,
-            toolKeyword, globalFilterKeyword,
-            panelTag, optionBlockFilter;
+        public enum PanelType
+        {
+            Item,
+            Cargo,
+            Output,
+            Status,
+            Span,
+            None
+        };
+
+        public enum FunctionState
+        {
+            Active,
+            Continue,
+            Uninitialized,
+            Error
+        };
+
+        enum FunctionIdentifier
+        {
+            #region mdk preserve
+            Script, Main_Control, Main_Output, Main_Sprites, Processing_Block_Options, Status_Panel,
+            Measuring_Capacities, Output_Panel, Counting_Listed_Items, Distribution, Distributing_Item, Counting_Item_In_Inventory,
+            Processing_Limits, Sorting, Storing_Item, Counting_Blueprints, Counting_Items, Scanning,
+            Generating_Sprites, Listing_Items, Item_Panel, Order_Inventory, Processing_Tags, Transferring_Item,
+            Spreading_Items, Cargo_Panel, Distributing_Blueprint, Removing_Excess_Assembly, Generating_Block_Options, Setting_Block_Quotas,
+            Save, Queue_Assembly, Queue_Disassembly, Inserting_Blueprint, Process_Panel_Options, Removing_Blueprint,
+            Removing_Excess_Disassembly, Order_Blocks_By_Priority, Cargo_Priority_Loop, Sorting_Cargo_Priority, Sort_Blueprints, Spread_Blueprints,
+            Load, Loadouts, Sort_Refineries, Custom_Logic, Matching_Items, Process_Logic,
+            Checking_Idle_Assemblers, Find_Mod_Items, Process_Setting, Main_Panel, Assembly_Reserve, Processing_Item_Setting,
+            Order_Storage, Save_Dictionary, Idle
+            #endregion
+        };
+
+        #region Constant Strings
 
         const string
             componentType = "MyObjectBuilder_Component",
@@ -354,159 +447,121 @@ namespace IngameScript
             setKeyIndexLogic = "lgc",
             setKeyIndexPanel = "pnl",
             setKeyIndexInventory = "inv",
-            setKeyIndexLimit = "lmt";
+            setKeyIndexLimit = "lmt",
+            setKeyBlockToggles = "Toggles", //Block setting list categories
+            setKeyBlockInputToggles = "Input Toggles",
+            setKeyBlockOutputToggles = "Output Toggles",
+            setKeyBlockAssemblerToggles = "Assembler Toggles",
+            setKeyBlockStorageKey = "storage",
+            setKeyBlockAutoConveyorKey = "autoconveyor",
+            setKeyBlockAssemblyOnlyKey = "assemblyonly",
+            setKeyBlockDisassemblyOnlyKey = "disassemblyonly",
+            setKeyBlockKeepInputKey = "keepinput",
+            setKeyBlockKeepOutputKey = "keepoutput",
+            setKeyBlockRemoveInputKey = "removeinput",
+            setKeyBlockRemoveOutputKey = "removeoutput",
+            setKeyBlockNoIdleResetKey = "noidlereset",
+            setKeyBlockNoSortingKey = "nosorting",
+            setKeyBlockNoSpreadKey = "nospreading",
+            setKeyBlockNoCountKey = "nocounting",
+            setKeyBlockUniqueBlueprinteOnlyKey = "uniqueblueprintsonly",
+            setKeyBlockGunOverrideKey = "gunoverride";
 
-        const string trueString = "true", falseString = "false";
+        #endregion
 
-        const bool shortTrue = true, shortFalse = false;
+        #endregion
 
-        const MyAssemblerMode assemblyMode = MyAssemblerMode.Assembly, disassemblyMode = MyAssemblerMode.Disassembly;
+        #region Global
 
-        int echoTicks = 10, activeOres = 0, overheatTicks = 0,
-            currentErrorCount = 0, totalErrorCount = 0, checkTicks = 0, mergeLengthTolerance = 0, updateFrequency = 1,
-            outputLimit = 15, tempProcessPanelOptionSurfaceIndex, tempStorageInventoryIndex, tempStoragePriorityMax,
-            tempStorageIndexStart;
+        static TimeSpan scriptSpan = TimeSpan.Zero;
+
+        static string
+            crossGridKeyword, includeGridKeyword,
+            excludeGridKeyword, exclusionKeyword,
+            ingotKeyword, oreKeyword,
+            componentKeyword, ammoKeyword,
+            toolKeyword, globalFilterKeyword,
+            panelTag, optionBlockFilter, currentMajorFunction = "Idle";
+
+        static double scriptVersion = 5.27, torchAverage = 0, tickWeight = 0.005;
+
+        #endregion
+
+        #region Values
 
         bool
             booted = false, saving, loading, fillingBottles = false,
             reset = false, autoLoadSettings = true, correctScript = false, correctVersion = false,
             scanning = false, allowEcho = true,
-            prioritySystemActivated = false, errorFilter = false, useDynamicQuota, increaseDynamicQuotaWhenLow, update = false;
+            prioritySystemActivated = false, errorFilter = false, useDynamicQuota, increaseDynamicQuotaWhenLow, update = false,
+            tempMatchingItemAppend, tempMatchingItemAcceptZero, tempOrderByPriority, tempDistributeBlueprintCount,
+            tempInsertBlueprintCount, tempCollectionToBuilderIncludeAmount, tempGetTagsAcceptZero;
 
-        static readonly string[] functionList = new string[]
-        {
-            "Main", "Main Control", "Main Output", //0-2
-            "Main Sprites", "Processing Block Options", "Status Panel", //3-5
-            "Measuring Capacities", "Output Panel", "Counting Listed Items", //6-8
-            "Distribution", "Distributing Item", "Counting Item In Inventory", //9-11
-            "Processing Limits", "Sorting", "Storing Item", //12-14
-            "Counting Blueprints", "Counting Items", "Scanning", //15-17
-            "Generating Sprites", "Listing Items", "Item Panel", //18-20
-            "Filling Dictionary", "Processing Tags", "Transferring Item", //21-23
-            "Spreading Items", "Cargo Panel", "Distributing Blueprint", //24-26
-            "Removing Excess Assembly", "Generating Block Options", "Setting Block Quotas", //27-29
-            "Save", "Queue Assembly", "Queue Disassembly", // 30-32
-            "Inserting Blueprint", "Process Panel Options", "Removing Blueprint", // 33-35
-            "Removing Excess Disassembly", "Order Blocks By Priority", "Cargo Priority Loop", // 36-38
-            "Sorting Cargo Priority", "Sort Blueprints", "Spread Blueprints", // 39-41
-            "Load", "Loadouts", "Sort Refineries", // 42-44
-            "Custom Logic", "Matching Items", "Process Logic", // 45-47
-            "Checking Idle Assemblers", "Find Mod Items", "Process Setting", // 48-50
-            "Main Panel", "Assembly Reserve", "Processing Item Setting", // 51-53
-            "Order Storage", "Order Inventory" // 54-55
-        };
+        FunctionIdentifier selfContainedIdentifier, currentFunction = FunctionIdentifier.Idle;
 
-        int[] outputFunctions = new int[] { 2, 3, 5, 6, 7, 18, 20, 25, 51 };
+        MyAssemblerMode tempDistributeBlueprintMode, tempInsertBlueprintMode, tempRemoveBlueprintMode;
 
-        static double scriptVersion = 5.27, torchAverage = 0, tickWeight = 0.005;
+        EchoMode echoMode = EchoMode.Main;
+
+        int echoTicks = 10, activeOres = 0, overheatTicks = 0,
+            currentErrorCount = 0, totalErrorCount = 0, checkTicks = 0, mergeLengthTolerance = 0, updateFrequency = 1,
+            outputLimit = 15, tempStorageInventoryIndex, tempStoragePriorityMax,
+            tempStorageIndexStart, performanceIndex = 0;
 
         double transferredAmount = 0, countedAmount = 0,
             transferAmount, dynamicQuotaMultiplierIncrement, dynamicQuotaMaxMultiplier, dynamicQuotaPositiveThreshold,
             dynamicQuotaNegativeThreshold, balanceRange = 0.05,
             allowedExcessPercent = 0,
             delayResetIdleAssembler = 45,
-            scriptHealth = 100, tempTransferAmount, tempStorageMax, tempDistributeItemMax;
+            scriptHealth = 100, tempTransferAmount, tempStorageMax, tempDistributeItemMax,
+            tempDistributeBlueprintAmount, tempInsertBlueprintAmount, tempRemoveBlueprintAmount;
 
         long tempStorageBlockIndex;
 
-        Color defPanelForegroundColor = new Color(0.7019608f, 0.9294118f, 1f, 1f);
+        string
+            scriptName = "NDS Inventory Manager",
+            settingBackup = "", mergeItem = "",
+            stoneOreToIngotBasicID = PositionPrefix("0010", "StoneOreToIngotBasic"),
+            lastString = "", itemCategoryString,
+            tempItemSetting, tempScriptSetting,
+            tempMatchingItemCategory, tempMatchingItemName,
+            tempMatchingItemAmount, tempProcessLogicData,
+            tempCountItemsInListTypeID, tempCountItemsInListSubtypeID,
+            tempAmountContainedTypeID, tempAmountContainedSubtypeID,
+            tempGetTagsText;
 
-        SortedList<string, IEnumerator<FunctionState>> stateList = new SortedList<string, IEnumerator<FunctionState>>();
+        static string newLine;
 
-        const TextAlignment leftAlignment = TextAlignment.LEFT, centerAlignment = TextAlignment.CENTER;
+        TimeSpan fillBottleSpan = TimeSpan.Zero;
 
-        List<MyInventoryItem> countByListA, amountContainedListA, mainFunctionItemList, tempStorageItemList;
+        DateTime tickStartTime = Now, lastActionClearTime = Now, nextPerformanceTime = Now.AddSeconds(10);
 
-        List<MyProductionItem> blueprintListMain;
+        #endregion
 
-        MyInventoryItem tempTransferInventoryItem, tempDistributeItem;
-
-        BlockDefinition mainBlockDefinition, alternateBlockDefinition, storageDefinitionA, blockCheckDefinitionA, tempBlockOptionDefinition,
-                        tempDistributeItemBlockDefinition;
-
-        IMyInventory tempTransferOriginInventory;
-
-        EchoMode echoMode = EchoMode.Main;
-
-        enum EchoMode
-        {
-            Main,
-            MergeMenu,
-            Functions,
-            MergeHelp,
-            DelayHelp
-        };
-
-        public enum DisplayType
-        {
-            Detailed,
-            CompactAmount,
-            Standard,
-            CompactPercent
-        };
-
-        public enum PanelItemSorting
-        {
-            Alphabetical,
-            AscendingAmount,
-            DescendingAmount,
-            AscendingPercent,
-            DescendingPercent
-        };
-
-        public enum PanelType
-        {
-            Item,
-            Cargo,
-            Output,
-            Status,
-            Span,
-            None
-        };
-
-        enum FunctionState
-        {
-            Active,
-            Continue,
-            Complete
-        };
-
-        const FunctionState stateActive = FunctionState.Active, stateContinue = FunctionState.Continue, stateComplete = FunctionState.Complete;
-
-        bool PauseTickRun { get { return UnavailableActions(); } }
-        bool IsStateActive { get { return StateActive(selfContainedIdentifier); } }
-        bool IsStateRunning { get { return StateActive(selfContainedIdentifier, true); } }
-        bool RunStateManager { get { return StateManager(selfContainedIdentifier); } }
-        double overheatAverage { get { return OverheatAverage; } set { OverheatAverage = value; } }
-        double actionLimiterMultiplier { get { return ActionLimiterMultiplier; } set { ActionLimiterMultiplier = value; } }
-        double runTimeLimiter { get { return RunTimeLimiter; } set { RunTimeLimiter = value; } }
-        int echoDelay { get { return EchoDelay; } }
-        static List<long> NewLongList { get { return new List<long>(); } }
-        static List<SortableObject> NewSortableObjectList { get { return new List<SortableObject>(); } }
-        List<MyInventoryItem> NewItemList { get { return new List<MyInventoryItem>(); } }
-        static List<string> NewStringList { get { return new List<string>(); } }
-        static List<MyProductionItem> NewProductionList { get { return new List<MyProductionItem>(); } }
-        static ItemCollection NewCollection { get { return new ItemCollection(); } }
-        static StringBuilder NewBuilder { get { return new StringBuilder(); } }
-        static SortedList<long, double> NewSortedListLongDouble { get { return new SortedList<long, double>(); } }
-        static SortedList<string, string> NewSortedListStringString { get { return new SortedList<string, string>(); } }
-        static HashSet<long> NewHashSetLong { get { return new HashSet<long>(); } }
-        static HashSet<string> NewHashSetString { get { return new HashSet<string>(); } }
-        static DateTime Now { get { return DateTime.Now; } }
-        static TimeSpan ZeroSpan { get { return TimeSpan.Zero; } }
-        static TimeSpan scriptSpan = TimeSpan.Zero;
-        List<ItemDefinition> GetAllItems
-        {
-            get
-            {
-                itemListAllItems.Clear();
-                itemListMain.Values.ToList().ForEach(b => itemListAllItems.AddRange(b.Values));
-                return itemListAllItems;
-            }
-        }
+        #region Classes/Structs
 
         PanelMasterClass panelMaster = new PanelMasterClass();
 
+        ItemCollection itemCollectionProcessSetting = NewCollection, itemCollectionMain = NewCollection,
+                       itemCollectionAlternate = NewCollection, itemCollectionProcessTotalLoadout = NewCollection,
+                       tempMatchingItemsCollection, tempSetBlockQuotaCollection,
+                       tempCountItemsInListCollection, tempCollectionToBuilderCollection,
+                       tempGetTagsCollection;
+
+        BlockDefinition mainBlockDefinition, alternateBlockDefinition, storageDefinitionA, blockCheckDefinitionA, tempBlockOptionDefinition,
+                        tempDistributeItemBlockDefinition, tempInsertBlueprintBlockDefinition, tempGenerateBlockOptionBlockDefinition;
+
+        Blueprint tempDistributeBlueprint, tempRemoveBlueprint;
+
+        MyInventoryItem tempTransferInventoryItem, tempDistributeItem;
+
+        MyDefinitionId tempInsertBlueprintID;
+
+        IMyInventory tempTransferOriginInventory, tempOrderInventory, tempAmountContainedInventory;
+
+        StringBuilder tempCollectionToBuilder;
+
+        #endregion
 
         #endregion
 
@@ -517,29 +572,116 @@ namespace IngameScript
         Program()
         {
             gtSystem = GridTerminalSystem;
-            ItemCollection.parent = this;
-            PanelMasterClass.parent = this;
+            ItemCollection.parent = PanelMasterClass.parent = LogicComparison.parent = this;
+            newLine = Environment.NewLine;
+
             SetConstants();
 
-            countByListA = NewItemList;
-            amountContainedListA = NewItemList;
-            mainFunctionItemList = NewItemList;
-
-            blueprintListMain = NewProductionList;
-
-            itemCollectionProcessSetting = NewCollection;
-            itemCollectionMain = NewCollection;
-            itemCollectionAlternate = NewCollection;
-            itemCollectionProcessTotalLoadout = NewCollection;
-
-            loading = TextHasLength(Me.CustomData);
-            saving = !loading;
+            saving = !(loading = TextHasLength(Me.CustomData));
 
             FillDict();
 
-            Scan(); Scan();
+            foreach (FunctionIdentifier identifier in Enum.GetValues(typeof(FunctionIdentifier)))
+                if (identifier != FunctionIdentifier.Idle)
+                {
+                    stateRecords[identifier] = new StateRecord();
+                    InitializeStateV2(identifier);
+                }
 
-            ControlScript(); ControlScript();
+            booted = true;
+        }
+
+        void FillDict()
+        {
+            if (!UseVanillaLibrary || booted) return;
+            AddItemDef("Bulletproof Glass", "BulletproofGlass", componentType, "BulletproofGlass");
+            AddItemDef(canvasType, canvasType, componentType, PositionPrefix("0030", canvasType));
+            AddItemDef("Computer", "Computer", componentType, "ComputerComponent");
+            AddItemDef("Construction Comp", "Construction", componentType, "ConstructionComponent");
+            AddItemDef("Detector Component", "Detector", componentType, "DetectorComponent");
+            AddItemDef("Display", "Display", componentType, "Display");
+            AddItemDef("Explosives", "Explosives", componentType, "ExplosivesComponent");
+            AddItemDef("Girder", "Girder", componentType, "GirderComponent");
+            AddItemDef("Gravity Gen. Comp", "GravityGenerator", componentType, "GravityGeneratorComponent");
+            AddItemDef("Interior Plate", "InteriorPlate", componentType, "InteriorPlate");
+            AddItemDef("Large Steel Tube", "LargeTube", componentType, "LargeTube");
+            AddItemDef("Medical Component", "Medical", componentType, "MedicalComponent");
+            AddItemDef("Metal Grid", "MetalGrid", componentType, "MetalGrid");
+            AddItemDef("Motor", "Motor", componentType, "MotorComponent");
+            AddItemDef("Power Cell", "PowerCell", componentType, "PowerCell");
+            AddItemDef("Radio Comm. Comp", "RadioCommunication", componentType, "RadioCommunicationComponent");
+            AddItemDef("Reactor Component", "Reactor", componentType, "ReactorComponent");
+            AddItemDef("Small Steel Tube", "SmallTube", componentType, "SmallTube");
+            AddItemDef("Solar Cell", "SolarCell", componentType, "SolarCell");
+            AddItemDef("Steel Plate", "SteelPlate", componentType, "SteelPlate");
+            AddItemDef("Superconductor", "Superconductor", componentType, "Superconductor");
+            AddItemDef("Thruster Component", "Thrust", componentType, "ThrustComponent");
+            AddItemDef("Zone Chip", "ZoneChip", componentType, nothingType, false);
+            AddItemDef("MR-20", "AutomaticRifleItem", toolType, PositionPrefix("0040", "AutomaticRifle"));
+            AddItemDef("MR-8P", "PreciseAutomaticRifleItem", toolType, PositionPrefix("0060", "PreciseAutomaticRifle"));
+            AddItemDef("MR-50A", "RapidFireAutomaticRifleItem", toolType, PositionPrefix("0050", "RapidFireAutomaticRifle"));
+            AddItemDef("MR-30E", "UltimateAutomaticRifleItem", toolType, PositionPrefix("0070", "UltimateAutomaticRifle"));
+            AddItemDef("Welder 1", "WelderItem", toolType, PositionPrefix("0090", "Welder"));
+            AddItemDef("Welder 2", "Welder2Item", toolType, PositionPrefix("0100", "Welder2"));
+            AddItemDef("Welder 3", "Welder3Item", toolType, PositionPrefix("0110", "Welder3"));
+            AddItemDef("Welder 4", "Welder4Item", toolType, PositionPrefix("0120", "Welder4"));
+            AddItemDef("Grinder 1", "AngleGrinderItem", toolType, PositionPrefix("0010", "AngleGrinder"));
+            AddItemDef("Grinder 2", "AngleGrinder2Item", toolType, PositionPrefix("0020", "AngleGrinder2"));
+            AddItemDef("Grinder 3", "AngleGrinder3Item", toolType, PositionPrefix("0030", "AngleGrinder3"));
+            AddItemDef("Grinder 4", "AngleGrinder4Item", toolType, PositionPrefix("0040", "AngleGrinder4"));
+            AddItemDef("Drill 1", "HandDrillItem", toolType, PositionPrefix("0050", "HandDrill"));
+            AddItemDef("Drill 2", "HandDrill2Item", toolType, PositionPrefix("0060", "HandDrill2"));
+            AddItemDef("Drill 3", "HandDrill3Item", toolType, PositionPrefix("0070", "HandDrill3"));
+            AddItemDef("Drill 4", "HandDrill4Item", toolType, PositionPrefix("0080", "HandDrill4"));
+            AddItemDef("Datapad", "Datapad", dataPadType, "Datapad", false);
+            AddItemDef("Powerkit", "Powerkit", consumableType, nothingType, false);
+            AddItemDef("Medkit", "Medkit", consumableType, nothingType, false);
+            AddItemDef("Clang Cola", "ClangCola", consumableType, nothingType, false);
+            AddItemDef("Cosmic Coffee", "CosmicCoffee", consumableType, nothingType, false);
+            AddItemDef("SpaceCredit", "SpaceCredit", physicalObjectType, nothingType, false);
+            AddItemDef("Oxygen Bottle", "OxygenBottle", oxyBottleType, PositionPrefix("0010", "OxygenBottle"));
+            AddItemDef("Hydrogen Bottle", "HydrogenBottle", hydBottleType, PositionPrefix("0020", "HydrogenBottle"));
+            AddItemDef("NATO 25x184mm", "NATO_25x184mm", ammoType, PositionPrefix("0080", "NATO_25x184mmMagazine"));
+            AddItemDef("Missile 200mm", "Missile200mm", ammoType, PositionPrefix("0100", "Missile200mm"));
+            AddItemDef("Cobalt Ore", "Cobalt", oreType);
+            AddItemDef("Gold Ore", "Gold", oreType);
+            AddItemDef("Ice", "Ice", oreType);
+            AddItemDef("Iron Ore", "Iron", oreType);
+            AddItemDef("Magnesium Ore", "Magnesium", oreType);
+            AddItemDef("Nickel Ore", "Nickel", oreType);
+            AddItemDef("Platinum Ore", "Platinum", oreType);
+            AddItemDef("Scrap Ore", "Scrap", oreType, "", false);
+            AddItemDef("Silicon Ore", "Silicon", oreType);
+            AddItemDef("Silver Ore", "Silver", oreType);
+            AddItemDef(stoneType, stoneType, oreType);
+            AddItemDef("Uranium Ore", "Uranium", oreType);
+            AddItemDef("Cobalt Ingot", "Cobalt", ingotType);
+            AddItemDef("Gold Ingot", "Gold", ingotType);
+            AddItemDef("Gravel", stoneType, ingotType);
+            AddItemDef("Iron Ingot", "Iron", ingotType, "", true, new List<string>() { "Scrap", stoneType });
+            AddItemDef("Magnesium Powder", "Magnesium", ingotType);
+            AddItemDef("Nickel Ingot", "Nickel", ingotType, "", true, new List<string>() { stoneType });
+            AddItemDef("Platinum Ingot", "Platinum", ingotType, "");
+            AddItemDef("Silicon Wafer", "Silicon", ingotType, "", true, new List<string>() { stoneType });
+            AddItemDef("Silver Ingot", "Silver", ingotType);
+            AddItemDef("Uranium Ingot", "Uranium", ingotType);
+            AddItemDef("MR-20 Magazine", "AutomaticRifleGun_Mag_20rd", ammoType, PositionPrefix("0040", "AutomaticRifleGun_Mag_20rd"));
+            AddItemDef("S-10E Magazine", "ElitePistolMagazine", ammoType, PositionPrefix("0030", "ElitePistolMagazine"));
+            AddItemDef("S-20A Magazine", "FullAutoPistolMagazine", ammoType, PositionPrefix("0020", "FullAutoPistolMagazine"));
+            AddItemDef("MR-8P Magazine", "PreciseAutomaticRifleGun_Mag_5rd", ammoType, PositionPrefix("0060", "PreciseAutomaticRifleGun_Mag_5rd"));
+            AddItemDef("MR-50A Magazine", "RapidFireAutomaticRifleGun_Mag_50rd", ammoType, PositionPrefix("0050", "RapidFireAutomaticRifleGun_Mag_50rd"));
+            AddItemDef("S-10 Magazine", "SemiAutoPistolMagazine", ammoType, PositionPrefix("0010", "SemiAutoPistolMagazine"));
+            AddItemDef("MR-30E Magazine", "UltimateAutomaticRifleGun_Mag_30rd", ammoType, PositionPrefix("0070", "UltimateAutomaticRifleGun_Mag_30rd"));
+            AddItemDef("Artillery Shell", "LargeCalibreAmmo", ammoType, PositionPrefix("0120", "LargeCalibreAmmo"));
+            AddItemDef("Assault Cannon Shell", "MediumCalibreAmmo", ammoType, PositionPrefix("0110", "MediumCalibreAmmo"));
+            AddItemDef("Autocannon Mag", "AutocannonClip", ammoType, PositionPrefix("0090", "AutocannonClip"));
+            AddItemDef("Large Railgun Sabot", "LargeRailgunAmmo", ammoType, PositionPrefix("0140", "LargeRailgunAmmo"));
+            AddItemDef("Small Railgun Sabot", "SmallRailgunAmmo", ammoType, PositionPrefix("0130", "SmallRailgunAmmo"));
+            AddItemDef("PRO-1", "AdvancedHandHeldLauncherItem", toolType, PositionPrefix("0090", "AdvancedHandHeldLauncher"));
+            AddItemDef("RO-1", "BasicHandHeldLauncherItem", toolType, PositionPrefix("0080", "BasicHandHeldLauncher"));
+            AddItemDef("S-10E", "ElitePistolItem", toolType, PositionPrefix("0030", "EliteAutoPistol"));
+            AddItemDef("S-20A", "FullAutoPistolItem", toolType, PositionPrefix("0020", "FullAutoPistol"));
+            AddItemDef("S-10", "SemiAutoPistolItem", toolType, PositionPrefix("0010", "SemiAutoPistol"));
         }
 
         void SetConstants()
@@ -586,7 +728,7 @@ namespace IngameScript
             itemCategoryList.ForEach(category => builder.Append($"|{Formatted(category)}"));
             itemCategoryString = builder.ToString();
 
-            presetPanelOptions = PanelMasterClass.PresetPanelOption(itemCategoryString);
+            panelMaster.presetPanelOptions = PanelMasterClass.PresetPanelOption(itemCategoryString);
 
             ResetRuntimes();
             outputLimit = settingsInts[setKeyOutputLimit];
@@ -604,12 +746,26 @@ namespace IngameScript
         {
             if ((!reset && !update) || saving)
             {
-                try
+                tickStartTime = Now;
+                itemListAllItems.Clear();
+
+                bool handledCommand = false;
+
+                scriptSpan += Runtime.TimeSinceLastRun;
+                torchAverage = TorchAverage(torchAverage, Runtime.LastRunTimeMs);
+
+                if (echoMode != EchoMode.MergeMenu && TextHasLength(argument))
+                    try
+                    {
+                        handledCommand = true;
+                        Commands(argument);
+                    }
+                    catch
+                    {
+                        Output($"Error running command: {argument}");
+                    }
+                if (overheatAverage <= 0 || torchAverage < overheatAverage)
                 {
-                    tickStartTime = Now;
-                    bool handledCommand = false;
-                    scriptSpan += Runtime.TimeSinceLastRun;
-                    torchAverage = TorchAverage(torchAverage, Runtime.LastRunTimeMs);
                     if (autoLoadSettings && !reset)
                     {
                         checkTicks++;
@@ -623,57 +779,34 @@ namespace IngameScript
                             else checkTicks = 0;
                         }
                     }
+
+                    overheatTicks = 0;
+                    StateManager(FunctionIdentifier.Script);
+                }
+                else overheatTicks++;
+
+                echoTicks += updateFrequency;
+                if (echoMode == EchoMode.MergeMenu)
+                    MergeCommand(!handledCommand ? argument : "");
+                if (allowEcho && echoTicks >= echoDelay + (overheatTicks > 0 ? overheatTicks / 10 : 0))
                     try
                     {
-                        if (echoMode != EchoMode.MergeMenu && TextHasLength(argument))
+                        echoTicks = 0;
+                        switch (echoMode)
                         {
-                            if (!saving && !loading)
-                                Commands(argument);
-                            else
-                                SetLastString("Please wait until save/load completes to run commands");
-                            handledCommand = true;
+                            case EchoMode.Main:
+                                MainEcho();
+                                break;
+                            case EchoMode.MergeHelp:
+                                MergeHelp();
+                                break;
+                            case EchoMode.MergeMenu:
+                                MergingMenu();
+                                break;
                         }
+                        PadEcho();
                     }
-                    catch
-                    {
-                        Output($"Error running command: {argument}");
-                    }
-                    if (overheatAverage <= 0 || torchAverage <= overheatAverage)
-                    {
-                        overheatTicks = 0;
-                        Script();
-                    }
-                    else overheatTicks++;
-                    echoTicks += updateFrequency;
-                    if (echoMode == EchoMode.MergeMenu)
-                        MergeCommand(!handledCommand ? argument : "");
-                    if (allowEcho && echoTicks >= echoDelay)
-                        try
-                        {
-                            echoTicks = 0;
-                            switch (echoMode)
-                            {
-                                case EchoMode.Main:
-                                    MainEcho();
-                                    break;
-                                case EchoMode.DelayHelp:
-                                    DelayHelp();
-                                    break;
-                                case EchoMode.Functions:
-                                    FunctionHelp();
-                                    break;
-                                case EchoMode.MergeHelp:
-                                    MergeHelp();
-                                    break;
-                                case EchoMode.MergeMenu:
-                                    MergingMenu();
-                                    break;
-                            }
-                            PadEcho();
-                        }
-                        catch { Output("Error caught in echo"); }
-                }
-                catch { Output("Error in main"); }
+                    catch { Output("Error caught in echo"); }
             }
             else
             {
@@ -681,40 +814,6 @@ namespace IngameScript
                     Echo("Please recompile to complete reset!");
                 if (update)
                     Echo("Remove any settings you want to update/reset and recompile");
-            }
-        }
-
-        void FunctionHelp()
-        {
-            Echo($"--Functions List ({stateErrorCodes.Count}/{stateRecords.Count})--");
-            Echo("--Enter 'functions?' to hide--");
-            string key;
-            double ticks;
-            bool active, showRange;
-            StateRecord record;
-            foreach (KeyValuePair<string, StateRecord> kvp in stateRecords)
-            {
-                record = kvp.Value;
-                key = kvp.Key;
-                ticks = record.lastTicks;
-                active = StateActive(key, true);
-                showRange = record.runs > 1;
-
-                Echo($"{key}{(active ? "*" : " ")} {kvp.Value.health:N2}%");
-
-                Echo($"-Ticks: {ShortNumber2(ticks)}{(active ? $" : {ShortNumber2(record.currentTicks)}" : "")}");
-
-                if (showRange) Echo($"--({ShortNumber2(record.minTicks)}-{ShortNumber2(record.maxTicks)})");
-
-                Echo($"-Time: {ShortMSTime(record.lastSpan.TotalMilliseconds)}{(active ? $" : {ShortMSTime(record.currentSpan.TotalMilliseconds)}" : "")}");
-                if (showRange) Echo($"--({ShortMSTime(record.minSpan.TotalMilliseconds)}-{ShortMSTime(record.maxSpan.TotalMilliseconds)})");
-
-                Echo($"-Actions: {ShortNumber2(record.lastActions)}{(active ? $" : {ShortNumber2(record.currentActions)}ops" : "")}");
-                if (showRange) Echo($"--({ShortNumber2(record.minActions)}-{ShortNumber2(record.maxActions)})");
-
-                if (ticks > 0) Echo($"-Avg: {record.averageTime:N2}ms, {Math.Ceiling(record.averageActions)}ops");
-
-                Echo($"-Runs: {ShortNumber2(record.runs)}");
             }
         }
 
@@ -789,28 +888,10 @@ namespace IngameScript
                 Echo($"BPT: {modBlueprintList[i]}");
         }
 
-        void DelayHelp()
-        {
-            Echo("--Delay List--");
-            Echo("--Enter 'delays?' to hide--");
-            sortableListDelayHelp.Clear();
-            sortableListDelayHelp.Add(new SortableObject { amount = RemainingSpan(scanSpan), text = "Scan and Process" });
-            sortableListDelayHelp.Add(new SortableObject { amount = RemainingSpan(fillBottleSpan), text = "Fill Bottles" });
-            if (autoLoadSettings)
-                sortableListDelayHelp.Add(new SortableObject { amount = 15.0 - ((double)checkTicks / 60.0), text = "Reload" });
-
-            foreach (KeyValuePair<string, TimeSpan> kvp in delaySpans)
-                sortableListDelayHelp.Add(new SortableObject { amount = RemainingSpan(kvp.Value), text = $"{kvp.Key}" });
-
-            sortableListDelayHelp = sortableListDelayHelp.OrderBy(x => x.amount).ToList();
-            foreach (SortableObject sortableObject in sortableListDelayHelp)
-                Echo($"{sortableObject.text}: {Math.Ceiling(sortableObject.amount)}s");
-        }
-
         void MainEcho()
         {
-            Echo($"Main: {currentMajorFunction}");
-            Echo($"Current: {(TextHasLength(selfContainedIdentifier) ? selfContainedIdentifier : currentFunction)}");
+            Echo($"Main: {currentMajorFunction.Replace("_", " ")}");
+            Echo($"Current: {currentFunction.ToString().Replace("_", " ")}");
             Echo($"Last: {Round(Runtime.LastRunTimeMs, 4)}");
             Echo($"Avg: {Round(torchAverage, 4)}");
             Echo($"Blocks: {managedBlocks.Count}");
@@ -823,7 +904,7 @@ namespace IngameScript
                 if (modItemDictionary.Count > 0 && modBlueprintList.Count > 0)
                     Echo("-Enter 'merge' to begin merge");
             }
-            Echo(overheatTicks > 0 ? $"Overheat Ticks: {overheatTicks}" : "");
+            Echo(overheatTicks > 0 ? $"Overheat x{overheatTicks}" : "");
 
             if (TextHasLength(lastString))
             {
@@ -833,7 +914,18 @@ namespace IngameScript
             }
 
             Echo("");
-            Echo($"Uptime: {scriptSpan.ToString("c")}");
+            Echo($"Uptime: {scriptSpan:c}");
+
+            while (DateTime.Now >= nextPerformanceTime ||
+                  (FunctionIdentifier)performanceIndex == FunctionIdentifier.Idle ||
+                  !stateRecords.ContainsKey((FunctionIdentifier)performanceIndex))
+            {
+                performanceIndex = (performanceIndex + 1) % Enum.GetValues(typeof(FunctionIdentifier)).Length;
+                nextPerformanceTime = Now.AddSeconds(10);
+            }
+            Echo("");
+            Echo($"Performance: {((FunctionIdentifier)performanceIndex).ToString().Replace("_", " ")}");
+            Echo(stateRecords[(FunctionIdentifier)performanceIndex].ToString());
         }
 
         void Commands(string argument)
@@ -865,25 +957,36 @@ namespace IngameScript
                         SetLastString("Save process is active, please wait to load!");
                     break;
                 case "clearqueue":
-                    foreach (long index in typedIndexes[setKeyIndexAssemblers])
+                    typedIndexes[setKeyIndexAssemblers].ForEach(index =>
+                    {
                         if (IsBlockOk(index))
                             ((IMyAssembler)managedBlocks[index].block).ClearQueue();
+                    });
                     SetLastString("Assembler queues cleared");
                     break;
                 case "reset":
-                    Me.CustomData = "";
-                    reset = true;
-                    saving = true;
-                    SetLastString("Save and reset process started");
+                    if (!saving && !loading)
+                    {
+                        Me.CustomData = "";
+                        reset = true;
+                        saving = true;
+                        SetLastString("Save and reset process started");
+                    }
                     break;
                 case "update":
-                    saving = true;
-                    update = true;
-                    SetLastString("Save and update process started");
+                    if (!saving && !loading)
+                    {
+                        saving = true;
+                        update = true;
+                        SetLastString("Save and update process started");
+                    }
                     break;
                 case "clearfunctions":
-                    ClearFunctions();
-                    SetLastString("Active processes stopped");
+                    if (!saving && !loading)
+                    {
+                        ClearFunctions();
+                        SetLastString("Active processes stopped");
+                    }
                     break;
                 case "merge?":
                     echoMode = (echoMode == EchoMode.Main && modItemDictionary.Count + modBlueprintList.Count > 0) ? EchoMode.MergeHelp : EchoMode.Main;
@@ -893,17 +996,13 @@ namespace IngameScript
                     echoMode = (echoMode == EchoMode.Main && modItemDictionary.Count > 0 && modBlueprintList.Count > 0) ? EchoMode.MergeMenu : EchoMode.Main;
                     SetLastString(echoMode == EchoMode.MergeMenu ? "Opened Merge Menu" : "Closed Merge Menu");
                     break;
-                case "functions?":
-                    echoMode = echoMode == EchoMode.Main ? EchoMode.Functions : EchoMode.Main;
-                    break;
-                case "delays?":
-                    echoMode = echoMode == EchoMode.Main ? EchoMode.DelayHelp : EchoMode.Main;
-                    break;
                 case "scan":
-                    scanSpan = SpanDelay();
-                    delaySpans.Clear();
-                    ClearFunctions();
-                    SetLastString("Functions and delays reset");
+                    if (!saving && !loading)
+                    {
+                        delaySpans.Clear();
+                        ClearFunctions();
+                        SetLastString("Functions and delays reset");
+                    }
                     break;
                 case "echo":
                     allowEcho = !allowEcho;
@@ -914,33 +1013,42 @@ namespace IngameScript
                     SetLastString(errorFilter ? "Error filter enabled, use 'error' to disable" : "Error filter disabled");
                     break;
                 case "full":
-                    for (int i = 0; i < settingDictionaryBools.Count; i++)
-                        for (int x = 0; x < settingDictionaryBools.Values[i].Count; x++)
-                        {
-                            value = settingDictionaryBools.Values[i].Keys[x];
-                            SetKeyBool(value, i < 2 || (!LeadsString(value, "useconveyor") && !fullExclude.Contains(value)));
-                        }
+                    if (!saving && !loading)
+                    {
+                        for (int i = 0; i < settingDictionaryBools.Count; i++)
+                            for (int x = 0; x < settingDictionaryBools.Values[i].Count; x++)
+                            {
+                                value = settingDictionaryBools.Values[i].Keys[x];
+                                SetKeyBool(value, i < 2 || (!LeadsString(value, "useconveyor") && !fullExclude.Contains(value)));
+                            }
 
-                    SetLastString("All functions");
-                    saving = true;
+                        SetLastString("All functions");
+                        saving = true;
+                    }
                     break;
                 case "basic":
-                    for (int i = 0; i < settingDictionaryBools.Count; i++)
-                        for (int x = 0; x < settingDictionaryBools.Values[i].Count; x++)
-                            SetKeyBool(settingDictionaryBools.Values[i].Keys[x], i == 0);
+                    if (!saving && !loading)
+                    {
+                        for (int i = 0; i < settingDictionaryBools.Count; i++)
+                            for (int x = 0; x < settingDictionaryBools.Values[i].Count; x++)
+                                SetKeyBool(settingDictionaryBools.Values[i].Keys[x], i == 0);
 
-                    SetLastString("Basic functions only");
-                    saving = true;
+                        SetLastString("Basic functions only");
+                        saving = true;
+                    }
                     break;
                 case "monitor":
-                    for (int i = 0; i < settingDictionaryBools.Count; i++)
-                        for (int x = 0; x < settingDictionaryBools.Values[i].Count; x++)
-                        {
-                            value = settingDictionaryBools.Values[i].Keys[x];
-                            SetKeyBool(value, value == setKeyToggleAutoLoadSettings || LeadsString(value, "useconveyor") || LeadsString(value, "count"));
-                        }
-                    SetLastString("Monitoring only");
-                    saving = true;
+                    if (!saving && !loading)
+                    {
+                        for (int i = 0; i < settingDictionaryBools.Count; i++)
+                            for (int x = 0; x < settingDictionaryBools.Values[i].Count; x++)
+                            {
+                                value = settingDictionaryBools.Values[i].Keys[x];
+                                SetKeyBool(value, value == setKeyToggleAutoLoadSettings || LeadsString(value, "useconveyor") || LeadsString(value, "count"));
+                            }
+                        SetLastString("Monitoring only");
+                        saving = true;
+                    }
                     break;
                 default:
                     if (!TextHasLength(key))
@@ -952,17 +1060,14 @@ namespace IngameScript
             if (!handled && TextHasLength(key))
                 switch (key)
                 {
-                    case "setgroup":
-                        name = data.Substring(0, data.IndexOf(" "));
-                        data = data.Substring(data.IndexOf(" ") + 1);
-                        SetGroup(name, data);
-                        saving = true;
-                        break;
                     case "set":
-                        if (SplitData(data, out name, out data, ' ', false))
+                        if (!saving && !loading)
                         {
-                            SetItemQuotaMain(name, data);
-                            saving = true;
+                            if (SplitData(data, out name, out data, ' ', false))
+                            {
+                                SetItemQuotaMain(name, data);
+                                saving = true;
+                            }
                         }
                         break;
                     default:
@@ -977,20 +1082,11 @@ namespace IngameScript
 
         #region State Functions
 
-        bool OrderCargo()
-        {
-            selfContainedIdentifier = functionList[54];
-            if (!IsStateActive)
-            {
-                InitializeState(OrderCargoState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> OrderCargoState()
         {
             IMyInventory inventory;
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (long index in typedIndexes[setKeyIndexStorage])
@@ -1021,48 +1117,53 @@ namespace IngameScript
         bool OrderInventory(List<SortableObject> expectedOrder, IMyInventory inventory)
         {
             if (expectedOrder.Count <= 1) return true;
-            selfContainedIdentifier = functionList[55];
-            if (!IsStateActive)
+
+            selfContainedIdentifier = FunctionIdentifier.Order_Inventory;
+
+            if (!IsStateRunning)
             {
-                InitializeState(OrderInventoryState(expectedOrder, inventory), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempOrderInventoryList = expectedOrder;
+                tempOrderInventory = inventory;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> OrderInventoryState(List<SortableObject> expectedOrder, IMyInventory inventory)
+        IEnumerator<FunctionState> OrderInventoryState()
         {
-            for (int x = 0; x < expectedOrder.Count; x++)
-                for (int z = x; z < inventory.ItemCount; z++)
-                {
-                    if (PauseTickRun) yield return stateActive;
+            yield return stateContinue;
 
-                    try
+            while (true)
+            {
+                for (int x = 0; x < tempOrderInventoryList.Count; x++)
+                    for (int z = x; z < tempOrderInventory.ItemCount; z++)
                     {
-                        MyInventoryItem item = (MyInventoryItem)inventory.GetItemAt(z);
-                        if (item.Type.ToString() == expectedOrder[x].text)
-                        {
-                            if (x != z)
-                                inventory.TransferItemFrom(inventory, z, x, false, item.Amount);
-                            break;
-                        }
-                    }
-                    catch { }
-                }
+                        if (PauseTickRun) yield return stateActive;
 
-            yield return stateComplete;
+                        try
+                        {
+                            MyInventoryItem item = (MyInventoryItem)tempOrderInventory.GetItemAt(z);
+                            if (item.Type.ToString() == tempOrderInventoryList[x].text)
+                            {
+                                if (x != z)
+                                    tempOrderInventory.TransferItemFrom(tempOrderInventory, z, x, false, item.Amount);
+                                break;
+                            }
+                        }
+                        catch { }
+                    }
+
+                yield return stateContinue;
+            }
         }
 
         bool ProcessItemSetting(string setting)
         {
-            selfContainedIdentifier = functionList[53];
+            selfContainedIdentifier = FunctionIdentifier.Processing_Item_Setting;
+
             if (!IsStateRunning)
                 tempItemSetting = setting;
-            if (!IsStateActive)
-            {
-                InitializeState(ProcessItemSettingState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+
             return RunStateManager;
         }
 
@@ -1073,6 +1174,7 @@ namespace IngameScript
             int index;
             string subSetting, key, data, typeID, subtypeID;
             string[] subSettingArray;
+            yield return stateContinue;
 
             while (true)
             {
@@ -1199,7 +1301,7 @@ namespace IngameScript
                         blueprintList[definition.blueprintID] = ItemToBlueprint(definition);
 
                     itemCategoryDictionary[definition.FullID] = definition.category;
-                    FinalizeKeys(ref definition);
+                    FinalizeKeys(definition);
                     CheckModdedItem(definition);
                 }
 
@@ -1209,7 +1311,8 @@ namespace IngameScript
 
         bool Transfer(ref double transferAmount, IMyInventory originInventory, BlockDefinition destinationBlock, MyInventoryItem item)
         {
-            selfContainedIdentifier = functionList[23];
+            selfContainedIdentifier = FunctionIdentifier.Transferring_Item;
+
             if (!IsStateRunning)
             {
                 tempTransferAmount = transferAmount;
@@ -1217,8 +1320,7 @@ namespace IngameScript
                 alternateBlockDefinition = destinationBlock;
                 tempTransferInventoryItem = item;
             }
-            if (!IsStateActive)
-                InitializeState(TransferState(), selfContainedIdentifier);
+
             bool done = RunStateManager;
 
             if (done)
@@ -1234,6 +1336,8 @@ namespace IngameScript
         IEnumerator<FunctionState> TransferState()
         {
             IMyInventory destinationInventory;
+            yield return stateContinue;
+
             while (true)
             {
                 destinationInventory = alternateBlockDefinition.Input;
@@ -1248,7 +1352,7 @@ namespace IngameScript
                             stopFunc = true;
                         else
                         {
-                            while (!AmountContained(ref contained, tempTransferInventoryItem, alternateBlockDefinition.block))
+                            while (!AmountContained(ref contained, tempTransferInventoryItem, alternateBlockDefinition.Input))
                                 yield return stateActive;
 
                             if (contained >= itemLimit)
@@ -1280,92 +1384,76 @@ namespace IngameScript
 
         bool ProcessSetting(string setting)
         {
-            selfContainedIdentifier = functionList[50];
-            if (!IsStateActive)
-            {
-                InitializeState(ProcessSettingState(setting), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+            selfContainedIdentifier = FunctionIdentifier.Process_Setting;
+
+            if (!IsStateRunning)
+                tempScriptSetting = setting;
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> ProcessSettingState(string setting)
+        IEnumerator<FunctionState> ProcessSettingState()
         {
-            int index = setting.IndexOf("=");
-            string stringValue, groupName;
-            if (index != -1)
+            int index;
+            string stringValue, key;
+            yield return stateContinue;
+
+            while (true)
             {
-                string key = setting.Substring(0, index).Trim();
-                stringValue = setting.Substring(index + 1).Trim();
-                if (StringsMatch(key, "name"))
+                index = tempScriptSetting.IndexOf("=");
+                if (index != -1)
                 {
-                    while (!ProcessItemSetting(setting))
-                        yield return stateActive;
-                }
-                else if (key == "group")
-                {
-                    index = stringValue.IndexOf("=");
-                    groupName = stringValue.Substring(0, index).ToLower();
-                    stringValue = stringValue.Substring(index + 1).Trim();
-                    itemCollectionProcessSetting.Clear();
-                    while (!GetTags(itemCollectionProcessSetting, stringValue))
-                        yield return stateActive;
-
-                    if (TextHasLength(groupName) && itemCollectionProcessSetting.ItemTypeCount != 0)
-                        customItemGroups[groupName] = itemCollectionProcessSetting;
-                }
-                else
-                {
-                    stringValue = setting.Substring(index + 1).Trim();
-                    double doubleValue;
-                    bool boolValue = !StringsMatch(stringValue, falseString);
-                    if (!double.TryParse(stringValue, out doubleValue))
-                        doubleValue = 0;
-
-                    if (key == "script")
+                    key = tempScriptSetting.Substring(0, index).Trim();
+                    stringValue = tempScriptSetting.Substring(index + 1).Trim();
+                    if (StringsMatch(key, "name"))
                     {
-                        if (stringValue == scriptName)
-                            correctScript = true;
+                        while (!ProcessItemSetting(tempScriptSetting))
+                            yield return stateActive;
                     }
-                    else if (key == "version")
+                    else
                     {
-                        if (doubleValue == scriptVersion)
-                            correctVersion = true;
-                    }
-                    else if (settingsInts.ContainsKey(key))
-                        settingsInts[key] = (int)doubleValue;
-                    else if (!SetKeyString(key, stringValue) && !SetKeyDouble(key, doubleValue) && !SetKeyBool(key, boolValue) && settingsListsStrings.ContainsKey(key) && LeadsString(stringValue, "[") && EndsString(stringValue, "]"))
-                    {
-                        stringValue = stringValue.Substring(1, stringValue.Length - 2);
-                        string[] valueArray = stringValue.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
-                        if (clearedSettingLists.Add(key))
-                            settingsListsStrings[key].Clear();
-                        for (int i = 0; i < valueArray.Length; i++)
+                        stringValue = tempScriptSetting.Substring(index + 1).Trim();
+                        double doubleValue;
+                        bool boolValue = !StringsMatch(stringValue, falseString);
+                        if (!double.TryParse(stringValue, out doubleValue))
+                            doubleValue = 0;
+
+                        if (key == "script")
                         {
-                            if (PauseTickRun)
-                                yield return stateActive;
+                            if (stringValue == scriptName)
+                                correctScript = true;
+                        }
+                        else if (key == "version")
+                        {
+                            if (doubleValue == scriptVersion)
+                                correctVersion = true;
+                        }
+                        else if (settingsInts.ContainsKey(key))
+                            settingsInts[key] = (int)doubleValue;
+                        else if (!SetKeyString(key, stringValue) && !SetKeyDouble(key, doubleValue) && !SetKeyBool(key, boolValue) && settingsListsStrings.ContainsKey(key) && LeadsString(stringValue, "[") && EndsString(stringValue, "]"))
+                        {
+                            stringValue = stringValue.Substring(1, stringValue.Length - 2);
+                            string[] valueArray = stringValue.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+                            if (clearedSettingLists.Add(key))
+                                settingsListsStrings[key].Clear();
+                            for (int i = 0; i < valueArray.Length; i++)
+                            {
+                                if (PauseTickRun)
+                                    yield return stateActive;
 
-                            settingsListsStrings[key].Add(valueArray[i]);
+                                settingsListsStrings[key].Add(valueArray[i]);
+                            }
                         }
                     }
                 }
+                yield return stateContinue;
             }
-            yield return stateComplete;
-        }
-
-        bool FindModItems()
-        {
-            selfContainedIdentifier = functionList[49];
-            if (!IsStateActive)
-            {
-                InitializeState(FindModItemState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
         }
 
         IEnumerator<FunctionState> FindModItemState()
         {
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (long index in typedIndexes[setKeyIndexAssemblers])
@@ -1410,17 +1498,6 @@ namespace IngameScript
             }
         }
 
-        bool CheckIdleAssemblers()
-        {
-            selfContainedIdentifier = functionList[48];
-            if (!IsStateActive)
-            {
-                InitializeState(IdleAssemblerState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> IdleAssemblerState()
         {
             IMyAssembler assembler;
@@ -1428,22 +1505,22 @@ namespace IngameScript
             SortedList<string, double> productionComparison = new SortedList<string, double>();
             List<MyProductionItem> productionList = NewProductionList;
             bool changed;
-            IMyInventory inventory;
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (long index in typedIndexes[setKeyIndexAssemblers])
                 {
                     if (PauseTickRun) yield return stateActive;
-                    if (!IsBlockOk(index) || managedBlocks[index].Settings.NoIdleReset)
+                    if (!IsBlockOk(index) || managedBlocks[index].Settings.GetOption(setKeyBlockNoIdleResetKey))
                         continue;
 
                     monitoredAssembler = managedBlocks[index].monitoredAssembler;
                     assembler = (IMyAssembler)managedBlocks[index].block;
 
-                    inventory = assembler.GetInventory(assembler.Mode == assemblyMode ? 0 : 1);
-                    changed = monitoredAssembler.Check(delayResetIdleAssembler);
+                    changed = monitoredAssembler.HasChanged(delayResetIdleAssembler);
 
-                    if (!changed)
+                    if (!changed && monitoredAssembler.CheckNow)
                     {
                         assembler.GetQueue(productionList);
                         foreach (MyProductionItem myProductionItem in productionList)
@@ -1455,40 +1532,53 @@ namespace IngameScript
                                 productionComparison[BlueprintSubtype(myProductionItem)] += (double)myProductionItem.Amount;
                         }
                         productionList.Clear();
-                        foreach (KeyValuePair<string, double> kvp in productionComparison)
+                        if (!(changed = productionComparison.Count != monitoredAssembler.productionComparison.Count))
                         {
-                            if (PauseTickRun) yield return stateActive;
-                            if (!monitoredAssembler.productionComparison.ContainsKey(kvp.Key) ||
-                                monitoredAssembler.productionComparison[kvp.Key] != kvp.Value)
+                            foreach (KeyValuePair<string, double> kvp in productionComparison)
                             {
-                                changed = true;
-                                break;
+                                if (PauseTickRun) yield return stateActive;
+                                if (!monitoredAssembler.productionComparison.ContainsKey(kvp.Key) ||
+                                    monitoredAssembler.productionComparison[kvp.Key] != kvp.Value)
+                                {
+                                    changed = true;
+                                    break;
+                                }
+                                else
+                                    monitoredAssembler.productionComparison.Remove(kvp.Key);
                             }
+                            changed = changed || monitoredAssembler.productionComparison.Count > 0;
                         }
                     }
-                    else changed = false;
-                    if (!changed)
+                    if (!changed && monitoredAssembler.CheckNow)
                     {
                         if (monitoredAssembler.stalling)
                         {
                             assembler.ClearQueue();
-                            mainFunctionItemList.Clear();
-                            assembler.GetInventory(0).GetItems(mainFunctionItemList);
-                            while (!PutInStorage(mainFunctionItemList, index, 0)) yield return stateActive;
 
-                            mainFunctionItemList.Clear();
-                            assembler.GetInventory(1).GetItems(mainFunctionItemList);
-                            while (!PutInStorage(mainFunctionItemList, index, 1)) yield return stateActive;
+                            for (int i = 0; i <= 1; i++)
+                            {
+                                mainFunctionItemList.Clear();
+                                assembler.GetInventory(i).GetItems(mainFunctionItemList);
+                                while (!PutInStorage(mainFunctionItemList, index, i)) yield return stateActive;
+                            }
+
+                            Output($"Reset Idle Assembler: {ShortenName(assembler.CustomName, 12)}");
+
                             monitoredAssembler.Reset();
                         }
-                        else monitoredAssembler.stalling = true;
-                        monitoredAssembler.productionComparison.Clear();
+                        else
+                            monitoredAssembler.stalling = true;
                     }
-                    else
+                    else if (changed || assembler.IsQueueEmpty)
                         monitoredAssembler.Reset();
-                    foreach (KeyValuePair<string, double> kvp in productionComparison)
-                        monitoredAssembler.productionComparison[kvp.Key] = kvp.Value;
-                    productionComparison.Clear();
+
+                    if (!assembler.IsQueueEmpty)
+                    {
+                        monitoredAssembler.productionComparison.Clear();
+                        foreach (KeyValuePair<string, double> kvp in productionComparison)
+                            monitoredAssembler.productionComparison[kvp.Key] = kvp.Value;
+                        productionComparison.Clear();
+                    }
                 }
                 yield return stateContinue;
             }
@@ -1496,157 +1586,160 @@ namespace IngameScript
 
         bool MatchItems(ItemCollection collection, string category, string name, bool append = true, string amount = "0", bool acceptZero = true)
         {
-            selfContainedIdentifier = functionList[46];
-            if (!IsStateActive)
+            selfContainedIdentifier = FunctionIdentifier.Matching_Items;
+
+            if (!IsStateRunning)
             {
-                InitializeState(MatchingItemState(collection, GetAllItems, category, name, append, amount, acceptZero), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempMatchingItemsCollection = collection;
+                tempMatchingItemCategory = category;
+                tempMatchingItemName = name;
+                tempMatchingItemAppend = append;
+                tempMatchingItemAmount = amount;
+                tempMatchingItemAcceptZero = acceptZero;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> MatchingItemState(ItemCollection collection, List<ItemDefinition> itemList, string category, string name, bool append, string amount, bool acceptZero)
+        IEnumerator<FunctionState> MatchingItemState()
         {
-            if (TextHasLength(name))
+            List<ItemDefinition> itemList = new List<ItemDefinition>();
+            ItemDefinition definition;
+            yield return stateContinue;
+
+            while (true)
             {
-                ItemDefinition definition;
-                bool match, percentage;
-                double calcedAmount;
-                for (int i = 0; i < itemList.Count; i++)
+                if (TextHasLength(tempMatchingItemName))
                 {
-                    if (PauseTickRun) yield return stateActive;
-
-                    if (IsWildCard(category) || category == itemList[i].category)
-                    {
-                        definition = itemList[i];
-                        match = name.Length > 2 && LeadsString(name, "'") && EndsString(name, "'");
-
-                        if (IsWildCard(name) || (match && StringsMatch(RemoveSpaces(definition.displayName), name.Substring(1, name.Length - 2))) || (!match && LeadsString(definition.displayName, name)))
-                        {
-                            if ((percentage = EndsString(amount, "%")) && double.TryParse(amount.Substring(0, amount.Length - 1), out calcedAmount))
-                                calcedAmount /= 100.0;
-                            else if (!double.TryParse(amount, out calcedAmount))
-                                calcedAmount = 0;
-                            collection.AddItem(definition.typeID, definition.subtypeID, new VariableItemCount(calcedAmount, percentage, true), append);
-                        }
-                    }
-                }
-                if (!acceptZero)
-                    for (int i = 0; i < collection.itemList.Count; i += 0)
+                    itemList.Clear();
+                    itemList.AddRange(GetAllItems);
+                    bool match, percentage;
+                    double calcedAmount;
+                    for (int i = 0; i < itemList.Count; i++)
                     {
                         if (PauseTickRun) yield return stateActive;
 
-                        if (collection.itemList.Values[i].count <= 0)
-                            collection.itemList.RemoveAt(i);
-                        else
-                            i++;
-                    }
-            }
+                        if (IsWildCard(tempMatchingItemCategory) || tempMatchingItemCategory == itemList[i].category)
+                        {
+                            definition = itemList[i];
+                            match = tempMatchingItemName.Length > 2 && LeadsString(tempMatchingItemName, "'") && EndsString(tempMatchingItemName, "'");
 
-            yield return stateComplete;
+                            if (IsWildCard(tempMatchingItemName) || (match && StringsMatch(RemoveSpaces(definition.displayName), tempMatchingItemName.Substring(1, tempMatchingItemName.Length - 2))) || (!match && LeadsString(definition.displayName, tempMatchingItemName)))
+                            {
+                                if ((percentage = EndsString(tempMatchingItemAmount, "%")) && double.TryParse(tempMatchingItemAmount.Substring(0, tempMatchingItemAmount.Length - 1), out calcedAmount))
+                                    calcedAmount /= 100.0;
+                                else if (!double.TryParse(tempMatchingItemAmount, out calcedAmount))
+                                    calcedAmount = 0;
+                                tempMatchingItemsCollection.AddItem(definition.typeID, definition.subtypeID, new VariableItemCount(calcedAmount, percentage, true), tempMatchingItemAppend);
+                            }
+                        }
+                    }
+                    if (!tempMatchingItemAcceptZero)
+                        for (int i = 0; i < tempMatchingItemsCollection.itemList.Count; i += 0)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+
+                            if (tempMatchingItemsCollection.itemList.Values[i].count <= 0)
+                                tempMatchingItemsCollection.itemList.RemoveAt(i);
+                            else
+                                i++;
+                        }
+                }
+
+                yield return stateContinue;
+            }
         }
 
         bool ProcessTimer(List<LogicComparison> logicComparisons, string data)
         {
-            selfContainedIdentifier = functionList[47];
-            if (!IsStateActive)
+            selfContainedIdentifier = FunctionIdentifier.Process_Logic;
+
+            if (!IsStateRunning)
             {
-                InitializeState(ProcessTimerState(logicComparisons, data), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempLogicComparisons = logicComparisons;
+                tempProcessLogicData = data;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> ProcessTimerState(List<LogicComparison> logicComparisons, string data)
+        IEnumerator<FunctionState> ProcessTimerState()
         {
-            logicSetsList.Clear();
-            string customData = RemoveSpaces(data), typeID = "", subtypeID = "", comparison = ">", substring = "";
+            string customData, typeID, subtypeID, comparison, substring;
             string[] logicSetArray;
             int tempIndex, collectionCount, comparisonCollectionCount;
+            yield return stateContinue;
 
-            if (PauseTickRun) yield return stateActive;
-
-            logicSetArray = customData.Split('|');
-
-            for (int x = 0; x < logicSetArray.Length; x++)
+            while (true)
             {
+                customData = RemoveSpaces(tempProcessLogicData);
+                comparison = ">";
+                typeID = subtypeID = substring = "";
+
                 if (PauseTickRun) yield return stateActive;
 
-                logicSetsList.Add(logicSetArray[x]);
-            }
+                logicSetArray = customData.Split('|');
 
-            if (logicSetsList.Count > 0)
-            {
-                for (int x = 0; x < logicSetsList.Count; x++)
-                {
-                    if (PauseTickRun) yield return stateActive;
-
-                    try
+                if (logicSetArray.Length > 0)
+                    for (int x = 0; x < logicSetArray.Length; x++)
                     {
-                        substring = logicSetsList[x];
-                        tempIndex = substring.IndexOf(":");
-                        typeID = substring.Substring(0, tempIndex);
-                        substring = substring.Substring(tempIndex + 1);
+                        if (PauseTickRun) yield return stateActive;
 
-                        comparison =
-                            substring.Contains(">=") ? ">=" :
-                            substring.Contains("<=") ? "<=" :
-                            substring.Contains("<") ? "<" :
-                            substring.Contains("=") ? "=" : ">";
+                        try
+                        {
+                            substring = logicSetArray[x];
+                            tempIndex = substring.IndexOf(":");
+                            typeID = substring.Substring(0, tempIndex);
+                            substring = substring.Substring(tempIndex + 1);
 
-                        tempIndex = substring.IndexOf(comparison);
-                        subtypeID = substring.Substring(0, tempIndex);
-                        substring = substring.Substring(tempIndex + comparison.Length);
-                    }
-                    catch { }
-                    itemCollectionMain.Clear();
-                    while (!MatchItems(itemCollectionMain, typeID, subtypeID))
-                        yield return stateActive;
+                            comparison =
+                                substring.Contains(">=") ? ">=" :
+                                substring.Contains("<=") ? "<=" :
+                                substring.Contains("<") ? "<" :
+                                substring.Contains("=") ? "=" : ">";
 
-                    collectionCount = itemCollectionMain.ItemTypeCount;
-                    tempIndex = substring.IndexOf(":");
-                    if (tempIndex > 0)
-                    {
-                        itemCollectionAlternate.Clear();
-                        typeID = substring.Substring(0, tempIndex);
-                        subtypeID = substring.Substring(tempIndex + 1);
-                        while (!MatchItems(itemCollectionAlternate, typeID, subtypeID))
+                            tempIndex = substring.IndexOf(comparison);
+                            subtypeID = substring.Substring(0, tempIndex);
+                            substring = substring.Substring(tempIndex + comparison.Length);
+                        }
+                        catch { }
+                        itemCollectionMain.Clear();
+                        while (!MatchItems(itemCollectionMain, typeID, subtypeID))
                             yield return stateActive;
 
-                        comparisonCollectionCount = itemCollectionAlternate.ItemTypeCount;
-                        for (int i = 0; i < collectionCount; i++)
+                        collectionCount = itemCollectionMain.ItemTypeCount;
+                        tempIndex = substring.IndexOf(":");
+                        if (tempIndex > 0)
                         {
-                            for (int y = 0; y < comparisonCollectionCount; y++)
+                            itemCollectionAlternate.Clear();
+
+                            typeID = substring.Substring(0, tempIndex);
+                            subtypeID = substring.Substring(tempIndex + 1);
+
+                            while (!MatchItems(itemCollectionAlternate, typeID, subtypeID))
+                                yield return stateActive;
+
+                            comparisonCollectionCount = itemCollectionAlternate.ItemTypeCount;
+                            for (int i = 0; i < collectionCount; i++)
+                                for (int y = 0; y < comparisonCollectionCount; y++)
+                                {
+                                    if (PauseTickRun) yield return stateActive;
+
+                                    tempLogicComparisons.Add(new LogicComparison { typeID = itemCollectionMain.ItemIDByIndex(i), compareAgainst = itemCollectionAlternate.ItemIDByIndex(y), comparison = comparison });
+                                }
+                        }
+                        else
+                            for (int i = 0; i < collectionCount; i++)
                             {
                                 if (PauseTickRun) yield return stateActive;
 
-                                logicComparisons.Add(new LogicComparison { typeID = itemCollectionMain.ItemIDByIndex(i), compareAgainst = itemCollectionAlternate.ItemIDByIndex(y), comparison = comparison });
+                                tempLogicComparisons.Add(new LogicComparison { typeID = itemCollectionMain.ItemIDByIndex(i), compareAgainst = substring, comparison = comparison });
+
                             }
-                        }
                     }
-                    else
-                    {
-                        for (int i = 0; i < collectionCount; i++)
-                        {
-                            if (PauseTickRun) yield return stateActive;
 
-                            logicComparisons.Add(new LogicComparison { typeID = itemCollectionMain.ItemIDByIndex(i), compareAgainst = substring, comparison = comparison });
-                        }
-                    }
-                }
+                yield return stateContinue;
             }
-            yield return stateComplete;
-        }
-
-        bool Loadouts()
-        {
-            selfContainedIdentifier = functionList[43];
-            if (!IsStateActive)
-            {
-                InitializeState(LoadoutState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
         }
 
         IEnumerator<FunctionState> LoadoutState()
@@ -1656,6 +1749,8 @@ namespace IngameScript
             ItemDefinition definition;
             double addAmount;
             bool excessFound;
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (long index in typedIndexes[setKeyIndexLoadout])
@@ -1744,22 +1839,13 @@ namespace IngameScript
             }
         }
 
-        bool SortRefineries()
-        {
-            selfContainedIdentifier = functionList[44];
-            if (!IsStateActive)
-            {
-                InitializeState(SortRefineryStateV2(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> SortRefineryStateV2()
         {
             IMyInventory inventory;
             double minPercent, maxPercent;
             SortedList<MyItemType, double> orePriorities = new SortedList<MyItemType, double>();
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (ItemDefinition itemDef in itemListMain[oreType].Values)
@@ -1848,20 +1934,11 @@ namespace IngameScript
             }
         }
 
-        bool Logic()
-        {
-            selfContainedIdentifier = functionList[45]; ;
-            if (!IsStateActive)
-            {
-                InitializeState(LogicState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> LogicState()
         {
             ItemDefinition definition;
+            yield return stateContinue;
+
             while (true)
             {
                 bool andComparison, pass = true;
@@ -1897,94 +1974,78 @@ namespace IngameScript
             }
         }
 
-        void Script()
-        {
-            selfContainedIdentifier = functionList[0];
-            if (!IsStateActive)
-                InitializeState(ScriptState(), selfContainedIdentifier);
-            else
-                StateManager(selfContainedIdentifier);
-        }
-
         IEnumerator<FunctionState> ScriptState()
         {
+            yield return stateContinue;
+
             while (true)
             {
                 while (!LoadData()) yield return stateActive;
 
                 while (!SaveData()) yield return stateActive;
 
-                ControlScript();
+                StateManager(FunctionIdentifier.Main_Control);
 
                 yield return stateActive;
 
-                if (!scanning && !loading) OutputScript();
+                if (!scanning && !loading) StateManager(FunctionIdentifier.Main_Output);
 
-                if (PauseTickRun) yield return stateActive;
                 yield return stateContinue;
             }
         }
 
-        void ControlScript()
-        {
-            selfContainedIdentifier = functionList[1];
-            if (!IsStateActive)
-                InitializeState(ControlState(), selfContainedIdentifier);
-            else
-                StateManager(selfContainedIdentifier);
-        }
-
         IEnumerator<FunctionState> ControlState()
         {
-            yield return stateActive;
-            string key;
+            FunctionIdentifier key;
+            yield return stateContinue;
+
             while (true)
             {
                 if (currentErrorCount >= 10)
                 {
                     currentErrorCount = 0;
-                    for (int i = 2; i < functionList.Length; i++)
+                    foreach (FunctionIdentifier identifier in stateRecords.Keys)
                     {
-                        if (PauseTickRun)
-                            yield return stateActive;
+                        if (PauseTickRun) yield return stateActive;
 
-                        if (StateActive(functionList[i]))
-                            StateDisposal(functionList[i]);
+                        if (identifier != FunctionIdentifier.Script && identifier != FunctionIdentifier.Main_Control && identifier != FunctionIdentifier.Idle && StateInitialized(identifier))
+                            StateDisposal(identifier);
                     }
                 }
 
-                if (SpanElapsed(scanSpan))
+                key = FunctionIdentifier.Scanning;
+                if (FunctionDelay(key))
                 {
                     scanning = true;
-                    currentMajorFunction = functionList[17];
-                    while (!Scan())
-                        yield return stateActive;
+                    currentMajorFunction = $"{key}";
+                    while (!StateManager(key)) yield return stateActive;
 
                     scanning = false;
-                    scanSpan = SpanDelay(GetKeyDouble(setKeyDelayScan));
+                    delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayScan));
                 }
 
                 if (GetKeyBool(setKeyToggleCountItems))
                 {
-                    currentMajorFunction = functionList[16];
-                    while (!Count())
-                        yield return stateActive;
+                    key = FunctionIdentifier.Counting_Items;
+                    currentMajorFunction = $"{key}";
+                    while (!StateManager(key)) yield return stateActive;
+                    yield return stateActive;
                 }
 
                 if (GetKeyBool(setKeyToggleCountBlueprints))
                 {
-                    currentMajorFunction = functionList[15];
-                    while (!CountBlueprints()) yield return stateActive;
+                    key = FunctionIdentifier.Counting_Blueprints;
+                    currentMajorFunction = $"{key}";
+                    while (!StateManager(key)) yield return stateActive;
                 }
 
                 if (GetKeyBool(setKeyToggleSortBlueprints))
                 {
-                    key = functionList[40];
+                    key = FunctionIdentifier.Sort_Blueprints;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!SortBlueprints())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelaySortBlueprints));
                     }
@@ -1992,12 +2053,11 @@ namespace IngameScript
 
                 if (GetKeyBool(setKeyToggleQueueAssembly) && GetKeyBool(setKeyToggleCountBlueprints))
                 {
-                    key = functionList[31];
+                    key = FunctionIdentifier.Queue_Assembly;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!QueueAssembly())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayQueueAssembly));
                     }
@@ -2005,12 +2065,11 @@ namespace IngameScript
 
                 if (GetKeyBool(setKeyToggleQueueDisassembly) && GetKeyBool(setKeyToggleCountBlueprints))
                 {
-                    key = functionList[32];
+                    key = FunctionIdentifier.Queue_Disassembly;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!QueueDisassembly())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayQueueDisassembly));
                     }
@@ -2018,12 +2077,11 @@ namespace IngameScript
 
                 if (GetKeyBool(setKeyToggleRemoveExcessAssembly) && GetKeyBool(setKeyToggleCountBlueprints))
                 {
-                    key = functionList[27];
+                    key = FunctionIdentifier.Removing_Excess_Assembly;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!RemoveExcessAssembly())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayRemoveExcessAssembly));
                     }
@@ -2031,12 +2089,11 @@ namespace IngameScript
 
                 if (GetKeyBool(setKeyToggleRemoveExcessDisassembly) && GetKeyBool(setKeyToggleCountBlueprints))
                 {
-                    key = functionList[36];
+                    key = FunctionIdentifier.Removing_Excess_Disassembly;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!RemoveExcessDisassembly())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayRemoveExcessDisassembly));
                     }
@@ -2044,12 +2101,11 @@ namespace IngameScript
 
                 if (activeOres > 0 && GetKeyBool(setKeyToggleToggleSortRefineries))
                 {
-                    key = functionList[44];
+                    key = FunctionIdentifier.Sort_Refineries;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!SortRefineries())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelaySortRefinery));
                     }
@@ -2057,12 +2113,11 @@ namespace IngameScript
 
                 if (typedIndexes[setKeyIndexLimit].Count > 0 && GetKeyBool(setKeyToggleProcessLimits))
                 {
-                    key = functionList[12];
+                    key = FunctionIdentifier.Processing_Limits;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!ProcessLimits())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayProcessLimits));
                     }
@@ -2070,16 +2125,15 @@ namespace IngameScript
 
                 if (GetKeyBool(setKeyToggleSortItems))
                 {
-                    key = functionList[13];
+                    key = FunctionIdentifier.Sorting;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
+                        currentMajorFunction = $"{key}";
                         bool useBottles = GetKeyDouble(setKeyDelayFillingBottles) > 0 && SpanElapsed(fillBottleSpan);
                         if (useBottles)
                             fillingBottles = !fillingBottles;
 
-                        while (!SortItems())
-                            yield return stateActive;
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelaySorting));
                         if (useBottles)
@@ -2089,18 +2143,18 @@ namespace IngameScript
 
                 if (GetKeyBool(setKeyToggleDistribution))
                 {
-                    key = functionList[9];
+                    key = FunctionIdentifier.Distribution;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!DistributeItems())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayDistribution));
                     }
                 }
 
-                key = functionList[24];
+                key = FunctionIdentifier.Spreading_Items;
                 if (FunctionDelay(key))
                 {
                     if (typedIndexes[setKeyIndexRefinery].Count > 1 && GetKeyBool(setKeyToggleSpreadRefieries))
@@ -2144,12 +2198,12 @@ namespace IngameScript
 
                 if (prioritySystemActivated && GetKeyBool(setKeyToggleSortCargoPriority))
                 {
-                    key = functionList[38];
+                    key = FunctionIdentifier.Cargo_Priority_Loop;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!SortCargoPriorities())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelaySortCargoPriority));
                     }
@@ -2157,12 +2211,12 @@ namespace IngameScript
 
                 if (GetKeyBool(setKeyToggleOrderCargo))
                 {
-                    key = functionList[54];
+                    key = FunctionIdentifier.Order_Storage;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!OrderCargo())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayOrderCargo));
                     }
@@ -2170,12 +2224,12 @@ namespace IngameScript
 
                 if (typedIndexes[setKeyIndexAssemblers].Count > 1 && GetKeyBool(setKeyToggleSpreadBlueprints))
                 {
-                    key = functionList[41];
+                    key = FunctionIdentifier.Spread_Blueprints;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!SpreadBlueprints())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelaySpreadBlueprints));
                     }
@@ -2183,12 +2237,12 @@ namespace IngameScript
 
                 if (typedIndexes[setKeyIndexLoadout].Count > 0 && GetKeyBool(setKeyToggleDoLoadouts))
                 {
-                    key = functionList[43];
+                    key = FunctionIdentifier.Loadouts;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!Loadouts())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayLoadouts));
                     }
@@ -2196,12 +2250,12 @@ namespace IngameScript
 
                 if (typedIndexes[setKeyIndexLogic].Count > 0 && GetKeyBool(setKeyToggleLogic))
                 {
-                    key = functionList[45];
+                    key = FunctionIdentifier.Custom_Logic;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!Logic())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayLogic));
                     }
@@ -2209,12 +2263,12 @@ namespace IngameScript
 
                 if (typedIndexes[setKeyIndexAssemblers].Count > 0 && GetKeyBool(setKeyToggleResetIdleAssemblers))
                 {
-                    key = functionList[48];
+                    key = FunctionIdentifier.Checking_Idle_Assemblers;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!CheckIdleAssemblers())
-                            yield return stateActive;
+                        currentMajorFunction = $"{key}";
+
+                        while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayIdleAssemblerCheck));
                     }
@@ -2222,11 +2276,11 @@ namespace IngameScript
 
                 if (GetKeyBool(setKeyToggleFindModItems))
                 {
-                    key = functionList[49];
+                    key = FunctionIdentifier.Find_Mod_Items;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = key;
-                        while (!FindModItems())
+                        currentMajorFunction = $"{key}";
+                        while (!StateManager(key))
                             yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayFindModItems));
@@ -2237,20 +2291,11 @@ namespace IngameScript
             }
         }
 
-        void OutputScript()
-        {
-            selfContainedIdentifier = functionList[2];
-            if (!IsStateActive)
-            {
-                InitializeState(OutputState(), selfContainedIdentifier);
-                if (PauseTickRun) return;
-            }
-            StateManager(selfContainedIdentifier, !scanning && !loading, false);
-        }
-
         IEnumerator<FunctionState> OutputState()
         {
             List<long> indexes = NewLongList;
+            yield return stateContinue;
+
             while (true)
             {
                 indexes.Clear();
@@ -2268,77 +2313,94 @@ namespace IngameScript
 
         bool OrderListByPriority(List<long> indexList, bool order)
         {
-            if (indexList.Count < 2)
-                return true;
-            selfContainedIdentifier = functionList[37];
-            if (!IsStateActive)
+            if (indexList.Count < 2) return true;
+
+            selfContainedIdentifier = FunctionIdentifier.Order_Blocks_By_Priority;
+
+            if (!IsStateRunning)
             {
-                InitializeState(OrderListByPriorityState(indexList, order), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempOrderByPriorityIndexes = indexList;
+                tempOrderByPriority = order;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> OrderListByPriorityState(List<long> indexList, bool order)
+        IEnumerator<FunctionState> OrderListByPriorityState()
         {
-            for (int i = 0; i < indexList.Count; i += 0)
+            List<long> orderedList = NewLongList;
+            IOrderedEnumerable<long> sortableObjects;
+            yield return stateContinue;
+
+            while (true)
             {
-                if (PauseTickRun) yield return stateActive;
-                if (!uniqueIndexSet.Add(indexList[i]))
-                    indexList.RemoveAt(i);
-                else i++;
-            }
-            uniqueIndexSet.Clear();
-            if (order && prioritySystemActivated)
-            {
-                List<long> orderedList = new List<long>(indexList);
-                IOrderedEnumerable<long> sortableObjects = orderedList.OrderByDescending(x => managedBlocks[x].Settings.priority);
-                indexList.Clear();
-                foreach (long index in sortableObjects)
+                for (int i = 0; i < tempOrderByPriorityIndexes.Count; i += 0)
                 {
                     if (PauseTickRun) yield return stateActive;
-                    indexList.Add(index);
+                    if (!uniqueIndexSet.Add(tempOrderByPriorityIndexes[i]))
+                        tempOrderByPriorityIndexes.RemoveAt(i);
+                    else i++;
                 }
+                uniqueIndexSet.Clear();
+                if (tempOrderByPriority && prioritySystemActivated)
+                {
+                    orderedList.Clear();
+                    orderedList.AddRange(tempOrderByPriorityIndexes);
+                    sortableObjects = orderedList.OrderByDescending(x => managedBlocks[x].Settings.priority);
+                    tempOrderByPriorityIndexes.Clear();
+                    foreach (long index in sortableObjects)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        tempOrderByPriorityIndexes.Add(index);
+                    }
+                }
+                yield return stateContinue;
             }
-            yield return stateComplete;
         }
 
         bool SetBlockQuotas(ItemCollection collection)
         {
-            selfContainedIdentifier = functionList[29];
-            if (!IsStateActive)
-            {
-                InitializeState(SetBlockQuotaState(collection), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+            selfContainedIdentifier = FunctionIdentifier.Setting_Block_Quotas;
+
+            if (!IsStateRunning)
+                tempSetBlockQuotaCollection = collection;
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> SetBlockQuotaState(ItemCollection collection)
+        IEnumerator<FunctionState> SetBlockQuotaState()
         {
-            List<ItemDefinition> itemList = GetAllItems;
-            bool append = collection.ItemTypeCount > 0;
-            foreach (ItemDefinition def in itemList)
-            {
-                if (PauseTickRun) yield return stateActive;
+            List<ItemDefinition> itemList = new List<ItemDefinition>();
+            bool append;
+            yield return stateContinue;
 
-                def.blockQuota = append ? collection.ItemCount(def.typeID, def.subtypeID, null) : 0;
+            while (true)
+            {
+                itemList.Clear();
+                itemList.AddRange(GetAllItems);
+                append = tempSetBlockQuotaCollection.ItemTypeCount > 0;
+
+                foreach (ItemDefinition def in itemList)
+                {
+                    if (PauseTickRun) yield return stateActive;
+
+                    def.blockQuota = append ? tempSetBlockQuotaCollection.ItemCount(def.typeID, def.subtypeID, null) : 0;
+                }
+
+                yield return stateContinue;
             }
-            yield return stateComplete;
         }
 
         bool SaveData()
         {
-            selfContainedIdentifier = functionList[30];
             if (!saving)
                 return true;
-            currentMajorFunction = selfContainedIdentifier;
-            if (!IsStateActive)
-            {
+
+            currentMajorFunction = $"{selfContainedIdentifier = FunctionIdentifier.Save}";
+
+            if (!IsStateRunning)
                 SetLastString("Saving Data");
-                InitializeState(SaveState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+
             return RunStateManager;
         }
 
@@ -2348,6 +2410,7 @@ namespace IngameScript
             string currentCategory;
             int duplicates;
             SortedList<string, SortedList<string, ItemDefinition>> categoryAndNameSorter = new SortedList<string, SortedList<string, ItemDefinition>>();
+            yield return stateContinue;
 
             while (true)
             {
@@ -2364,7 +2427,7 @@ namespace IngameScript
                         if (PauseTickRun)
                             yield return stateActive;
 
-                        currentCategory = kvpB.Value.category;
+                        currentCategory = Formatted(kvpB.Value.category);
                         if (!categoryAndNameSorter.ContainsKey(currentCategory))
                             categoryAndNameSorter[currentCategory] = new SortedList<string, ItemDefinition>();
 
@@ -2378,97 +2441,34 @@ namespace IngameScript
                     }
                 }
 
-                foreach (KeyValuePair<string, SortedList<string, ItemDefinition>> kvpA in categoryAndNameSorter)
-                {
-                    if (PauseTickRun)
-                        yield return stateActive;
+                SaveSettingDictionaryMulti<ItemDefinition>(categoryAndNameSorter, builder, "Items - ");
+                if (PauseTickRun) yield return stateActive;
 
-                    AppendHeader(ref builder, $"Items - {Formatted(kvpA.Key)}");
-                    foreach (KeyValuePair<string, ItemDefinition> kvpB in kvpA.Value)
-                    {
-                        if (PauseTickRun)
-                            yield return stateActive;
 
-                        ItemDefinitionToBuilders(ref builder, kvpB.Value);
-                        BuilderAppendLine(builder);
-                    }
-                }
-
-                AppendHeader(ref builder, "Item Groups");
-                foreach (KeyValuePair<string, ItemCollection> kvp in customItemGroups)
-                {
-                    if (PauseTickRun)
-                        yield return stateActive;
-
-                    builder.Append($"group={kvp.Key}=");
-                    while (!CollectionToString(builder, kvp.Value, false))
-                        yield return stateActive;
-                }
                 if (!reset)
                 {
-                    foreach (KeyValuePair<string, SortedList<string, bool>> kvpA in settingDictionaryBools)
-                    {
-                        if (PauseTickRun)
-                            yield return stateActive;
+                    SaveSettingDictionaryMulti<bool>(settingDictionaryBools, builder, "Switches - ", true);
+                    if (PauseTickRun) yield return stateActive;
 
-                        AppendHeader(ref builder, $"Switches - {kvpA.Key}");
-                        foreach (KeyValuePair<string, bool> kvpB in kvpA.Value)
-                        {
-                            if (PauseTickRun)
-                                yield return stateActive;
+                    SaveSettingDictionaryMulti<double>(settingDictionaryDoubles, builder, "Numbers - ", true);
+                    if (PauseTickRun) yield return stateActive;
 
-                            BuilderAppendLine(builder, $"{kvpB.Key}={kvpB.Value}");
-                        }
-                    }
-                    foreach (KeyValuePair<string, SortedList<string, double>> kvpA in settingDictionaryDoubles)
-                    {
-                        if (PauseTickRun)
-                            yield return stateActive;
+                    SaveSettingDictionarySingle<int>(settingsInts, builder, "", true);
+                    if (PauseTickRun) yield return stateActive;
 
-                        AppendHeader(ref builder, $"Numbers - {kvpA.Key}");
-                        foreach (KeyValuePair<string, double> kvpB in kvpA.Value)
-                        {
-                            if (PauseTickRun)
-                                yield return stateActive;
+                    SaveSettingDictionaryMulti<string>(settingDictionaryStrings, builder, "Text - ", true);
+                    if (PauseTickRun) yield return stateActive;
 
-                            BuilderAppendLine(builder, $"{kvpB.Key}={kvpB.Value}");
-                        }
-                    }
-                    foreach (KeyValuePair<string, int> kvp in settingsInts)
-                    {
-                        if (PauseTickRun)
-                            yield return stateActive;
-
-                        BuilderAppendLine(builder, $"{kvp.Key}={kvp.Value}");
-                    }
-                    foreach (KeyValuePair<string, SortedList<string, string>> kvpA in settingDictionaryStrings)
-                    {
-                        if (PauseTickRun)
-                            yield return stateActive;
-
-                        AppendHeader(ref builder, $"Text - {kvpA.Key}");
-                        foreach (KeyValuePair<string, string> kvpB in kvpA.Value)
-                        {
-                            if (PauseTickRun)
-                                yield return stateActive;
-
-                            BuilderAppendLine(builder, $"{kvpB.Key}={kvpB.Value}");
-                        }
-                    }
-                    AppendHeader(ref builder, "Lists");
+                    AppendHeader(builder, "Lists");
                     foreach (KeyValuePair<string, List<string>> kvp in settingsListsStrings)
                     {
                         if (PauseTickRun)
                             yield return stateActive;
 
-                        builder.Append($"{kvp.Key}=[");
-                        for (int i = 0; i < kvp.Value.Count; i++)
-                            builder.Append($"{(i > 0 ? "|" : "")}{kvp.Value[i]}");
-                        BuilderAppendLine(builder, "]");
+                        BuilderAppendLine(builder, $"{kvp.Key}=[{String.Join("|", kvp.Value)}]");
                         BuilderAppendLine(builder);
                     }
 
-                    BuilderAppendLine(builder);
                     BuilderAppendLine(builder);
                     BuilderAppendLine(builder, $"script={scriptName}");
 
@@ -2485,18 +2485,34 @@ namespace IngameScript
             }
         }
 
+        void SaveSettingDictionaryMulti<T>(SortedList<string, SortedList<string, T>> list, StringBuilder builder, string header = "", bool prefixKey = false)
+        {
+            foreach (KeyValuePair<string, SortedList<string, T>> kvp in list)
+            {
+                if (header.Length > 0)
+                    AppendHeader(builder, $"{header}{kvp.Key}");
+                SaveSettingDictionarySingle<T>(kvp.Value, builder, "", prefixKey);
+            }
+        }
+
+        void SaveSettingDictionarySingle<T>(SortedList<string, T> list, StringBuilder builder, string header = "", bool prefixKey = false)
+        {
+            if (header.Length > 0)
+                AppendHeader(builder, $"{header}");
+            foreach (KeyValuePair<string, T> kvp in list)
+                BuilderAppendLine(builder, $"{(prefixKey ? $"{kvp.Key}=" : "")}{kvp.Value}");
+        }
+
         bool LoadData()
         {
-            selfContainedIdentifier = functionList[42];
             if (!loading)
                 return true;
-            currentMajorFunction = selfContainedIdentifier;
-            if (!IsStateActive)
-            {
+
+            currentMajorFunction = $"{selfContainedIdentifier = FunctionIdentifier.Load}";
+
+            if (!IsStateRunning)
                 SetLastString("Loading Data");
-                InitializeState(LoadState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+
             return RunStateManager;
         }
 
@@ -2505,6 +2521,8 @@ namespace IngameScript
             string[] settingArray;
             List<string> settingList = NewStringList;
             string excludedDefTemp;
+            yield return stateContinue;
+
             while (true)
             {
                 if (TextHasLength(Me.CustomData))
@@ -2560,20 +2578,11 @@ namespace IngameScript
             }
         }
 
-        bool QueueAssembly()
-        {
-            selfContainedIdentifier = functionList[31];
-            if (!IsStateActive)
-            {
-                InitializeState(QueueAssemblyState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> QueueAssemblyState()
         {
             double queueAmount;
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (KeyValuePair<string, Blueprint> kvp in blueprintList)
@@ -2597,20 +2606,11 @@ namespace IngameScript
             }
         }
 
-        bool QueueDisassembly()
-        {
-            selfContainedIdentifier = functionList[32];
-            if (!IsStateActive)
-            {
-                InitializeState(QueueDisassemblyState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> QueueDisassemblyState()
         {
             double queueAmount;
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (KeyValuePair<string, Blueprint> kvp in blueprintList)
@@ -2628,179 +2628,199 @@ namespace IngameScript
 
         bool DistributeBlueprint(Blueprint blueprint, double amount, List<long> assemblerIndexList, MyAssemblerMode mode = assemblyMode, bool count = true)
         {
-            selfContainedIdentifier = functionList[26];
-            if (!IsStateActive)
+            selfContainedIdentifier = FunctionIdentifier.Distributing_Blueprint;
+
+            if (!IsStateRunning)
             {
-                InitializeState(DistributeBlueprintState(blueprint, amount, assemblerIndexList, mode, count), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempDistributeBlueprint = blueprint;
+                tempDistributeBlueprintAmount = amount;
+                tempDistributeBlueprintIndexes = assemblerIndexList;
+                tempDistributeBlueprintMode = mode;
+                tempDistributeBlueprintCount = count;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> DistributeBlueprintState(Blueprint blueprint, double originalAmount, List<long> assemblerIndexList, MyAssemblerMode mode, bool count)
+        IEnumerator<FunctionState> DistributeBlueprintState()
         {
-            double amount = originalAmount, multiplier = 1;
+            double amount, multiplier;
             string blocksubtype;
-            if (mode == disassemblyMode)
-            {
-                multiplier = blueprint.multiplier;
-                amount = Math.Floor(originalAmount / multiplier);
-            }
-            MyDefinitionId blueprintID = MyDefinitionId.Parse(MakeBlueprint(blueprint));
+            MyDefinitionId blueprintID;
             IMyTerminalBlock block;
-            potentialAssemblerList.Clear();
-            foreach (long index in assemblerIndexList)
-            {
-                if (PauseTickRun) yield return stateActive;
-
-                if (!IsBlockOk(index))
-                    continue;
-
-                if (UsableAssembler(managedBlocks[index], blueprintID, mode))
-                {
-                    block = managedBlocks[index].block;
-                    blocksubtype = BlockSubtype(block);
-                    if (!potentialAssemblerList.ContainsKey(blocksubtype))
-                        potentialAssemblerList[blocksubtype] = new List<PotentialAssembler>();
-
-                    potentialAssemblerList[blocksubtype].Add(new PotentialAssembler { index = index, empty = ((IMyAssembler)block).IsQueueEmpty, specific = managedBlocks[index].Settings.UniqueBlueprintsOnly });
-                }
-            }
-
             List<long> indexList = NewLongList;
-            foreach (KeyValuePair<string, List<PotentialAssembler>> kvpA in potentialAssemblerList)
+            yield return stateContinue;
+
+            while (true)
             {
-                if (PauseTickRun)
-                    yield return stateActive;
-
-                foreach (PotentialAssembler potentialAssembler in kvpA.Value)
+                amount = tempDistributeBlueprintAmount;
+                if (tempDistributeBlueprintMode == disassemblyMode)
                 {
-                    if (PauseTickRun)
-                        yield return stateActive;
+                    multiplier = tempDistributeBlueprint.multiplier;
+                    amount = Math.Floor(tempDistributeBlueprintAmount / multiplier);
+                }
+                else multiplier = 1;
 
-                    if (!potentialAssembler.specific || potentialAssemblerList.Count == 1)
+                if (MyDefinitionId.TryParse(MakeBlueprint(tempDistributeBlueprint), out blueprintID))
+                {
+                    potentialAssemblerList.Clear();
+
+                    foreach (long index in tempDistributeBlueprintIndexes)
                     {
-                        if (mode == disassemblyMode && assemblyNeededByMachine.Contains(kvpA.Key) && indexList.Count > 0)
-                            continue;
+                        if (PauseTickRun) yield return stateActive;
 
-                        if (potentialAssembler.empty)
-                            indexList.Insert(0, potentialAssembler.index);
-                        else
-                            indexList.Add(potentialAssembler.index);
+                        if (!IsBlockOk(index)) continue;
+
+                        if (UsableAssembler(managedBlocks[index], blueprintID, tempDistributeBlueprintMode))
+                        {
+                            block = managedBlocks[index].block;
+                            blocksubtype = BlockSubtype(block);
+                            if (!potentialAssemblerList.ContainsKey(blocksubtype))
+                                potentialAssemblerList[blocksubtype] = new List<PotentialAssembler>();
+
+                            potentialAssemblerList[blocksubtype].Add(new PotentialAssembler { index = index, empty = ((IMyAssembler)block).IsQueueEmpty, specific = managedBlocks[index].Settings.GetOption(setKeyBlockUniqueBlueprinteOnlyKey) });
+                        }
+                    }
+
+                    indexList.Clear();
+                    foreach (KeyValuePair<string, List<PotentialAssembler>> kvpA in potentialAssemblerList)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+
+                        foreach (PotentialAssembler potentialAssembler in kvpA.Value)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+
+                            if (!potentialAssembler.specific || potentialAssemblerList.Count == 1)
+                            {
+                                if (tempDistributeBlueprintMode == disassemblyMode && assemblyNeededByMachine.Contains(kvpA.Key) && indexList.Count > 0)
+                                    continue;
+
+                                if (potentialAssembler.empty)
+                                    indexList.Insert(0, potentialAssembler.index);
+                                else
+                                    indexList.Add(potentialAssembler.index);
+                            }
+                        }
+                    }
+                    potentialAssemblerList.Clear();
+
+                    if (indexList.Count > 0)
+                    {
+                        int splitAmount, excessAmount, currentAmount;
+                        splitAmount = Math.DivRem((int)amount, indexList.Count, out excessAmount);
+                        if (tempDistributeBlueprint.blueprintID == stoneOreToIngotBasicID)
+                        {
+                            excessAmount = 0;
+                            splitAmount = (int)amount;
+                        }
+
+                        for (int i = 0; i < indexList.Count && i < amount; i++)
+                        {
+                            currentAmount = splitAmount;
+                            if (i < excessAmount)
+                                currentAmount++;
+
+                            if (currentAmount > 0)
+                                while (!InsertBlueprint(blueprintID, currentAmount * multiplier, managedBlocks[indexList[i]], tempDistributeBlueprintMode, tempDistributeBlueprintCount))
+                                    yield return stateActive;
+                        }
                     }
                 }
+
+                yield return stateContinue;
             }
-            potentialAssemblerList.Clear();
-
-            if (indexList.Count > 0)
-            {
-                int splitAmount, excessAmount, currentAmount;
-                splitAmount = Math.DivRem((int)amount, indexList.Count, out excessAmount);
-                if (blueprint.blueprintID == stoneOreToIngotBasicID)
-                {
-                    excessAmount = 0;
-                    splitAmount = (int)amount;
-                }
-
-                for (int i = 0; i < indexList.Count && i < amount; i++)
-                {
-                    currentAmount = splitAmount;
-                    if (i < excessAmount)
-                        currentAmount++;
-
-                    if (currentAmount > 0)
-                        while (!InsertBlueprint(blueprintID, currentAmount * multiplier, managedBlocks[indexList[i]], mode, count))
-                            yield return stateActive;
-                }
-            }
-
-            yield return stateComplete;
         }
 
         bool InsertBlueprint(MyDefinitionId blueprintID, double amount, BlockDefinition managedBlock, MyAssemblerMode mode, bool count = true)
         {
-            selfContainedIdentifier = functionList[33];
-            if (!IsStateActive)
+            selfContainedIdentifier = FunctionIdentifier.Inserting_Blueprint;
+
+            if (!IsStateRunning)
             {
-                InitializeState(InsertBlueprintState(blueprintID, amount, managedBlock, mode, count), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempInsertBlueprintID = blueprintID;
+                tempInsertBlueprintAmount = amount;
+                tempInsertBlueprintBlockDefinition = managedBlock;
+                tempInsertBlueprintMode = mode;
+                tempInsertBlueprintCount = count;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> InsertBlueprintState(MyDefinitionId blueprintID, double amount, BlockDefinition managedBlock, MyAssemblerMode mode, bool count)
+        IEnumerator<FunctionState> InsertBlueprintState()
         {
-            double currentAmount = Math.Floor(amount);
-            bool contains;
-            IMyAssembler assembler = (IMyAssembler)managedBlock.block;
-            assembler.Mode = mode;
-            if (assembler.Mode != mode)
-                assembler.Mode = mode;
+            double currentAmount, currentPercent, nextPercent;
+            bool contains, inserted;
+            IMyAssembler assembler;
+            yield return stateContinue;
 
-            if (assembler.Mode == mode)
+            while (true)
             {
-                if (assembler.IsQueueEmpty)
-                    assembler.AddQueueItem(blueprintID, currentAmount);
-                else
+                currentAmount = Math.Floor(tempInsertBlueprintAmount);
+                assembler = (IMyAssembler)tempInsertBlueprintBlockDefinition.block;
+                assembler.Mode = tempInsertBlueprintMode;
+                if (assembler.Mode != tempInsertBlueprintMode)
+                    assembler.Mode = tempInsertBlueprintMode;
+
+                if (assembler.Mode == tempInsertBlueprintMode)
                 {
-                    bool inserted = false;
-                    double currentPercent = mode == assemblyMode ? BlueprintPercentage(blueprintID) : 0, nextPercent = 0;
-
-                    blueprintListMain.Clear();
-                    assembler.GetQueue(blueprintListMain);
-                    contains = false;
-                    for (int i = 0; !contains && i < blueprintListMain.Count; i++)
+                    if (assembler.IsQueueEmpty)
+                        assembler.AddQueueItem(tempInsertBlueprintID, currentAmount);
+                    else
                     {
-                        if (PauseTickRun) yield return stateActive;
+                        inserted = false;
+                        currentPercent = tempInsertBlueprintMode == assemblyMode ? BlueprintPercentage(tempInsertBlueprintID) : 0;
 
-                        if (BlueprintSubtype(blueprintListMain[i]) == blueprintID.SubtypeName)
-                        {
-                            contains = true;
-                            if (blueprintID.SubtypeName == stoneOreToIngotBasicID)
-                                currentAmount = Math.Floor(currentAmount - (double)blueprintListMain[i].Amount);
-                        }
-                    }
-                    if (currentAmount > 0 && (contains || (mode == assemblyMode && !managedBlock.Settings.NoSorting)))
-                        for (int i = 0; i < blueprintListMain.Count; i++)
+                        blueprintListMain.Clear();
+                        assembler.GetQueue(blueprintListMain);
+                        contains = false;
+                        for (int i = 0; !contains && i < blueprintListMain.Count; i++)
                         {
                             if (PauseTickRun) yield return stateActive;
 
-                            if (!contains && mode == assemblyMode)
-                                nextPercent = BlueprintPercentage(blueprintListMain[i].BlueprintId);
-
-                            if ((!contains && currentPercent <= nextPercent) || BlueprintSubtype(blueprintListMain[i]) == blueprintID.SubtypeName)
+                            if (BlueprintSubtype(blueprintListMain[i]) == tempInsertBlueprintID.SubtypeName)
                             {
-                                assembler.InsertQueueItem(i, blueprintID, currentAmount);
-                                inserted = true;
-                                break;
+                                contains = true;
+                                if (tempInsertBlueprintID.SubtypeName == stoneOreToIngotBasicID)
+                                    currentAmount = Math.Floor(currentAmount - (double)blueprintListMain[i].Amount);
                             }
                         }
+                        if (currentAmount > 0 && (contains || (tempInsertBlueprintMode == assemblyMode && !tempInsertBlueprintBlockDefinition.Settings.GetOption(setKeyBlockNoSortingKey))))
+                            for (int i = 0; i < blueprintListMain.Count; i++)
+                            {
+                                if (PauseTickRun) yield return stateActive;
 
-                    if (!inserted && currentAmount > 0)
-                        assembler.AddQueueItem(blueprintID, currentAmount);
+                                if (!contains && tempInsertBlueprintMode == assemblyMode)
+                                    nextPercent = BlueprintPercentage(blueprintListMain[i].BlueprintId);
+                                else
+                                    nextPercent = 0;
+
+                                if ((!contains && currentPercent <= nextPercent) || BlueprintSubtype(blueprintListMain[i]) == tempInsertBlueprintID.SubtypeName)
+                                {
+                                    assembler.InsertQueueItem(i, tempInsertBlueprintID, currentAmount);
+                                    inserted = true;
+                                    break;
+                                }
+                            }
+
+                        if (!inserted && currentAmount > 0)
+                            assembler.AddQueueItem(tempInsertBlueprintID, currentAmount);
+                    }
+                    if (tempInsertBlueprintCount)
+                        AddBlueprintAmount(tempInsertBlueprintID.SubtypeName, tempInsertBlueprintMode == assemblyMode, currentAmount, true);
                 }
-                if (count)
-                    AddBlueprintAmount(blueprintID.SubtypeName, mode == assemblyMode, currentAmount, true);
-            }
 
-            yield return stateComplete;
-        }
-
-        bool RemoveExcessAssembly()
-        {
-            selfContainedIdentifier = functionList[27];
-            if (!IsStateActive)
-            {
-                InitializeState(RemoveExcessAssemblyState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                yield return stateContinue;
             }
-            return RunStateManager;
         }
 
         IEnumerator<FunctionState> RemoveExcessAssemblyState()
         {
             ItemDefinition definition;
             double excessQueued;
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (KeyValuePair<string, Blueprint> kvp in blueprintList)
@@ -2821,68 +2841,68 @@ namespace IngameScript
 
         bool RemoveBlueprint(Blueprint blueprint, double amount, MyAssemblerMode mode = assemblyMode)
         {
-            selfContainedIdentifier = functionList[35];
-            if (!IsStateActive)
+            selfContainedIdentifier = FunctionIdentifier.Removing_Blueprint;
+
+            if (!IsStateRunning)
             {
-                InitializeState(RemoveBlueprintState(blueprint, amount, mode), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempRemoveBlueprint = blueprint;
+                tempRemoveBlueprintAmount = amount;
+                tempRemoveBlueprintMode = mode;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> RemoveBlueprintState(Blueprint blueprint, double amount, MyAssemblerMode mode)
+        IEnumerator<FunctionState> RemoveBlueprintState()
         {
-            double removalAmount, toBeRemovedAmount = amount;
+            double removalAmount, toBeRemovedAmount;
             IMyAssembler assembler;
-            foreach (long index in typedIndexes[setKeyIndexAssemblers])
+            yield return stateContinue;
+
+            while (true)
             {
-                if (toBeRemovedAmount <= 0) break;
-                if (PauseTickRun) yield return stateActive;
-                if (!IsBlockOk(index))
-                    continue;
+                toBeRemovedAmount = tempRemoveBlueprintAmount;
 
-                assembler = (IMyAssembler)managedBlocks[index].block;
-
-                if (assembler.Mode == mode && !assembler.IsQueueEmpty)
+                foreach (long index in typedIndexes[setKeyIndexAssemblers])
                 {
-                    blueprintListMain.Clear();
-                    assembler.GetQueue(blueprintListMain);
-                    for (int x = blueprintListMain.Count - 1; x >= 0 && toBeRemovedAmount > 0; x--)
+                    if (toBeRemovedAmount <= 0) break;
+                    if (PauseTickRun) yield return stateActive;
+                    if (!IsBlockOk(index)) continue;
+
+                    assembler = (IMyAssembler)managedBlocks[index].block;
+
+                    if (assembler.Mode == tempRemoveBlueprintMode && !assembler.IsQueueEmpty)
                     {
-                        if (PauseTickRun)
-                            yield return stateActive;
-
-                        if (BlueprintSubtype(blueprintListMain[x]) == blueprint.blueprintID)
+                        blueprintListMain.Clear();
+                        assembler.GetQueue(blueprintListMain);
+                        for (int x = blueprintListMain.Count - 1; x >= 0 && toBeRemovedAmount > 0; x--)
                         {
-                            removalAmount = (double)blueprintListMain[x].Amount;
-                            if (removalAmount > toBeRemovedAmount)
-                                removalAmount = toBeRemovedAmount;
+                            if (PauseTickRun) yield return stateActive;
 
-                            assembler.RemoveQueueItem(x, (MyFixedPoint)removalAmount);
-                            AddBlueprintAmount(blueprint.blueprintID, mode == assemblyMode, -removalAmount, true);
-                            toBeRemovedAmount -= removalAmount;
+                            if (BlueprintSubtype(blueprintListMain[x]) == tempRemoveBlueprint.blueprintID)
+                            {
+                                removalAmount = (double)blueprintListMain[x].Amount;
+                                if (removalAmount > toBeRemovedAmount)
+                                    removalAmount = toBeRemovedAmount;
+
+                                assembler.RemoveQueueItem(x, (MyFixedPoint)removalAmount);
+                                AddBlueprintAmount(tempRemoveBlueprint.blueprintID, tempRemoveBlueprintMode == assemblyMode, -removalAmount, true);
+                                toBeRemovedAmount -= removalAmount;
+                            }
                         }
                     }
                 }
-            }
-            yield return stateComplete;
-        }
 
-        bool RemoveExcessDisassembly()
-        {
-            selfContainedIdentifier = functionList[36];
-            if (!IsStateActive)
-            {
-                InitializeState(RemoveExcessDisassemblyState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                yield return stateContinue;
             }
-            return RunStateManager;
         }
 
         IEnumerator<FunctionState> RemoveExcessDisassemblyState()
         {
             ItemDefinition definition;
             double excessQueued;
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (KeyValuePair<string, Blueprint> kvp in blueprintList)
@@ -2902,19 +2922,10 @@ namespace IngameScript
             }
         }
 
-        bool SortCargoPriorities()
-        {
-            selfContainedIdentifier = functionList[38];
-            if (!IsStateActive)
-            {
-                InitializeState(SortCargoPriorityState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> SortCargoPriorityState()
         {
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (KeyValuePair<string, List<long>> kvp in indexesStorageLists)
@@ -2932,68 +2943,64 @@ namespace IngameScript
 
         bool SortCargoList(List<long> indexList)
         {
-            selfContainedIdentifier = functionList[39];
-            if (!IsStateActive)
-            {
-                InitializeState(SortCargoListState(indexList), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+            selfContainedIdentifier = FunctionIdentifier.Sorting_Cargo_Priority;
+
+            if (!IsStateRunning)
+                tempSortCargoListIndexes = indexList;
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> SortCargoListState(List<long> indexList)
+        IEnumerator<FunctionState> SortCargoListState()
         {
-            int storageStartIndex = 0;
-            while (storageStartIndex < indexList.Count)
+            int storageStartIndex;
+            yield return stateContinue;
+
+            while (true)
             {
-                if (PauseTickRun) yield return stateActive;
-
-                if (CurrentVolumePercentage(indexList[storageStartIndex]) >= 0.985)
-                    storageStartIndex++;
-                else
-                    break;
-            }
-            for (int i = storageStartIndex + 1; i < indexList.Count; i++)
-            {
-                if (PauseTickRun)
-                    yield return stateActive;
-
-                if (!IsBlockOk(indexList[i]))
-                    continue;
-
-                if (CurrentVolumePercentage(indexList[storageStartIndex]) >= 0.985)
-                    storageStartIndex++;
-
-                if (i > storageStartIndex)
+                storageStartIndex = 0;
+                while (storageStartIndex < tempSortCargoListIndexes.Count)
                 {
-                    mainFunctionItemList.Clear();
-                    mainBlockDefinition = managedBlocks[indexList[i]];
-                    mainBlockDefinition.Input.GetItems(mainFunctionItemList);
+                    if (PauseTickRun) yield return stateActive;
 
-                    for (int x = 0; x < mainFunctionItemList.Count; x += 0)
-                    {
-                        if (PauseTickRun)
-                            yield return stateActive;
-                        if (mainBlockDefinition.Settings.loadout.ItemCount(mainFunctionItemList[x], mainBlockDefinition.block) > 0)
-                            mainFunctionItemList.RemoveAt(x);
-                        else x++;
-                    }
-                    while (!PutInStorage(mainFunctionItemList, indexList[i], 0, -1, i, storageStartIndex))
-                        yield return stateActive;
+                    if (CurrentVolumePercentage(tempSortCargoListIndexes[storageStartIndex]) >= 0.985)
+                        storageStartIndex++;
+                    else
+                        break;
                 }
-            }
-            yield return stateComplete;
-        }
 
-        bool SortBlueprints()
-        {
-            selfContainedIdentifier = functionList[40];
-            if (!IsStateActive)
-            {
-                InitializeState(SortBlueprintState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                for (int i = storageStartIndex + 1; i < tempSortCargoListIndexes.Count; i++)
+                {
+                    if (PauseTickRun) yield return stateActive;
+
+                    if (!IsBlockOk(tempSortCargoListIndexes[i])) continue;
+
+                    if (CurrentVolumePercentage(tempSortCargoListIndexes[storageStartIndex]) >= 0.985)
+                        storageStartIndex++;
+
+                    if (i > storageStartIndex)
+                    {
+                        mainFunctionItemList.Clear();
+                        mainBlockDefinition = managedBlocks[tempSortCargoListIndexes[i]];
+                        mainBlockDefinition.Input.GetItems(mainFunctionItemList);
+
+                        for (int x = 0; x < mainFunctionItemList.Count; x += 0)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+
+                            if (mainBlockDefinition.Settings.loadout.ItemCount(mainFunctionItemList[x], mainBlockDefinition.block) > 0)
+                                mainFunctionItemList.RemoveAt(x);
+                            else
+                                x++;
+                        }
+
+                        while (!PutInStorage(mainFunctionItemList, tempSortCargoListIndexes[i], 0, -1, i, storageStartIndex))
+                            yield return stateActive;
+                    }
+                }
+
+                yield return stateContinue;
             }
-            return RunStateManager;
         }
 
         IEnumerator<FunctionState> SortBlueprintState()
@@ -3002,6 +3009,8 @@ namespace IngameScript
             int tempAmount;
             double blueprintPercent, minPercent = 0, maxPercent = 0;
             BlockDefinition managedBlock;
+            yield return stateContinue;
+
             while (true)
             {
                 sortableListMain.Clear();
@@ -3009,7 +3018,7 @@ namespace IngameScript
                 {
                     if (PauseTickRun) yield return stateActive;
                     managedBlock = managedBlocks[index];
-                    if (!IsBlockOk(index) || managedBlock.Settings.NoSorting)
+                    if (!IsBlockOk(index) || managedBlock.Settings.GetOption(setKeyBlockNoSortingKey))
                         continue;
 
                     assembler = (IMyAssembler)managedBlock.block;
@@ -3069,17 +3078,6 @@ namespace IngameScript
             }
         }
 
-        bool SpreadBlueprints()
-        {
-            selfContainedIdentifier = functionList[41];
-            if (!IsStateActive)
-            {
-                InitializeState(SpreadBlueprintStateV2(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> SpreadBlueprintStateV2()
         {
             SortedList<MyAssemblerMode, SortedList<string, BlueprintSpreadInformation>> blueprintInformation = new SortedList<MyAssemblerMode, SortedList<string, BlueprintSpreadInformation>>();
@@ -3091,6 +3089,7 @@ namespace IngameScript
             double moveAmount, averageAmount, minimalRange = balanceRange;
             List<long> indexList = NewLongList;
             long currentEntityID;
+            yield return stateContinue;
 
             while (true)
             {
@@ -3204,20 +3203,18 @@ namespace IngameScript
 
         bool BalanceItems(List<long> indexList)
         {
-            selfContainedIdentifier = functionList[24];
+            selfContainedIdentifier = FunctionIdentifier.Spreading_Items;
+
             if (!IsStateRunning)
                 tempBalanceItemIndexes = indexList;
-            if (!IsStateActive)
-            {
-                InitializeState(BalanceState2(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+
             return RunStateManager;
         }
 
         IEnumerator<FunctionState> BalanceState2()
         {
             SortedList<MyItemType, SortedList<long, double>> countList = new SortedList<MyItemType, SortedList<long, double>>();
+            yield return stateContinue;
 
             while (true)
             {
@@ -3226,7 +3223,7 @@ namespace IngameScript
                 foreach (long index in tempBalanceItemIndexes)
                 {
                     if (PauseTickRun) yield return stateActive;
-                    if (!IsBlockOk(index) || managedBlocks[index].Settings.NoSpreading) continue;
+                    if (!IsBlockOk(index) || managedBlocks[index].Settings.GetOption(setKeyBlockNoSpreadKey)) continue;
 
                     mainFunctionItemList.Clear();
                     managedBlocks[index].Input.GetItems(mainFunctionItemList);
@@ -3251,7 +3248,7 @@ namespace IngameScript
                     {
                         if (PauseTickRun) yield return stateActive;
 
-                        if (IsBlockOk(index) && !managedBlocks[index].Settings.NoSpreading && !kvp.Value.ContainsKey(index) && AcceptsItem(managedBlocks[index], kvp.Key.TypeId, kvp.Key.SubtypeId)) kvp.Value[index] = 0;
+                        if (IsBlockOk(index) && !managedBlocks[index].Settings.GetOption(setKeyBlockNoSpreadKey) && !kvp.Value.ContainsKey(index) && AcceptsItem(managedBlocks[index], kvp.Key.TypeId, kvp.Key.SubtypeId)) kvp.Value[index] = 0;
                     }
                 // Loop through each item
                 foreach (KeyValuePair<MyItemType, SortedList<long, double>> kvpA in countList)
@@ -3345,47 +3342,43 @@ namespace IngameScript
 
         bool CountItemsInList(ItemCollection count, List<long> indexes, string typeID = "", string subtypeID = "")
         {
-            selfContainedIdentifier = functionList[8];
-            if (!IsStateActive)
+            selfContainedIdentifier = FunctionIdentifier.Counting_Listed_Items;
+
+            if (!IsStateRunning)
             {
-                InitializeState(CountListState(count, indexes, typeID, subtypeID), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempCountItemsInListCollection = count;
+                tempCountItemsInListIndexes = indexes;
+                tempCountItemsInListTypeID = typeID;
+                tempCountItemsInListSubtypeID = subtypeID;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> CountListState(ItemCollection count, List<long> indexes, string typeID, string subtypeID)
+        IEnumerator<FunctionState> CountListState()
         {
-            foreach (long index in indexes)
+            yield return stateContinue;
+
+            while (true)
             {
-                if (PauseTickRun) yield return stateActive;
-
-                countByListA.Clear();
-                if (!IsBlockOk(index))
-                    continue;
-
-                managedBlocks[index].Input.GetItems(countByListA);
-                for (int x = 0; x < countByListA.Count; x++)
+                foreach (long index in tempCountItemsInListIndexes)
                 {
-                    if (PauseTickRun)
-                        yield return stateActive;
+                    if (PauseTickRun) yield return stateActive;
 
-                    if ((!TextHasLength(typeID) || countByListA[x].Type.TypeId == typeID) && (!TextHasLength(subtypeID) || countByListA[x].Type.SubtypeId == subtypeID))
-                        count.AddItem(countByListA[x]);
+                    if (!IsBlockOk(index)) continue;
+
+                    countByListA.Clear();
+                    managedBlocks[index].Input.GetItems(countByListA);
+                    for (int x = 0; x < countByListA.Count; x++)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+
+                        if ((!TextHasLength(tempCountItemsInListTypeID) || countByListA[x].Type.TypeId == tempCountItemsInListTypeID) && (!TextHasLength(tempCountItemsInListSubtypeID) || countByListA[x].Type.SubtypeId == tempCountItemsInListSubtypeID))
+                            tempCountItemsInListCollection.AddItem(countByListA[x]);
+                    }
                 }
+                yield return stateContinue;
             }
-            yield return stateComplete;
-        }
-
-        bool DistributeItems()
-        {
-            selfContainedIdentifier = functionList[9];
-            if (!IsStateActive)
-            {
-                InitializeState(DistributeState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
         }
 
         IEnumerator<FunctionState> DistributeState()
@@ -3393,6 +3386,8 @@ namespace IngameScript
             string subtypeID;
             SortedList<long, double> acceptingIndexes = NewSortedListLongDouble;
             List<long> tempIndexes = NewLongList;
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (long index in typedIndexes[setKeyIndexStorage])
@@ -3458,7 +3453,8 @@ namespace IngameScript
 
         bool DistributeItem(MyInventoryItem item, BlockDefinition block, SortedList<long, double> acceptingIndexes, double specifixMax = -1)
         {
-            selfContainedIdentifier = functionList[10];
+            selfContainedIdentifier = FunctionIdentifier.Distributing_Item;
+
             if (!IsStateRunning)
             {
                 tempDistributeItem = item;
@@ -3466,147 +3462,151 @@ namespace IngameScript
                 tempDistributeItemIndexes = acceptingIndexes;
                 tempDistributeItemMax = specifixMax;
             }
-            if (!IsStateActive)
-            {
-                InitializeState(DistributeItemState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+
             return RunStateManager;
         }
 
         IEnumerator<FunctionState> DistributeItemState()
         {
-            IMyTerminalBlock managedBlock;
             SortedList<long, double> tempSortedIndexList = NewSortedListLongDouble;
             List<long> tempIndexList = NewLongList;
-            foreach (KeyValuePair<long, double> kvp in tempDistributeItemIndexes)
-                tempSortedIndexList[kvp.Key] = kvp.Value;
-
             double contained, totalAmount, splitAmount, originalSplitAmount,
-                    maxAmount, balanceRange, balancedShare, tempMax, remainder = 0;
+                    maxAmount, balanceRange, balancedShare, tempMax, remainder;
+            bool fractional, foundLimit;
+            long key;
+            int indexCount;
+            yield return stateContinue;
 
-            for (int i = 0; i < tempSortedIndexList.Count; i += 0)
+            while (true)
             {
-                if (PauseTickRun) yield return stateActive;
-
-                if (IsBlockOk(tempSortedIndexList.Keys[i]) && CurrentVolumePercentage(tempSortedIndexList.Keys[i]) < 0.99 && AcceptsItem(managedBlocks[tempSortedIndexList.Keys[i]], tempDistributeItem))
-                {
-                    tempIndexList.Add(tempSortedIndexList.Keys[i]);
-                    i++;
-                }
-                else
-                    tempSortedIndexList.Remove(tempSortedIndexList.Keys[i]);
-            }
-
-            if (tempSortedIndexList.Count > 0)
-            {
-                itemCollectionMain.Clear();
-
-                while (!CountItemsInList(itemCollectionMain, tempIndexList, tempDistributeItem.Type.TypeId, tempDistributeItem.Type.SubtypeId))
-                    yield return stateActive;
-
+                tempSortedIndexList.Clear();
                 tempIndexList.Clear();
+                foreach (KeyValuePair<long, double> kvp in tempDistributeItemIndexes)
+                    tempSortedIndexList[kvp.Key] = kvp.Value;
 
-                totalAmount = (double)tempDistributeItem.Amount;
-                balanceRange = GetKeyDouble(setKeyBalanceRange);
-                if (tempDistributeItemMax > 0 && totalAmount > tempDistributeItemMax)
-                    totalAmount = tempDistributeItemMax;
+                remainder = 0;
 
-                bool fractional = FractionalItem(tempDistributeItem);
-
-                itemCollectionMain.AddItem(tempDistributeItem.Type.TypeId, tempDistributeItem.Type.SubtypeId, new VariableItemCount(totalAmount));
-
-                if (itemCollectionMain.ItemTypeCount > 0 && tempSortedIndexList.Count > 0)
+                for (int i = 0; i < tempSortedIndexList.Count; i += 0)
                 {
-                    balancedShare = itemCollectionMain.ItemCount(tempDistributeItem) / tempSortedIndexList.Count;
-                    for (int i = 0; i < tempSortedIndexList.Count; i += 0)
+                    if (PauseTickRun) yield return stateActive;
+
+                    if (IsBlockOk(tempSortedIndexList.Keys[i]) && CurrentVolumePercentage(tempSortedIndexList.Keys[i]) < 0.99 && AcceptsItem(managedBlocks[tempSortedIndexList.Keys[i]], tempDistributeItem))
                     {
-                        if (PauseTickRun) yield return stateActive;
-
-                        contained = tempSortedIndexList.Values[i];
-                        if (contained == -1)
-                        {
-                            contained = 0;
-                            managedBlock = managedBlocks[tempSortedIndexList.Keys[i]].block;
-                            while (!AmountContained(ref contained, tempDistributeItem, managedBlock))
-                                yield return stateActive;
-
-                            tempSortedIndexList[tempSortedIndexList.Keys[i]] = contained;
-                        }
-                        if (contained > balancedShare + (balancedShare * balanceRange))
-                            tempSortedIndexList.RemoveAt(i);
-                        else
-                            i++;
+                        tempIndexList.Add(tempSortedIndexList.Keys[i]);
+                        i++;
                     }
+                    else
+                        tempSortedIndexList.Remove(tempSortedIndexList.Keys[i]);
                 }
 
                 if (tempSortedIndexList.Count > 0)
                 {
-                    long key;
-                    bool foundLimit;
-                    int indexCount = 0;
-                    foreach (KeyValuePair<long, double> kvp in tempSortedIndexList)
+                    itemCollectionMain.Clear();
+
+                    while (!CountItemsInList(itemCollectionMain, tempIndexList, tempDistributeItem.Type.TypeId, tempDistributeItem.Type.SubtypeId))
+                        yield return stateActive;
+
+                    tempIndexList.Clear();
+
+                    totalAmount = (double)tempDistributeItem.Amount;
+                    balanceRange = GetKeyDouble(setKeyBalanceRange);
+                    if (tempDistributeItemMax > 0 && totalAmount > tempDistributeItemMax)
+                        totalAmount = tempDistributeItemMax;
+
+                    fractional = FractionalItem(tempDistributeItem);
+
+                    itemCollectionMain.AddItem(tempDistributeItem.Type.TypeId, tempDistributeItem.Type.SubtypeId, new VariableItemCount(totalAmount));
+
+                    if (itemCollectionMain.ItemTypeCount > 0 && tempSortedIndexList.Count > 0)
                     {
-                        maxAmount = DefaultMax(tempDistributeItem, managedBlocks[kvp.Key]);
-                        tempMax = managedBlocks[kvp.Key].Settings.limits.ItemCount(out foundLimit, tempDistributeItem, managedBlocks[kvp.Key].block);
-                        if (foundLimit) maxAmount = tempMax;
-
-                        foundLimit = maxAmount < double.MaxValue;
-
-                        splitAmount = totalAmount / ((double)tempSortedIndexList.Count - indexCount);
-                        contained = kvp.Value;
-                        key = kvp.Key;
-                        if (PauseTickRun) yield return stateActive;
-
-                        if (contained == -1)
+                        balancedShare = itemCollectionMain.ItemCount(tempDistributeItem) / tempSortedIndexList.Count;
+                        for (int i = 0; i < tempSortedIndexList.Count; i += 0)
                         {
-                            contained = 0;
-                            managedBlock = managedBlocks[kvp.Key].block;
-                            if (foundLimit)
-                                while (!AmountContained(ref contained, tempDistributeItem, managedBlock))
-                                    yield return stateActive;
-                        }
-                        if (splitAmount + contained > maxAmount)
-                            splitAmount = maxAmount - contained;
+                            if (PauseTickRun) yield return stateActive;
 
-                        if (!fractional)
-                        {
-                            remainder += splitAmount - Math.Floor(splitAmount);
-                            splitAmount = Math.Floor(splitAmount);
-                            if (remainder >= 1 && (contained + splitAmount + 1 <= maxAmount))
+                            contained = tempSortedIndexList.Values[i];
+                            if (contained == -1)
                             {
-                                splitAmount++;
-                                remainder--;
+                                contained = 0;
+                                while (!AmountContained(ref contained, tempDistributeItem, managedBlocks[tempSortedIndexList.Keys[i]].Input))
+                                    yield return stateActive;
+
+                                tempSortedIndexList[tempSortedIndexList.Keys[i]] = contained;
                             }
+                            if (contained > balancedShare + (balancedShare * balanceRange))
+                                tempSortedIndexList.RemoveAt(i);
+                            else
+                                i++;
                         }
-                        if (indexCount + 1 == tempSortedIndexList.Count && splitAmount + remainder <= maxAmount)
-                            splitAmount += remainder;
+                    }
 
-                        originalSplitAmount = splitAmount;
-                        while (!Transfer(ref splitAmount, tempDistributeItemBlockDefinition.Input, managedBlocks[kvp.Key], tempDistributeItem))
-                            yield return stateActive;
+                    if (tempSortedIndexList.Count > 0)
+                    {
+                        indexCount = 0;
+                        foreach (KeyValuePair<long, double> kvp in tempSortedIndexList)
+                        {
+                            maxAmount = DefaultMax(tempDistributeItem, managedBlocks[kvp.Key]);
+                            tempMax = managedBlocks[kvp.Key].Settings.limits.ItemCount(out foundLimit, tempDistributeItem, managedBlocks[kvp.Key].block);
+                            if (foundLimit) maxAmount = tempMax;
 
-                        if (splitAmount > 0)
-                            totalAmount -= originalSplitAmount - splitAmount;
-                        indexCount++;
+                            foundLimit = maxAmount < double.MaxValue;
+
+                            splitAmount = totalAmount / ((double)tempSortedIndexList.Count - indexCount);
+                            contained = kvp.Value;
+                            key = kvp.Key;
+                            if (PauseTickRun) yield return stateActive;
+
+                            if (contained == -1)
+                            {
+                                contained = 0;
+                                if (foundLimit)
+                                    while (!AmountContained(ref contained, tempDistributeItem, managedBlocks[kvp.Key].Input))
+                                        yield return stateActive;
+                            }
+                            if (splitAmount + contained > maxAmount)
+                                splitAmount = maxAmount - contained;
+
+                            if (!fractional)
+                            {
+                                remainder += splitAmount - Math.Floor(splitAmount);
+                                splitAmount = Math.Floor(splitAmount);
+                                if (remainder >= 1 && (contained + splitAmount + 1 <= maxAmount))
+                                {
+                                    splitAmount++;
+                                    remainder--;
+                                }
+                            }
+                            if (indexCount + 1 == tempSortedIndexList.Count && splitAmount + remainder <= maxAmount)
+                                splitAmount += remainder;
+
+                            originalSplitAmount = splitAmount;
+                            while (!Transfer(ref splitAmount, tempDistributeItemBlockDefinition.Input, managedBlocks[kvp.Key], tempDistributeItem))
+                                yield return stateActive;
+
+                            if (splitAmount > 0)
+                                totalAmount -= originalSplitAmount - splitAmount;
+                            indexCount++;
+                        }
                     }
                 }
+                yield return stateContinue;
             }
-            yield return stateComplete;
         }
 
-        bool AmountContained(ref double amount, MyInventoryItem item, IMyTerminalBlock block)
+        bool AmountContained(ref double amount, MyInventoryItem item, IMyInventory inventory)
         {
-            return AmountContained(ref amount, item.Type.TypeId, item.Type.SubtypeId, block);
+            return AmountContained(ref amount, item.Type.TypeId, item.Type.SubtypeId, inventory);
         }
 
-        bool AmountContained(ref double amount, string itemID, string subtypeID, IMyTerminalBlock block)
+        bool AmountContained(ref double amount, string typeID, string subtypeID, IMyInventory inventory)
         {
-            selfContainedIdentifier = functionList[11];
-            if (!IsStateActive)
+            selfContainedIdentifier = FunctionIdentifier.Counting_Item_In_Inventory;
+
+            if (!IsStateRunning)
             {
-                InitializeState(AmountContainedState(itemID, subtypeID, block), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempAmountContainedTypeID = typeID;
+                tempAmountContainedSubtypeID = subtypeID;
+                tempAmountContainedInventory = inventory;
             }
 
             if (RunStateManager)
@@ -3619,34 +3619,29 @@ namespace IngameScript
             return false;
         }
 
-        IEnumerator<FunctionState> AmountContainedState(string itemID, string subtypeID, IMyTerminalBlock block)
+        IEnumerator<FunctionState> AmountContainedState()
         {
-            amountContainedListA.Clear();
-            block.GetInventory(0).GetItems(amountContainedListA);
-            for (int i = 0; i < amountContainedListA.Count; i++)
-            {
-                if (PauseTickRun)
-                    yield return stateActive;
+            yield return stateContinue;
 
-                if (amountContainedListA[i].Type.TypeId == itemID && amountContainedListA[i].Type.SubtypeId == subtypeID)
-                    countedAmount += (double)amountContainedListA[i].Amount;
-            }
-            yield return stateComplete;
-        }
-
-        bool ProcessLimits()
-        {
-            selfContainedIdentifier = functionList[12];
-            if (!IsStateActive)
+            while (true)
             {
-                InitializeState(ProcessLimitsState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                amountContainedListA.Clear();
+                tempAmountContainedInventory.GetItems(amountContainedListA);
+                for (int i = 0; i < amountContainedListA.Count; i++)
+                {
+                    if (PauseTickRun) yield return stateActive;
+
+                    if (amountContainedListA[i].Type.TypeId == tempAmountContainedTypeID && amountContainedListA[i].Type.SubtypeId == tempAmountContainedSubtypeID)
+                        countedAmount += (double)amountContainedListA[i].Amount;
+                }
+                yield return stateContinue;
             }
-            return RunStateManager;
         }
 
         IEnumerator<FunctionState> ProcessLimitsState()
         {
+            yield return stateContinue;
+
             while (true)
             {
                 double limit = 0, excess;
@@ -3679,20 +3674,11 @@ namespace IngameScript
             }
         }
 
-        bool SortItems()
-        {
-            selfContainedIdentifier = functionList[13];
-            if (!IsStateActive)
-            {
-                InitializeState(SortState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> SortState()
         {
             IMyTerminalBlock block;
+            yield return stateContinue;
+
             while (true)
             {
                 foreach (long index in typedIndexes[setKeyIndexSortable])
@@ -3703,11 +3689,11 @@ namespace IngameScript
                     mainBlockDefinition = managedBlocks[index];
                     block = mainBlockDefinition.block;
 
-                    if (mainBlockDefinition.Settings.RemoveInput || (!mainBlockDefinition.Settings.manual && Sortable(mainBlockDefinition, 0)))
+                    if (mainBlockDefinition.Settings.GetOption(setKeyBlockRemoveInputKey) || (!mainBlockDefinition.Settings.manual && Sortable(mainBlockDefinition, 0)))
                     {
                         mainFunctionItemList.Clear();
                         mainBlockDefinition.Input.GetItems(mainFunctionItemList);
-                        if (!mainBlockDefinition.Settings.RemoveInput)
+                        if (!mainBlockDefinition.Settings.GetOption(setKeyBlockRemoveInputKey))
                             for (int x = 0; x < mainFunctionItemList.Count; x += 0)
                             {
                                 if (PauseTickRun) yield return stateActive;
@@ -3718,11 +3704,11 @@ namespace IngameScript
                             }
                         while (!PutInStorage(mainFunctionItemList, index, 0)) yield return stateActive;
                     }
-                    if (block.InventoryCount > 1 && (mainBlockDefinition.Settings.RemoveOutput || (!mainBlockDefinition.Settings.manual && Sortable(mainBlockDefinition, 1))))
+                    if (block.InventoryCount > 1 && (mainBlockDefinition.Settings.GetOption(setKeyBlockRemoveOutputKey) || (!mainBlockDefinition.Settings.manual && Sortable(mainBlockDefinition, 1))))
                     {
                         mainFunctionItemList.Clear();
                         block.GetInventory(1).GetItems(mainFunctionItemList);
-                        if (!mainBlockDefinition.Settings.RemoveOutput)
+                        if (!mainBlockDefinition.Settings.GetOption(setKeyBlockRemoveOutputKey))
                             for (int x = 0; x < mainFunctionItemList.Count; x += 0)
                             {
                                 if (PauseTickRun) yield return stateActive;
@@ -3741,7 +3727,8 @@ namespace IngameScript
 
         bool PutInStorage(List<MyInventoryItem> items, long blockIndex, int inventoryIndex, double max = -1, int priorityMax = -1, int storageIndexStart = 0)
         {
-            selfContainedIdentifier = functionList[14];
+            selfContainedIdentifier = FunctionIdentifier.Storing_Item;
+
             if (!IsStateRunning)
             {
                 tempStorageItemList = items;
@@ -3751,11 +3738,7 @@ namespace IngameScript
                 tempStoragePriorityMax = priorityMax;
                 tempStorageIndexStart = storageIndexStart;
             }
-            if (!IsStateActive)
-            {
-                InitializeState(PutInStorageState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+
             return RunStateManager;
         }
 
@@ -3764,12 +3747,14 @@ namespace IngameScript
             IMyTerminalBlock destBlock, origBlock;
             IMyInventory originInventory;
             List<long> tempIndexList = NewLongList;
-            string itemID, typeID;
+            string itemID, typeID, typeKey;
+            bool bottleException;
+            yield return stateContinue;
+
             while (true)
             {
                 storageDefinitionA = managedBlocks[tempStorageBlockIndex];
                 origBlock = storageDefinitionA.block;
-                string typeKey;
 
                 foreach (MyInventoryItem item in tempStorageItemList)
                 {
@@ -3784,7 +3769,7 @@ namespace IngameScript
                         transferAmount = (double)item.Amount;
 
                     originInventory = origBlock.GetInventory(tempStorageInventoryIndex);
-                    bool bottleException = fillingBottles && IsBottle(item) && !(origBlock is IMyGasGenerator || origBlock is IMyGasTank);
+                    bottleException = fillingBottles && IsBottle(item) && !(origBlock is IMyGasGenerator || origBlock is IMyGasTank);
                     if (transferAmount > 0)
                     {
                         if (!bottleException && itemCategoryDictionary.ContainsKey(itemID) && indexesStorageLists.ContainsKey(itemCategoryDictionary[itemID]))
@@ -3814,8 +3799,7 @@ namespace IngameScript
 
                         for (int i = tempStorageIndexStart; i < tempIndexList.Count && (tempStoragePriorityMax <= 0 || i < tempStoragePriorityMax); i++)
                         {
-                            if (PauseTickRun)
-                                yield return stateActive;
+                            if (PauseTickRun) yield return stateActive;
 
                             if (!IsBlockOk(tempIndexList[i]) || CurrentVolumePercentage(tempIndexList[i]) >= 0.985)
                                 continue;
@@ -3833,19 +3817,8 @@ namespace IngameScript
                     }
                 }
 
-                yield return stateComplete;
+                yield return stateContinue;
             }
-        }
-
-        bool CountBlueprints()
-        {
-            selfContainedIdentifier = functionList[15];
-            if (!IsStateActive)
-            {
-                InitializeState(CountBlueprintState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
         }
 
         IEnumerator<FunctionState> CountBlueprintState()
@@ -3854,6 +3827,8 @@ namespace IngameScript
             bool assembly, queueAssembly = GetKeyBool(setKeyToggleQueueAssembly);
             List<Blueprint> blueprints = new List<Blueprint>();
             Blueprint blueprint;
+            yield return stateContinue;
+
             while (true)
             {
                 blueprints.Clear();
@@ -3908,58 +3883,53 @@ namespace IngameScript
 
         bool AddAssemblyNeeded(List<Blueprint> blueprints)
         {
-            selfContainedIdentifier = functionList[52];
-            if (!IsStateActive)
-            {
-                InitializeState(AddAssemblyState(blueprints), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+            selfContainedIdentifier = FunctionIdentifier.Assembly_Reserve;
+
+            if (!IsStateRunning)
+                tempAddAssemblyNeededList = blueprints;
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> AddAssemblyState(List<Blueprint> blueprints)
+        IEnumerator<FunctionState> AddAssemblyState()
         {
             MyDefinitionId blueprintID;
             IMyAssembler assembler;
             string key;
-            foreach (long index in typedIndexes[setKeyIndexAssemblers])
-            {
-                if (PauseTickRun) yield return stateActive;
-                if (!IsBlockOk(index))
-                    continue;
-                assembler = (IMyAssembler)managedBlocks[index].block;
+            yield return stateContinue;
 
-                foreach (Blueprint blueprint in blueprints)
+            while (true)
+            {
+                foreach (long index in typedIndexes[setKeyIndexAssemblers])
                 {
                     if (PauseTickRun) yield return stateActive;
-                    blueprintID = MyDefinitionId.Parse(MakeBlueprint(blueprint));
-                    if (assembler.CanUseBlueprint(blueprintID))
-                    {
-                        key = BlockSubtype(assembler);
 
-                        assemblyNeededByMachine.Add(BlockSubtype(assembler));
-                        break;
+                    if (!IsBlockOk(index)) continue;
+
+                    assembler = (IMyAssembler)managedBlocks[index].block;
+                    foreach (Blueprint blueprint in tempAddAssemblyNeededList)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        blueprintID = MyDefinitionId.Parse(MakeBlueprint(blueprint));
+                        if (assembler.CanUseBlueprint(blueprintID))
+                        {
+                            key = BlockSubtype(assembler);
+
+                            assemblyNeededByMachine.Add(BlockSubtype(assembler));
+                            break;
+                        }
                     }
                 }
-            }
 
-            yield return stateComplete;
-        }
-
-        bool Count()
-        {
-            selfContainedIdentifier = functionList[16];
-            if (!IsStateActive)
-            {
-                InitializeState(CountState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                yield return stateContinue;
             }
-            return RunStateManager;
         }
 
         IEnumerator<FunctionState> CountState()
         {
             IMyTerminalBlock block;
+            yield return stateContinue;
+
             while (true)
             {
                 activeOres = 0;
@@ -3967,7 +3937,7 @@ namespace IngameScript
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    if (!IsBlockOk(index) || managedBlocks[index].Settings.NoCounting)
+                    if (!IsBlockOk(index) || managedBlocks[index].Settings.GetOption(setKeyBlockNoCountKey))
                         continue;
 
                     block = managedBlocks[index].block;
@@ -4003,20 +3973,8 @@ namespace IngameScript
             }
         }
 
-        bool Scan()
-        {
-            selfContainedIdentifier = functionList[17];
-            if (!IsStateActive)
-            {
-                InitializeState(ScanState(), selfContainedIdentifier);
-                return false;
-            }
-            return RunStateManager;
-        }
-
         IEnumerator<FunctionState> ScanState()
         {
-            yield return stateActive;
             long currentEntityID;
             IMyTextSurfaceProvider provider;
             IMyTerminalBlock currentBlock;
@@ -4024,6 +3982,7 @@ namespace IngameScript
             bool currentPriority, emptyLoadout, isClone;
             string blockDef, typeID, subtypeID;
             IMyCubeGrid currentGrid;
+            yield return stateContinue;
 
             while (true)
             {
@@ -4104,7 +4063,7 @@ namespace IngameScript
                     if (!managedBlocks.ContainsKey(block.EntityId))
                     {
                         managedBlocks[block.EntityId] = new BlockDefinition(block);
-                        managedBlocks[block.EntityId].Settings.Initialize(crossGridKeyword, includeGridKeyword, exclusionKeyword, excludeGridKeyword);
+                        managedBlocks[block.EntityId].Settings.Initialize();
                     }
                 }
                 scannedBlocks.Clear();
@@ -4118,16 +4077,15 @@ namespace IngameScript
                     if (!kvp.Value.IsClone) while (!ProcessBlockOptions(kvp.Value)) yield return stateActive;
                     else if (!TextHasLength(kvp.Value.DataSource)) setRemoveIDs.Add(kvp.Key);
 
-                    if (kvp.Value.Settings.CrossGrid)
+                    if (kvp.Value.Settings.GetOption(crossGridKeyword))
                         includedIDs.Add(kvp.Value.block.EntityId);
 
-                    if (kvp.Value.Settings.ExcludedGrid)
+                    if (kvp.Value.Settings.GetOption(excludeGridKeyword))
                         excludedGridList.Add(kvp.Value.block.CubeGrid);
 
-                    if (kvp.Value.Settings.IncludeGrid)
+                    if (kvp.Value.Settings.GetOption(includeGridKeyword))
                         gridList.Add(kvp.Value.block.CubeGrid);
                 }
-
                 //excludedIDs, excludedGridList, accessibleIDs, managedBlocks (all-processed), gridList
 
                 //Process clones separating from cloning
@@ -4135,7 +4093,7 @@ namespace IngameScript
                     if (!clonedEntityIDs.Contains(index) && managedBlocks.ContainsKey(index))
                     {
                         managedBlocks[index].SetClone(null);
-                        managedBlocks[index].Settings.Initialize(crossGridKeyword, includeGridKeyword, exclusionKeyword, excludeGridKeyword);
+                        managedBlocks[index].Settings.Initialize();
                     }
 
                 setRemoveIDs.Clear();
@@ -4171,10 +4129,10 @@ namespace IngameScript
                     currentEntityID = kvp.Value.block.EntityId;
                     currentGrid = kvp.Value.block.CubeGrid;
                     if (!accessibleIDs.Contains(currentEntityID) ||
-                        kvp.Value.Settings.Excluded ||
+                        kvp.Value.Settings.GetOption(exclusionKeyword) ||
                         excludedIDs.Contains(currentEntityID) ||
                         excludedGridList.Contains(currentGrid) ||
-                        (sameGridOnly && !kvp.Value.Settings.CrossGrid && !gridList.Contains(currentGrid) && !includedIDs.Contains(currentEntityID)))
+                        (sameGridOnly && !kvp.Value.Settings.GetOption(crossGridKeyword) && !gridList.Contains(currentGrid) && !includedIDs.Contains(currentEntityID)))
                         setRemoveIDs.Add(kvp.Key);
                 }
                 excludedIDs.Clear();
@@ -4284,7 +4242,7 @@ namespace IngameScript
                                 if (currentPriority)
                                     priorityTypes.Add(setKeyIndexRefinery);
                             }
-                            if (currentDefinition.Settings.Storage)
+                            if (currentDefinition.Settings.GetOption(setKeyBlockStorageKey))
                             {
                                 typedIndexes[setKeyIndexStorage].Add(index);
                                 if (currentPriority)
@@ -4344,7 +4302,7 @@ namespace IngameScript
                                     priorityTypes.Add(setKeyIndexLimit);
                                 typedIndexes[setKeyIndexLimit].Add(index);
                             }
-                            if ((!currentDefinition.Settings.manual || currentDefinition.Settings.RemoveInput || currentDefinition.Settings.RemoveOutput) && !(currentDefinition.Settings.KeepInput && currentDefinition.Settings.KeepOutput))
+                            if ((!currentDefinition.Settings.manual || currentDefinition.Settings.GetOption(setKeyBlockRemoveInputKey) || currentDefinition.Settings.GetOption(setKeyBlockRemoveOutputKey)) && !(currentDefinition.Settings.GetOption(setKeyBlockKeepInputKey) && currentDefinition.Settings.GetOption(setKeyBlockKeepOutputKey)))
                                 for (int i = 0; i < currentDefinition.block.InventoryCount; i++)
                                     if (Sortable(currentDefinition, i))
                                     {
@@ -4359,7 +4317,7 @@ namespace IngameScript
                     }
                     if (currentBlock is IMyTextPanel)
                     {
-                        while (!ProcessPanelOptions(currentDefinition)) yield return stateActive;
+                        while (!panelMaster.ProcessPanelOptions(currentDefinition)) yield return stateActive;
 
                         if (IsPanel(currentDefinition))
                         {
@@ -4374,7 +4332,7 @@ namespace IngameScript
                         {
                             if (PauseTickRun) yield return stateActive;
 
-                            while (!ProcessPanelOptions(currentDefinition, s)) yield return stateActive;
+                            while (!panelMaster.ProcessPanelOptions(currentDefinition, s)) yield return stateActive;
 
                             if (IsPanel(currentDefinition, s))
                             {
@@ -4383,6 +4341,7 @@ namespace IngameScript
                             }
                         }
                     }
+
                     if (currentDefinition.Settings.logicComparisons.Count > 0)
                         typedIndexes[setKeyIndexLogic].Add(currentBlock.EntityId);
                 }
@@ -4420,225 +4379,143 @@ namespace IngameScript
 
         bool CollectionToString(StringBuilder builder, ItemCollection collection, bool includeAmount = true)
         {
-            if (collection == null || collection.ItemTypeCount == 0)
-                return true;
-            selfContainedIdentifier = functionList[19];
-            if (!IsStateActive)
+            if (collection == null || collection.ItemTypeCount == 0) return true;
+
+            selfContainedIdentifier = FunctionIdentifier.Listing_Items;
+
+            if (!IsStateRunning)
             {
-                InitializeState(CollectionToStringState(builder, collection, includeAmount), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempCollectionToBuilder = builder;
+                tempCollectionToBuilderCollection = collection;
+                tempCollectionToBuilderIncludeAmount = includeAmount;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> CollectionToStringState(StringBuilder builder, ItemCollection collection, bool includeAmount)
+        IEnumerator<FunctionState> CollectionToStringState()
         {
             SortedList<string, SortedList<string, List<string>>> likeValues = new SortedList<string, SortedList<string, List<string>>>();
-            int items = 0;
+            int items;
             string amountString;
             ItemDefinition item;
-            for (int i = 0; i < collection.ItemTypeCount; i++)
+            yield return stateContinue;
+
+            while (true)
             {
-                if (PauseTickRun) yield return stateActive;
-                item = collection.ItemByIndex(i);
-                amountString = collection.CountByIndex(i);
-                item.category = Formatted(GetItemCategory(item.FullID));
-                if (!likeValues.ContainsKey(item.category))
-                    likeValues[item.category] = new SortedList<string, List<string>>();
-                if (!likeValues[item.category].ContainsKey(amountString))
-                    likeValues[item.category][amountString] = NewStringList;
-                likeValues[item.category][amountString].Add($"{ItemName(item.typeID, item.subtypeID)}");
-            }
-            foreach (KeyValuePair<string, SortedList<string, List<string>>> kvpA in likeValues)
-                foreach (KeyValuePair<string, List<string>> kvp in kvpA.Value)
+                items = 0;
+                likeValues.Clear();
+                for (int i = 0; i < tempCollectionToBuilderCollection.ItemTypeCount; i++)
                 {
                     if (PauseTickRun) yield return stateActive;
-                    if (items > 0)
-                        builder.Append("|");
-                    items++;
-                    if (includeAmount)
-                        builder.Append(kvp.Key);
-                    builder.Append($":{kvpA.Key}");
-                    foreach (string itemID in kvp.Value)
+
+                    item = tempCollectionToBuilderCollection.ItemByIndex(i);
+                    amountString = tempCollectionToBuilderCollection.CountByIndex(i);
+                    item.category = Formatted(GetItemCategory(item.FullID));
+                    if (!likeValues.ContainsKey(item.category))
+                        likeValues[item.category] = new SortedList<string, List<string>>();
+                    if (!likeValues[item.category].ContainsKey(amountString))
+                        likeValues[item.category][amountString] = NewStringList;
+                    likeValues[item.category][amountString].Add($"{ItemName(item.typeID, item.subtypeID)}");
+                }
+                foreach (KeyValuePair<string, SortedList<string, List<string>>> kvpA in likeValues)
+                    foreach (KeyValuePair<string, List<string>> kvp in kvpA.Value)
                     {
                         if (PauseTickRun) yield return stateActive;
-                        builder.Append($":'{itemID}'");
+
+                        tempCollectionToBuilder.Append($"{(items > 0 ? "|" : "")}{(tempCollectionToBuilderIncludeAmount ? kvp.Key : "")}:{kvpA.Key}");
+                        items++;
+
+                        foreach (string itemID in kvp.Value)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+                            tempCollectionToBuilder.Append($":'{itemID}'");
+                        }
                     }
-                }
 
-            yield return stateComplete;
-        }
-
-        void FillDict()
-        {
-            if (!UseVanillaLibrary || booted) return;
-            AddItemDef("Bulletproof Glass", "BulletproofGlass", componentType, "BulletproofGlass");
-            AddItemDef(canvasType, canvasType, componentType, PositionPrefix("0030", canvasType));
-            AddItemDef("Computer", "Computer", componentType, "ComputerComponent");
-            AddItemDef("Construction Comp", "Construction", componentType, "ConstructionComponent");
-            AddItemDef("Detector Component", "Detector", componentType, "DetectorComponent");
-            AddItemDef("Display", "Display", componentType, "Display");
-            AddItemDef("Explosives", "Explosives", componentType, "ExplosivesComponent");
-            AddItemDef("Girder", "Girder", componentType, "GirderComponent");
-            AddItemDef("Gravity Gen. Comp", "GravityGenerator", componentType, "GravityGeneratorComponent");
-            AddItemDef("Interior Plate", "InteriorPlate", componentType, "InteriorPlate");
-            AddItemDef("Large Steel Tube", "LargeTube", componentType, "LargeTube");
-            AddItemDef("Medical Component", "Medical", componentType, "MedicalComponent");
-            AddItemDef("Metal Grid", "MetalGrid", componentType, "MetalGrid");
-            AddItemDef("Motor", "Motor", componentType, "MotorComponent");
-            AddItemDef("Power Cell", "PowerCell", componentType, "PowerCell");
-            AddItemDef("Radio Comm. Comp", "RadioCommunication", componentType, "RadioCommunicationComponent");
-            AddItemDef("Reactor Component", "Reactor", componentType, "ReactorComponent");
-            AddItemDef("Small Steel Tube", "SmallTube", componentType, "SmallTube");
-            AddItemDef("Solar Cell", "SolarCell", componentType, "SolarCell");
-            AddItemDef("Steel Plate", "SteelPlate", componentType, "SteelPlate");
-            AddItemDef("Superconductor", "Superconductor", componentType, "Superconductor");
-            AddItemDef("Thruster Component", "Thrust", componentType, "ThrustComponent");
-            AddItemDef("Zone Chip", "ZoneChip", componentType, nothingType, false);
-            AddItemDef("MR-20", "AutomaticRifleItem", toolType, PositionPrefix("0040", "AutomaticRifle"));
-            AddItemDef("MR-8P", "PreciseAutomaticRifleItem", toolType, PositionPrefix("0060", "PreciseAutomaticRifle"));
-            AddItemDef("MR-50A", "RapidFireAutomaticRifleItem", toolType, PositionPrefix("0050", "RapidFireAutomaticRifle"));
-            AddItemDef("MR-30E", "UltimateAutomaticRifleItem", toolType, PositionPrefix("0070", "UltimateAutomaticRifle"));
-            AddItemDef("Welder 1", "WelderItem", toolType, PositionPrefix("0090", "Welder"));
-            AddItemDef("Welder 2", "Welder2Item", toolType, PositionPrefix("0100", "Welder2"));
-            AddItemDef("Welder 3", "Welder3Item", toolType, PositionPrefix("0110", "Welder3"));
-            AddItemDef("Welder 4", "Welder4Item", toolType, PositionPrefix("0120", "Welder4"));
-            AddItemDef("Grinder 1", "AngleGrinderItem", toolType, PositionPrefix("0010", "AngleGrinder"));
-            AddItemDef("Grinder 2", "AngleGrinder2Item", toolType, PositionPrefix("0020", "AngleGrinder2"));
-            AddItemDef("Grinder 3", "AngleGrinder3Item", toolType, PositionPrefix("0030", "AngleGrinder3"));
-            AddItemDef("Grinder 4", "AngleGrinder4Item", toolType, PositionPrefix("0040", "AngleGrinder4"));
-            AddItemDef("Drill 1", "HandDrillItem", toolType, PositionPrefix("0050", "HandDrill"));
-            AddItemDef("Drill 2", "HandDrill2Item", toolType, PositionPrefix("0060", "HandDrill2"));
-            AddItemDef("Drill 3", "HandDrill3Item", toolType, PositionPrefix("0070", "HandDrill3"));
-            AddItemDef("Drill 4", "HandDrill4Item", toolType, PositionPrefix("0080", "HandDrill4"));
-            AddItemDef("Datapad", "Datapad", dataPadType, "Datapad", false);
-            AddItemDef("Powerkit", "Powerkit", consumableType, nothingType, false);
-            AddItemDef("Medkit", "Medkit", consumableType, nothingType, false);
-            AddItemDef("Clang Cola", "ClangCola", consumableType, nothingType, false);
-            AddItemDef("Cosmic Coffee", "CosmicCoffee", consumableType, nothingType, false);
-            AddItemDef("SpaceCredit", "SpaceCredit", physicalObjectType, nothingType, false);
-            AddItemDef("Oxygen Bottle", "OxygenBottle", oxyBottleType, PositionPrefix("0010", "OxygenBottle"));
-            AddItemDef("Hydrogen Bottle", "HydrogenBottle", hydBottleType, PositionPrefix("0020", "HydrogenBottle"));
-            AddItemDef("NATO 25x184mm", "NATO_25x184mm", ammoType, PositionPrefix("0080", "NATO_25x184mmMagazine"));
-            AddItemDef("Missile 200mm", "Missile200mm", ammoType, PositionPrefix("0100", "Missile200mm"));
-            AddItemDef("Cobalt Ore", "Cobalt", oreType);
-            AddItemDef("Gold Ore", "Gold", oreType);
-            AddItemDef("Ice", "Ice", oreType);
-            AddItemDef("Iron Ore", "Iron", oreType);
-            AddItemDef("Magnesium Ore", "Magnesium", oreType);
-            AddItemDef("Nickel Ore", "Nickel", oreType);
-            AddItemDef("Platinum Ore", "Platinum", oreType);
-            AddItemDef("Scrap Ore", "Scrap", oreType, "", false);
-            AddItemDef("Silicon Ore", "Silicon", oreType);
-            AddItemDef("Silver Ore", "Silver", oreType);
-            AddItemDef(stoneType, stoneType, oreType);
-            AddItemDef("Uranium Ore", "Uranium", oreType);
-            AddItemDef("Cobalt Ingot", "Cobalt", ingotType);
-            AddItemDef("Gold Ingot", "Gold", ingotType);
-            AddItemDef("Gravel", stoneType, ingotType);
-            AddItemDef("Iron Ingot", "Iron", ingotType, "", true, new List<string>() { "Scrap", stoneType });
-            AddItemDef("Magnesium Powder", "Magnesium", ingotType);
-            AddItemDef("Nickel Ingot", "Nickel", ingotType, "", true, new List<string>() { stoneType });
-            AddItemDef("Platinum Ingot", "Platinum", ingotType, "");
-            AddItemDef("Silicon Wafer", "Silicon", ingotType, "", true, new List<string>() { stoneType });
-            AddItemDef("Silver Ingot", "Silver", ingotType);
-            AddItemDef("Uranium Ingot", "Uranium", ingotType);
-            AddItemDef("MR-20 Magazine", "AutomaticRifleGun_Mag_20rd", ammoType, PositionPrefix("0040", "AutomaticRifleGun_Mag_20rd"));
-            AddItemDef("S-10E Magazine", "ElitePistolMagazine", ammoType, PositionPrefix("0030", "ElitePistolMagazine"));
-            AddItemDef("S-20A Magazine", "FullAutoPistolMagazine", ammoType, PositionPrefix("0020", "FullAutoPistolMagazine"));
-            AddItemDef("MR-8P Magazine", "PreciseAutomaticRifleGun_Mag_5rd", ammoType, PositionPrefix("0060", "PreciseAutomaticRifleGun_Mag_5rd"));
-            AddItemDef("MR-50A Magazine", "RapidFireAutomaticRifleGun_Mag_50rd", ammoType, PositionPrefix("0050", "RapidFireAutomaticRifleGun_Mag_50rd"));
-            AddItemDef("S-10 Magazine", "SemiAutoPistolMagazine", ammoType, PositionPrefix("0010", "SemiAutoPistolMagazine"));
-            AddItemDef("MR-30E Magazine", "UltimateAutomaticRifleGun_Mag_30rd", ammoType, PositionPrefix("0070", "UltimateAutomaticRifleGun_Mag_30rd"));
-            AddItemDef("Artillery Shell", "LargeCalibreAmmo", ammoType, PositionPrefix("0120", "LargeCalibreAmmo"));
-            AddItemDef("Assault Cannon Shell", "MediumCalibreAmmo", ammoType, PositionPrefix("0110", "MediumCalibreAmmo"));
-            AddItemDef("Autocannon Mag", "AutocannonClip", ammoType, PositionPrefix("0090", "AutocannonClip"));
-            AddItemDef("Large Railgun Sabot", "LargeRailgunAmmo", ammoType, PositionPrefix("0140", "LargeRailgunAmmo"));
-            AddItemDef("Small Railgun Sabot", "SmallRailgunAmmo", ammoType, PositionPrefix("0130", "SmallRailgunAmmo"));
-            AddItemDef("PRO-1", "AdvancedHandHeldLauncherItem", toolType, PositionPrefix("0090", "AdvancedHandHeldLauncher"));
-            AddItemDef("RO-1", "BasicHandHeldLauncherItem", toolType, PositionPrefix("0080", "BasicHandHeldLauncher"));
-            AddItemDef("S-10E", "ElitePistolItem", toolType, PositionPrefix("0030", "EliteAutoPistol"));
-            AddItemDef("S-20A", "FullAutoPistolItem", toolType, PositionPrefix("0020", "FullAutoPistol"));
-            AddItemDef("S-10", "SemiAutoPistolItem", toolType, PositionPrefix("0010", "SemiAutoPistol"));
-            booted = true;
+                yield return stateContinue;
+            }
         }
 
         bool GetTags(ItemCollection quota, string text, bool acceptZero = true)
         {
-            selfContainedIdentifier = functionList[22];
-            if (!TextHasLength(text))
-                return true;
+            if (!TextHasLength(text)) return true;
 
-            if (!IsStateActive)
+            selfContainedIdentifier = FunctionIdentifier.Processing_Tags;
+
+            if (!IsStateRunning)
             {
-                InitializeState(GetTagState(quota, text, acceptZero), selfContainedIdentifier);
-                if (PauseTickRun) return false;
+                tempGetTagsCollection = quota;
+                tempGetTagsText = text;
+                tempGetTagsAcceptZero = acceptZero;
             }
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> GetTagState(ItemCollection quota, string givenText, bool acceptZero)
+        IEnumerator<FunctionState> GetTagState()
         {
-            Dictionary<char, char> limiters = new Dictionary<char, char> {
-        { '{', '}' }, { '[', ']' }, { '<', '>' }
-    };
-            string typeID, amountString = "0", text = givenText;
-            char keyChar = givenText[0];
-            if (limiters.ContainsKey(keyChar) && givenText[givenText.Length - 1] == limiters[keyChar])
-                text = givenText.Substring(1, givenText.Length - 2);
-
+            Dictionary<char, char> limiters = new Dictionary<char, char> { { '{', '}' }, { '[', ']' }, { '<', '>' } };
+            string typeID, amountString, text;
             string[] subGroups, groupTags;
-
+            char keyChar;
             double parsedAmount;
             bool haveType;
+            yield return stateContinue;
 
-            subGroups = text.ToLower().Split('|');
-            typeID = "*";
-            for (int y = 0; y < subGroups.Length; y++)
+            while (true)
             {
-                if (PauseTickRun) yield return stateActive;
+                amountString = "0";
+                text = tempGetTagsText;
+                keyChar = tempGetTagsText[0];
+                if (limiters.ContainsKey(keyChar) && tempGetTagsText[tempGetTagsText.Length - 1] == limiters[keyChar])
+                    text = tempGetTagsText.Substring(1, tempGetTagsText.Length - 2);
+                subGroups = text.ToLower().Split('|');
+                typeID = "*";
 
-                groupTags = subGroups[y].Split(':');
-                tagTempStringList.Clear();
-                haveType = false;
-                for (int z = 0; z < groupTags.Length; z++)
+                for (int y = 0; y < subGroups.Length; y++)
                 {
-                    if (PauseTickRun)
-                        yield return stateActive;
+                    if (PauseTickRun) yield return stateActive;
 
-                    if (z == 0 && (EndsString(groupTags[z], "%") || double.TryParse(groupTags[z], out parsedAmount)))
+                    groupTags = subGroups[y].Split(':');
+                    tagTempStringList.Clear();
+                    haveType = false;
+                    for (int z = 0; z < groupTags.Length; z++)
                     {
-                        amountString = groupTags[z];
-                        continue;
+                        if (PauseTickRun)
+                            yield return stateActive;
+
+                        if (z == 0 && (EndsString(groupTags[z], "%") || double.TryParse(groupTags[z], out parsedAmount)))
+                        {
+                            amountString = groupTags[z];
+                            continue;
+                        }
+                        if (z < 2 && !haveType && IsCategory(groupTags[z]))
+                        {
+                            typeID = groupTags[z];
+                            haveType = true;
+                        }
+                        else
+                            tagTempStringList.Add(groupTags[z]);
                     }
-                    if (z < 2 && !haveType && IsCategory(groupTags[z]))
-                    {
-                        typeID = groupTags[z];
-                        haveType = true;
-                    }
-                    else
-                        tagTempStringList.Add(groupTags[z]);
+                    if (haveType && groupTags.Length == 1 && IsWildCard(typeID))
+                        tagTempStringList.Add("*");
+
+                    for (int z = 0; z < tagTempStringList.Count; z++)
+                        while (!MatchItems(tempGetTagsCollection, typeID, tagTempStringList[z], false, amountString, tempGetTagsAcceptZero))
+                            yield return stateActive;
                 }
-                if (haveType && groupTags.Length == 1 && IsWildCard(typeID))
-                    tagTempStringList.Add("*");
-
-                for (int z = 0; z < tagTempStringList.Count; z++)
-                    while (!MatchItems(quota, typeID, tagTempStringList[z], false, amountString, acceptZero))
-                        yield return stateActive;
+                yield return stateContinue;
             }
-            yield return stateComplete;
         }
 
         bool ProcessBlockOptions(BlockDefinition managedBlock)
         {
-            selfContainedIdentifier = functionList[4];
+            selfContainedIdentifier = FunctionIdentifier.Processing_Block_Options;
+
             if (!IsStateRunning)
                 tempBlockOptionDefinition = managedBlock;
-            if (!IsStateActive)
-            {
-                InitializeState(ProcessBlockOptionState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+
             return RunStateManager;
         }
 
@@ -4648,6 +4525,8 @@ namespace IngameScript
             IMyTerminalBlock block;
             string[] dataLines;
             List<IMyTerminalBlock> groupBlocks = new List<IMyTerminalBlock>();
+            yield return stateContinue;
+
             while (true)
             {
                 dataSource = tempBlockOptionDefinition.DataSource;
@@ -4661,7 +4540,7 @@ namespace IngameScript
                 }
                 else if (!StringsMatch(dataSource, tempBlockOptionDefinition.settingBackup))
                 {
-                    tempBlockOptionDefinition.Settings.Initialize(crossGridKeyword, includeGridKeyword, exclusionKeyword, excludeGridKeyword);
+                    tempBlockOptionDefinition.Settings.Initialize();
                     tempBlockOptionDefinition.cloneGroup = "";
                     dataLines = SplitLines(dataSource);
                     processBlockStorageList.Clear();
@@ -4719,7 +4598,7 @@ namespace IngameScript
                     foreach (string option in processBlockOptionList)
                     {
                         if (PauseTickRun) yield return stateActive;
-                        tempBlockOptionDefinition.Settings.ParseOption(option);
+                        tempBlockOptionDefinition.Settings.SetOption(option);
                     }
                     if (processBlockStorageList.Count > 0)
                     {
@@ -4729,11 +4608,11 @@ namespace IngameScript
                             if (IsCategory(category))
                                 tempBlockOptionDefinition.Settings.storageCategories.Add(category);
                         }
-                        tempBlockOptionDefinition.Settings.Storage = tempBlockOptionDefinition.Settings.storageCategories.Count > 0;
+                        tempBlockOptionDefinition.Settings.SetOption(setKeyBlockStorageKey, tempBlockOptionDefinition.Settings.storageCategories.Count > 0);
                         storageSet = true;
                     }
 
-                    if (tempBlockOptionDefinition.Settings.Storage)
+                    if (tempBlockOptionDefinition.Settings.GetOption(setKeyBlockStorageKey))
                     {
                         if (tempBlockOptionDefinition.Settings.storageCategories.Count == 0)
                         {
@@ -4743,7 +4622,7 @@ namespace IngameScript
                     }
                     else if (processBlockOptionList.Count == 0 && !storageSet && !tempBlockOptionDefinition.Settings.manual && tempBlockOptionDefinition.block is IMyCargoContainer && !IsGun(tempBlockOptionDefinition))
                     {
-                        tempBlockOptionDefinition.Settings.Storage = true;
+                        tempBlockOptionDefinition.Settings.SetOption(setKeyBlockStorageKey);
                         tempBlockOptionDefinition.Settings.storageCategories.Add("all");
                         tempBlockOptionDefinition.Settings.storageCategories.AddRange(itemCategoryList);
                     }
@@ -4776,354 +4655,120 @@ namespace IngameScript
             }
         }
 
-        bool ProcessPanelOptions(BlockDefinition managedBlock, int surfaceIndex = 0)
+        bool GenerateBlockOptions(BlockDefinition blockDefinition)
         {
-            selfContainedIdentifier = functionList[34];
+            selfContainedIdentifier = FunctionIdentifier.Generating_Block_Options;
+
             if (!IsStateRunning)
-            {
-                tempBlockOptionDefinition = managedBlock;
-                tempProcessPanelOptionSurfaceIndex = surfaceIndex;
-            }
-            if (!IsStateActive)
-            {
-                InitializeState(ProcessPanelOptionState(), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
+                tempGenerateBlockOptionBlockDefinition = blockDefinition;
+
             return RunStateManager;
         }
 
-        IEnumerator<FunctionState> ProcessPanelOptionState()
+        IEnumerator<FunctionState> GenerateBlockOptionState()
         {
-            PanelMasterClass.PanelDefinition panelDefinition;
-            string dataSource, key, data, blockDefinition;
-            StringBuilder keyBuilder = NewBuilder;
-            string[] dataLines, dataOptions;
+            IMyTerminalBlock block;
+            StringBuilder builder = NewBuilder, optionBuilder = NewBuilder;
+            bool none;
+            yield return stateContinue;
+
             while (true)
             {
-                if (!tempBlockOptionDefinition.panelDefinitionList.ContainsKey(tempProcessPanelOptionSurfaceIndex))
-                    SetPanelDefinition(tempBlockOptionDefinition, tempProcessPanelOptionSurfaceIndex);
-                panelDefinition = tempBlockOptionDefinition.panelDefinitionList[tempProcessPanelOptionSurfaceIndex];
-                dataSource = panelDefinition.DataSource;
-                blockDefinition = BlockSubtype(tempBlockOptionDefinition.block);
-
-                if (!TextHasLength(dataSource))
+                block = tempGenerateBlockOptionBlockDefinition.block;
+                builder.Clear();
+                optionBuilder.Clear();
+                if (TextHasLength(optionBlockFilter) && TextHasLength(tempGenerateBlockOptionBlockDefinition.DataSource))
                 {
-                    if (TextHasLength(panelDefinition.settingBackup))
-                        SetPanelDefinition(tempBlockOptionDefinition, tempProcessPanelOptionSurfaceIndex);
-                    if (GetKeyBool(setKeyAutoTagBlocks))
+                    BuilderAppendLine(builder, tempGenerateBlockOptionBlockDefinition.DataSource);
+                    BuilderAppendLine(builder);
+                }
+                if (TextHasLength(optionBlockFilter))
+                    BuilderAppendLine(builder, optionBlockFilter);
+                BuilderAppendLine(builder, $"Automatic={!tempGenerateBlockOptionBlockDefinition.Settings.manual}");
+                builder.Append("Options=");
+
+                AppendOption(tempGenerateBlockOptionBlockDefinition.Settings.settingDictionaryBools[setKeyBlockToggles], builder, optionBuilder);
+                if (PauseTickRun) yield return stateActive;
+
+                if (tempGenerateBlockOptionBlockDefinition.HasInventory)
+                {
+                    AppendOption(tempGenerateBlockOptionBlockDefinition.Settings.settingDictionaryBools[setKeyBlockInputToggles], builder, optionBuilder);
+
+                    if (block.InventoryCount > 1)
                     {
-                        panelDefinition.DataSource = presetPanelOptions;
-                        tempBlockOptionDefinition.block.CustomName = tempBlockOptionDefinition.block.CustomName.Replace(panelTag, panelTag.ToUpper());
+                        AppendOption(tempGenerateBlockOptionBlockDefinition.Settings.settingDictionaryBools[setKeyBlockOutputToggles], builder, optionBuilder);
+
+                        if (block is IMyAssembler)
+                            AppendOption(tempGenerateBlockOptionBlockDefinition.Settings.settingDictionaryBools[setKeyBlockAssemblerToggles], builder, optionBuilder);
                     }
                 }
-                else if (!StringsMatch(dataSource, panelDefinition.settingBackup))
+                BuilderAppendLine(builder);
+                if (BuilderHasLength(optionBuilder))
+                    BuilderAppendLine(builder, optionBuilder.ToString());
+                if (PauseTickRun) yield return stateActive;
+                optionBuilder.Clear();
+                AppendOption(builder, $"Priority={tempGenerateBlockOptionBlockDefinition.Settings.priority}", tempGenerateBlockOptionBlockDefinition.Settings.priority == 1.0);
+                AppendOption(builder, $"Clone Group={tempGenerateBlockOptionBlockDefinition.cloneGroup}", !TextHasLength(tempGenerateBlockOptionBlockDefinition.cloneGroup));
+                if (tempGenerateBlockOptionBlockDefinition.HasInventory)
                 {
-                    panelDefinition.items.Clear();
-                    keyBuilder.Clear();
-                    dataLines = SplitLines(dataSource);
-                    bool dataBool, rowSet = false;
-                    double dataDouble;
-                    int startIndex;
-                    OptionHeaderIndex(out startIndex, dataLines, optionBlockFilter);
-                    for (int i = startIndex; i < dataLines.Length; i++)
+                    none = !tempGenerateBlockOptionBlockDefinition.Settings.GetOption(setKeyBlockStorageKey);
+                    AppendOption(builder, optionBuilder, "Storage=", none);
+
+                    AppendOption(builder, optionBuilder, "All", none || !tempGenerateBlockOptionBlockDefinition.Settings.storageCategories.Contains("all"));
+                    itemCategoryList.ForEach(category => AppendOption(builder, optionBuilder, category, none || !tempGenerateBlockOptionBlockDefinition.Settings.storageCategories.Contains(category)));
+                    if (!none)
+                        BuilderAppendLine(builder);
+                    if (BuilderHasLength(optionBuilder))
+                        BuilderAppendLine(builder, optionBuilder.ToString());
+                    optionBuilder.Clear();
+                    if (PauseTickRun) yield return stateActive;
+                    if (tempGenerateBlockOptionBlockDefinition.Settings.loadout.ItemTypeCount > 0)
                     {
-                        if (PauseTickRun) yield return stateActive;
-                        if (startIndex > 0 && StringsMatch(dataLines[i], optionBlockFilter)) break;
-                        if (!dataLines[i].StartsWith("//") && SplitData(dataLines[i], out key, out data))
-                        {
-                            dataBool = StringsMatch(data, trueString);
-                            double.TryParse(data, out dataDouble);
-                            switch (key.ToLower())
-                            {
-                                case "type":
-                                    switch (data.ToLower())
-                                    {
-                                        case "item":
-                                            panelDefinition.panelType = PanelType.Item;
-                                            break;
-                                        case "cargo":
-                                            panelDefinition.panelType = PanelType.Cargo;
-                                            break;
-                                        case "output":
-                                            panelDefinition.panelType = PanelType.Output;
-                                            break;
-                                        case "status":
-                                            panelDefinition.panelType = PanelType.Status;
-                                            break;
-                                        case "span":
-                                            panelDefinition.panelType = PanelType.Span;
-                                            break;
-                                    }
-                                    keyBuilder.Append($"{panelDefinition.panelType}");
-                                    break;
-                                case "categories":
-                                    dataOptions = data.ToLower().Split('|');
-                                    panelDefinition.itemCategories.Clear();
-                                    for (int x = 0; x < dataOptions.Length; x++)
-                                    {
-                                        if (PauseTickRun) yield return stateActive;
-                                        if (IsCategory(dataOptions[x]))
-                                        {
-                                            panelDefinition.itemCategories.Add(dataOptions[x]);
-                                            keyBuilder.Append(dataOptions[x]);
-                                        }
-                                    }
-                                    break;
-                                case "items":
-                                    while (!GetTags(panelDefinition.items, data.ToLower()))
-                                        yield return stateActive;
-                                    if (panelDefinition.items.ItemTypeCount > 0)
-                                        while (!CollectionToString(keyBuilder, panelDefinition.items, false)) yield return stateActive;
-                                    break;
-                                case "sorting":
-                                    switch (data.ToLower())
-                                    {
-                                        case "alphabetical":
-                                            panelDefinition.panelItemSorting = PanelItemSorting.Alphabetical;
-                                            break;
-                                        case "ascendingamount":
-                                            panelDefinition.panelItemSorting = PanelItemSorting.AscendingAmount;
-                                            break;
-                                        case "descendingamount":
-                                            panelDefinition.panelItemSorting = PanelItemSorting.DescendingAmount;
-                                            break;
-                                        case "ascendingpercent":
-                                            panelDefinition.panelItemSorting = PanelItemSorting.AscendingPercent;
-                                            break;
-                                        case "descendingpercent":
-                                            panelDefinition.panelItemSorting = PanelItemSorting.DescendingPercent;
-                                            break;
-                                    }
-                                    keyBuilder.Append(panelDefinition.panelItemSorting.ToString());
-                                    break;
-                                case "text color":
-                                    GetColor(out panelDefinition.textColor, data);
-                                    keyBuilder.Append(panelDefinition.textColor.ToVector4());
-                                    break;
-                                case "number color":
-                                    GetColor(out panelDefinition.numberColor, data);
-                                    keyBuilder.Append(panelDefinition.numberColor);
-                                    break;
-                                case "back color":
-                                    GetColor(out panelDefinition.backdropColor, data);
-                                    keyBuilder.Append(panelDefinition.backdropColor);
-                                    break;
-                                case "rows":
-                                    panelDefinition.rows = (int)dataDouble;
-                                    rowSet = true;
-                                    break;
-                                case "name length":
-                                    panelDefinition.nameLength = (int)dataDouble;
-                                    keyBuilder.Append(panelDefinition.nameLength);
-                                    break;
-                                case "decimals":
-                                    panelDefinition.decimals = (int)dataDouble;
-                                    keyBuilder.Append(panelDefinition.decimals);
-                                    break;
-                                case "update delay":
-                                    panelDefinition.updateDelay = dataDouble;
-                                    break;
-                                case "span id":
-                                    panelDefinition.spanKey = data;
-                                    break;
-                                case "span child id":
-                                    panelDefinition.childSpanKey = data;
-                                    panelDefinition.span = TextHasLength(data);
-                                    break;
-                                case "number suffixes":
-                                    dataOptions = data.Split('|');
-                                    panelDefinition.suffixes.Clear();
-                                    panelDefinition.suffixes.AddRange(dataOptions);
-                                    break;
-                                case "options":
-                                    dataOptions = data.ToLower().Split('|');
-                                    panelDefinition.belowQuota = dataOptions.Contains("belowquota");
-                                    panelDefinition.showProgressBar = !dataOptions.Contains("hideprogressbar");
-                                    break;
-                                case "minimum value":
-                                    panelDefinition.minimumItemAmount = dataDouble;
-                                    keyBuilder.Append(panelDefinition.minimumItemAmount);
-                                    break;
-                                case "maximum value":
-                                    panelDefinition.maximumItemAmount = dataDouble;
-                                    keyBuilder.Append(panelDefinition.maximumItemAmount);
-                                    break;
-                                case "font":
-                                    panelDefinition.font = GetFont(((IMyTextSurfaceProvider)tempBlockOptionDefinition.block).GetSurface(0), data);
-                                    break;
-                                case "item display":
-                                    switch (data.ToLower())
-                                    {
-                                        case "detailed":
-                                            panelDefinition.displayType = DisplayType.Detailed;
-                                            break;
-                                        case "compactamount":
-                                            panelDefinition.displayType = DisplayType.CompactAmount;
-                                            break;
-                                        case "standard":
-                                            panelDefinition.displayType = DisplayType.Standard;
-                                            break;
-                                        case "compactpercent":
-                                            panelDefinition.displayType = DisplayType.CompactPercent;
-                                            break;
-                                    }
-                                    break;
-                            }
-                        }
-                    }
-                    if (panelDefinition.panelType != PanelType.None)
-                    {
-                        IMyTextSurface surface = panelDefinition.GetSurface();
-                        panelDefinition.size = surface.SurfaceSize;
-                        panelDefinition.positionOffset = surface.TextureSize - surface.SurfaceSize;
-                        if (panelDefinition.provider || panelDefinition.cornerPanel || blockDefinition == "LargeTextPanel" || blockDefinition == "LargeLCDPanel5x3")
-                            panelDefinition.positionOffset /= 2f;
-                        panelDefinition.settingKey = keyBuilder.ToString();
-                        if (!rowSet)
-                            panelDefinition.rows = 15;
-                        switch (panelDefinition.panelType)
-                        {
-                            case PanelType.Cargo:
-                                panelDefinition.columns = 1;
-                                if (!rowSet)
-                                    panelDefinition.rows = panelDefinition.itemCategories.Count;
-                                break;
-                            case PanelType.Output:
-                                if (!rowSet)
-                                    panelDefinition.rows = 13;
-                                panelDefinition.columns = 2;
-                                if (rowSet && panelDefinition.rows == 0)
-                                    panelDefinition.columns = 1;
-                                break;
-                            case PanelType.Status:
-                                panelDefinition.columns = 2;
-                                if (!rowSet)
-                                    panelDefinition.rows = 8;
-                                if (rowSet && panelDefinition.rows == 0)
-                                    panelDefinition.columns = 1;
-                                break;
-                            case PanelType.Span:
-                                panelDefinition.columns = 1;
-                                break;
-                        }
+                        builder.Append("Loadout=");
+                        while (!CollectionToString(builder, tempGenerateBlockOptionBlockDefinition.Settings.loadout, true)) yield return stateActive;
+                        BuilderAppendLine(builder);
                     }
                     else
-                        tempBlockOptionDefinition.panelDefinitionList.Remove(tempProcessPanelOptionSurfaceIndex);
+                        AppendOption(builder, "Loadout=20%:ingot:iron:silicon:nickel|50:ore:ice");
+                    if (tempGenerateBlockOptionBlockDefinition.Settings.limits.ItemTypeCount > 0)
+                    {
+                        builder.Append("Limit=");
+                        while (!CollectionToString(builder, tempGenerateBlockOptionBlockDefinition.Settings.limits, true)) yield return stateActive;
+                        BuilderAppendLine(builder);
+                    }
+                    else
+                        AppendOption(builder, "Limit=25:ingot:*|10%:ore:*");
                 }
+                if (block is IMyFunctionalBlock)
+                {
+                    if (tempGenerateBlockOptionBlockDefinition.Settings.logicComparisons.Count > 0)
+                    {
+                        builder.Append(tempGenerateBlockOptionBlockDefinition.Settings.andComparison ? "LogicAnd=" : "LogicOr=");
 
-                panelDefinition.settingBackup = dataSource;
+                        foreach (LogicComparison logicComparison in tempGenerateBlockOptionBlockDefinition.Settings.logicComparisons)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+                            if (builder[builder.Length - 1] != '=')
+                                builder.Append("|");
+                            builder.Append(logicComparison.GetString);
+                        }
+                        BuilderAppendLine(builder);
+                    }
+                    else
+                    {
+                        AppendOption(builder, "LogicAnd=ingot:iron<100 | ore:iron>=quota*0.1");
+                        AppendOption(builder, "LogicOr=ingot:iron<quota*0.95 | ingot:silicon<quota*0.95");
+                    }
+                }
+                AppendOption(builder, $"Definition={block.BlockDefinition}");
+                if (TextHasLength(optionBlockFilter))
+                    BuilderAppendLine(builder, optionBlockFilter);
+
+                tempGenerateBlockOptionBlockDefinition.DataSource = builder.ToString().TrimEnd();
+                tempGenerateBlockOptionBlockDefinition.settingBackup = tempGenerateBlockOptionBlockDefinition.DataSource;
 
                 yield return stateContinue;
             }
-        }
-
-        bool GenerateBlockOptions(BlockDefinition blockDefinition)
-        {
-            selfContainedIdentifier = functionList[28];
-            if (!IsStateActive)
-            {
-                InitializeState(GenerateBlockOptionState(blockDefinition), selfContainedIdentifier);
-                if (PauseTickRun) return false;
-            }
-            return RunStateManager;
-        }
-
-        IEnumerator<FunctionState> GenerateBlockOptionState(BlockDefinition blockDefinition)
-        {
-            IMyTerminalBlock block = blockDefinition.block;
-            StringBuilder builder = NewBuilder, optionBuilder = NewBuilder;
-            bool none;
-            if (TextHasLength(optionBlockFilter) && TextHasLength(blockDefinition.DataSource))
-            {
-                BuilderAppendLine(builder, blockDefinition.DataSource);
-                BuilderAppendLine(builder);
-            }
-            if (TextHasLength(optionBlockFilter))
-                BuilderAppendLine(builder, optionBlockFilter);
-            BuilderAppendLine(builder, $"Automatic={!blockDefinition.Settings.manual}");
-            builder.Append("Options=");
-
-            AppendOption(blockDefinition.Settings.toggles, builder, optionBuilder);
-            if (PauseTickRun) yield return stateActive;
-
-            if (blockDefinition.HasInventory)
-            {
-                AppendOption(blockDefinition.Settings.inventoryToggles, builder, optionBuilder);
-
-                if (block.InventoryCount > 1)
-                {
-                    AppendOption(blockDefinition.Settings.multiInventoryToggles, builder, optionBuilder);
-
-                    if (block is IMyAssembler)
-                        AppendOption(blockDefinition.Settings.assemblerToggles, builder, optionBuilder);
-                }
-            }
-            BuilderAppendLine(builder);
-            if (BuilderHasLength(optionBuilder))
-                BuilderAppendLine(builder, optionBuilder.ToString());
-            if (PauseTickRun) yield return stateActive;
-            optionBuilder.Clear();
-            AppendOption(builder, $"Priority={blockDefinition.Settings.priority}", blockDefinition.Settings.priority == 1.0);
-            AppendOption(builder, $"Clone Group={blockDefinition.cloneGroup}", !TextHasLength(blockDefinition.cloneGroup));
-            if (blockDefinition.HasInventory)
-            {
-                none = !blockDefinition.Settings.Storage;
-                AppendOption(builder, optionBuilder, "Storage=", none);
-
-                AppendOption(builder, optionBuilder, "All", none || !blockDefinition.Settings.storageCategories.Contains("all"));
-                itemCategoryList.ForEach(category => AppendOption(builder, optionBuilder, category, none || !blockDefinition.Settings.storageCategories.Contains(category)));
-                if (!none)
-                    BuilderAppendLine(builder);
-                if (BuilderHasLength(optionBuilder))
-                    BuilderAppendLine(builder, optionBuilder.ToString());
-                optionBuilder.Clear();
-                if (PauseTickRun) yield return stateActive;
-                if (blockDefinition.Settings.loadout.ItemTypeCount > 0)
-                {
-                    builder.Append("Loadout=");
-                    while (!CollectionToString(builder, blockDefinition.Settings.loadout, true)) yield return stateActive;
-                    BuilderAppendLine(builder);
-                }
-                else
-                    AppendOption(builder, "Loadout=20%:ingot:iron:silicon:nickel|50:ore:ice");
-                if (blockDefinition.Settings.limits.ItemTypeCount > 0)
-                {
-                    builder.Append("Limit=");
-                    while (!CollectionToString(builder, blockDefinition.Settings.limits, true)) yield return stateActive;
-                    BuilderAppendLine(builder);
-                }
-                else
-                    AppendOption(builder, "Limit=25:ingot:*|10%:ore:*");
-            }
-            if (block is IMyFunctionalBlock)
-            {
-                if (blockDefinition.Settings.logicComparisons.Count > 0)
-                {
-                    builder.Append(blockDefinition.Settings.andComparison ? "LogicAnd=" : "LogicOr=");
-
-                    foreach (LogicComparison logicComparison in blockDefinition.Settings.logicComparisons)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        if (builder[builder.Length - 1] != '=')
-                            builder.Append("|");
-                        builder.Append(logicComparison.GetString);
-                    }
-                    BuilderAppendLine(builder);
-                }
-                else
-                {
-                    AppendOption(builder, "LogicAnd=ingot:iron<100 | ore:iron>=quota*0.1");
-                    AppendOption(builder, "LogicOr=ingot:iron<quota*0.95 | ingot:silicon<quota*0.95");
-                }
-            }
-            AppendOption(builder, $"Definition={block.BlockDefinition}");
-            if (TextHasLength(optionBlockFilter))
-                BuilderAppendLine(builder, optionBlockFilter);
-
-            blockDefinition.DataSource = builder.ToString().TrimEnd();
-            blockDefinition.settingBackup = blockDefinition.DataSource;
-
-            yield return stateComplete;
         }
 
 
@@ -5167,11 +4812,6 @@ namespace IngameScript
             return scriptSpan >= span;
         }
 
-        double RemainingSpan(TimeSpan span)
-        {
-            return Math.Max(0, (span - scriptSpan).TotalSeconds);
-        }
-
         bool IsGravelSifter(IMyTerminalBlock block)
         {
             return settingsListsStrings[setKeyGravelSifterKeys].Contains(BlockSubtype(block).ToLower());
@@ -5210,7 +4850,7 @@ namespace IngameScript
                 IsTool(typeID) ? toolKeyword : typeID;
         }
 
-        bool IsBlueprint(string data)
+        static bool IsBlueprint(string data)
         {
             return TextHasLength(data) && !StringsMatch(data, "none");
         }
@@ -5279,12 +4919,12 @@ namespace IngameScript
             return false;
         }
 
-        static string ShortMSTime(double milliseconds)
+        string ShortMSTime(double milliseconds)
         {
             return $"{(milliseconds >= 1000.0 ? $"{ShortNumber2(milliseconds / 1000.0)}s" : $"{ShortNumber2(milliseconds)}ms")}";
         }
 
-        string BlockSubtype(IMyTerminalBlock block)
+        static string BlockSubtype(IMyTerminalBlock block)
         {
             return block.BlockDefinition.SubtypeName;
         }
@@ -5294,17 +4934,14 @@ namespace IngameScript
             return blueprint.BlueprintId.SubtypeName;
         }
 
-        bool StateActive(string key, bool check = false)
+        bool StateInitialized(FunctionIdentifier key)
         {
-            if (check)
-                return stateErrorCodes.ContainsKey(key);
-            if (stateList.ContainsKey(key))
-            {
-                if (!stateErrorCodes.ContainsKey(key))
-                    stateErrorCodes[key] = "";
-                return true;
-            }
-            return false;
+            return stateRecords[key].lastStatus != stateUninitialized;
+        }
+
+        bool StateRunning(FunctionIdentifier key)
+        {
+            return stateRecords[key].lastStatus == stateActive;
         }
 
         bool GlobalFilter(IMyTerminalBlock block)
@@ -5312,7 +4949,7 @@ namespace IngameScript
             return (!TextHasLength(globalFilterKeyword) || ContainsString(block.CustomName, globalFilterKeyword)) && !settingsListsStrings[setKeyExcludedDefinitions].Contains(BlockSubtype(block));
         }
 
-        bool SplitData(string text, out string key, out string data, char splitter = '=', bool firstIndex = true)
+        static bool SplitData(string text, out string key, out string data, char splitter = '=', bool firstIndex = true)
         {
             int index = firstIndex ? text.IndexOf(splitter) : text.LastIndexOf(splitter);
             if (index != -1)
@@ -5537,7 +5174,7 @@ namespace IngameScript
             return blockCheckDefinitionA.block.CubeGrid.CubeExists(blockCheckDefinitionA.block.Position) && blockCheckDefinitionA.block.IsFunctional && !blockCheckDefinitionA.block.Closed;
         }
 
-        static bool GetDefinition(out ItemDefinition definition, string itemID)
+        bool GetDefinition(out ItemDefinition definition, string itemID)
         {
             string typeID, subtypeID;
             SplitID(itemID, out typeID, out subtypeID);
@@ -5551,35 +5188,6 @@ namespace IngameScript
         static string TruncateNumber(double number, int decimalPlaces)
         {
             return $"{Math.Floor(number * (Math.Pow(10.0, decimalPlaces))) / (Math.Pow(10.0, decimalPlaces))}";
-        }
-
-        void ItemDefinitionToBuilders(ref StringBuilder builder, ItemDefinition definition)
-        {
-            builder.Append($"Name={definition.displayName}||Category={Formatted(definition.category)}||Quota={definition.quota}");
-            BuilderAppendLine(builder, definition.quota >= 0 && definition.quotaMax > definition.quota ? $"<{definition.quotaMax}" : "");
-
-            builder.Append($"^Type={definition.typeID}||Subtype={definition.subtypeID}");
-
-            if (IsBlueprint(definition.blueprintID))
-                builder.Append($"||Blueprint={definition.blueprintID}||Assembly Multiplier={definition.assemblyMultiplier}||Assemble={definition.assemble}||Disassemble={definition.disassemble}");
-            else if (StringsMatch(definition.blueprintID, "none"))
-                builder.Append("||Blueprint=None");
-
-            if (IsOre(definition.typeID))
-                builder.Append($"||Refine={definition.refine}");
-
-            builder.Append($"||Fuel={definition.fuel}||Display={definition.display}");
-            if (definition.gas || IsIce(definition.typeID, definition.subtypeID))
-                builder.Append($"||Gas={definition.gas}");
-
-            if (IsIngot(definition.typeID) || definition.oreKeys.Count > 0)
-            {
-                builder.Append("||Ore Keys=[");
-                for (int i = 0; i < definition.oreKeys.Count; i++)
-                    builder.Append($"{(i > 0 ? "|" : "")}{definition.oreKeys[i]}");
-                builder.Append("]");
-            }
-            BuilderAppendLine(builder);
         }
 
         bool IsGas(MyInventoryItem item)
@@ -5596,7 +5204,7 @@ namespace IngameScript
             return IsIce(typeID, subtypeID);
         }
 
-        bool IsIce(string typeID, string subtypeID)
+        static bool IsIce(string typeID, string subtypeID)
         {
             return IsOre(typeID) && subtypeID == "Ice";
         }
@@ -5611,7 +5219,7 @@ namespace IngameScript
             if (!GetKeyBool(setKeySurvivalKitAssembly) && blueprintID.SubtypeName != stoneOreToIngotBasicID && ContainsString(BlockSubtype(assembler), "survival"))
                 return false;
 
-            if ((block.Settings.AssemblyOnly && mode == disassemblyMode) || (block.Settings.DisassemblyOnly && mode == assemblyMode))
+            if ((block.Settings.GetOption(setKeyBlockAssemblyOnlyKey) && mode == disassemblyMode) || (block.Settings.GetOption(setKeyBlockDisassemblyOnlyKey) && mode == assemblyMode))
                 return false;
 
             return assembler.CanUseBlueprint(blueprintID) && (assembler.IsQueueEmpty || assembler.Mode == mode);
@@ -5651,11 +5259,11 @@ namespace IngameScript
             return 100;
         }
 
-        bool FunctionDelay(string functionKey)
+        bool FunctionDelay(FunctionIdentifier functionKey)
         {
             if (!delaySpans.ContainsKey(functionKey))
             {
-                delaySpans[functionKey] = ZeroSpan;
+                delaySpans[functionKey] = TimeSpan.Zero;
                 return true;
             }
             return SpanElapsed(delaySpans[functionKey]);
@@ -5744,6 +5352,7 @@ namespace IngameScript
         static float ItemVolume(string typeID, string subtypeID)
         {
             string key = $"{typeID}/{subtypeID}";
+
             try
             {
                 MyItemType type = MyItemType.Parse(key);
@@ -5751,9 +5360,7 @@ namespace IngameScript
                     return type.GetItemInfo().Volume;
             }
             catch { }
-            ItemDefinition def;
-            if (GetDefinition(out def, key) && def.volume != 0)
-                return def.volume;
+
             return 0.17f;
         }
 
@@ -5782,13 +5389,19 @@ namespace IngameScript
             return AvailableVolume(block) / ItemVolume(item);
         }
 
-        static bool FractionalItem(string typeId, string subtypeID)
+        static bool FractionalItem(string typeID, string subtypeID)
         {
-            ItemDefinition definition;
-            if (GetDefinition(out definition, $"{typeId}/{subtypeID}"))
-                return definition.fractional;
+            string key = $"{typeID}/{subtypeID}";
 
-            return false;
+            try
+            {
+                MyItemType type = MyItemType.Parse(key);
+                if (type.GetItemInfo().Volume > 0f)
+                    return type.GetItemInfo().UsesFractions;
+            }
+            catch { }
+
+            return typeID == ingotType || typeID == oreType;
         }
 
         static bool FractionalItem(MyInventoryItem item)
@@ -5798,10 +5411,9 @@ namespace IngameScript
 
         bool Sortable(BlockDefinition blockDef, int inventoryIndex)
         {
-            if (inventoryIndex == 0 && blockDef.Settings.KeepInput)
+            if ((inventoryIndex == 0 && blockDef.Settings.GetOption(setKeyBlockKeepInputKey)) || (inventoryIndex == 1 && blockDef.Settings.GetOption(setKeyBlockKeepOutputKey)))
                 return false;
-            if (inventoryIndex == 1 && blockDef.Settings.KeepOutput)
-                return false;
+
             IMyTerminalBlock block = blockDef.block;
             if (blockDef.isGravelSifter || block is IMyRefinery)
                 return inventoryIndex == 1;
@@ -5819,7 +5431,7 @@ namespace IngameScript
 
         bool IsGun(BlockDefinition block)
         {
-            return block is IMyUserControllableGun || block.Settings.GunOverride;
+            return block is IMyUserControllableGun || block.Settings.GetOption(setKeyBlockGunOverrideKey);
         }
 
         bool Sortable(MyInventoryItem item, BlockDefinition blockDef, int inventoryIndex = 0)
@@ -5868,12 +5480,12 @@ namespace IngameScript
             return StringsMatch(typeID, hydBottleType) || StringsMatch(typeID, oxyBottleType);
         }
 
-        bool IsIngot(string typeID)
+        static bool IsIngot(string typeID)
         {
             return IsWildCard(typeID) || StringsMatch(typeID, ingotType) || StringsMatch(typeID, ingotKeyword) || (typeID.Length > 1 && LeadsString(ingotKeyword, typeID));
         }
 
-        bool IsOre(string typeID)
+        static bool IsOre(string typeID)
         {
             return IsWildCard(typeID) || StringsMatch(typeID, oreType) || StringsMatch(typeID, oreKeyword) || (typeID.Length > 1 && LeadsString(oreKeyword, typeID));
         }
@@ -5921,7 +5533,7 @@ namespace IngameScript
             return RemoveSpaces(whole, true).EndsWith(RemoveSpaces(end, true));
         }
 
-        bool LeadsString(string whole, string lead)
+        static bool LeadsString(string whole, string lead)
         {
             return RemoveSpaces(whole, true).StartsWith(RemoveSpaces(lead, true));
         }
@@ -5966,50 +5578,49 @@ namespace IngameScript
             (Now - tickStartTime).TotalMilliseconds >= runTimeLimiter * mult;
         }
 
-        bool StateManager(string identifier, bool updateStatus = true, bool reportErrors = true)
+        bool StateManager(FunctionIdentifier identifier, bool updateStatus = true, bool reportErrors = true)
         {
-            if (updateStatus)
-                currentFunction = identifier;
+            if (updateStatus) currentFunction = identifier; // Update echo status
+
+            if (!StateInitialized(identifier)) InitializeStateV2(identifier); // Initialize enumerator
+
+            if (!stateErrorCodes.ContainsKey(identifier)) stateErrorCodes[identifier] = ""; // Set error code
 
 
-            bool errorCaught = false, endReached;
+            bool endReached;
             DateTime startTime = Now, endTime;
             int currentActions = Runtime.CurrentInstructionCount;
             FunctionState currentState;
             try
             {
-                endReached = !stateList[identifier].MoveNext();
-                currentState = !endReached && stateList.ContainsKey(identifier) ? stateList[identifier].Current : stateComplete;
+                endReached = !stateRecords[identifier].enumerator.MoveNext();
+                currentState = stateRecords[identifier].lastStatus = stateRecords[identifier].enumerator.Current;
             }
             catch
             {
-                errorCaught = true;
-                currentState = stateComplete;
+                currentState = stateRecords[identifier].lastStatus = stateError;
             }
             endTime = Now;
-            if (errorCaught && reportErrors)
-                Output($"Error in function: {identifier} : {stateErrorCodes[identifier]}");
+            if (currentState == stateError && reportErrors)
+                Output($"Error in function: {identifier}{(stateErrorCodes[identifier].Length > 0 ? $" : {stateErrorCodes[identifier]}" : "")}");
 
-            stateRecords[identifier].PostRun(Runtime.CurrentInstructionCount - currentActions, Now - startTime, errorCaught, reportErrors, currentState != stateActive);
+            stateRecords[identifier].PostRun(Runtime.CurrentInstructionCount - currentActions, Now - startTime, currentState == stateError, reportErrors, currentState != stateActive);
 
-            if (errorCaught || currentState != stateActive)
-            {
-                scriptHealth = 0;
-                foreach (KeyValuePair<string, StateRecord> pair in stateRecords)
-                    scriptHealth += (double)pair.Value.health;
-                scriptHealth /= (double)stateRecords.Count;
-                if (errorCaught || currentState == stateComplete)
-                    StateDisposal(identifier);
-                else
-                    stateErrorCodes.Remove(identifier);
-            }
             if (currentState != stateActive)
             {
+                scriptHealth = 0;
+                foreach (StateRecord record in stateRecords.Values)
+                    scriptHealth += (double)record.health;
+                scriptHealth /= (double)stateRecords.Count;
+
+                StateDisposal(identifier, currentState == stateError);
+
                 if (identifier == selfContainedIdentifier)
-                    selfContainedIdentifier = "";
-                if (identifier == currentMajorFunction)
-                    currentMajorFunction = "Idle";
+                    selfContainedIdentifier = FunctionIdentifier.Idle;
+                if ($"{identifier}" == currentMajorFunction)
+                    currentMajorFunction = $"{FunctionIdentifier.Idle}";
             }
+
             return currentState != stateActive;
         }
 
@@ -6036,13 +5647,16 @@ namespace IngameScript
             return highestIndex >= 0 ? $"{TruncateNumber(currentNumber, decimals)}{suffixes[highestIndex]}" : TruncateNumber(currentNumber, decimals);
         }
 
-        static string ShortNumber2(double number, List<string> suffixesList = null, int decimals = 2, int padding = 0, bool left = true)
+        string ShortNumber2(double number, int decimals = 2, int padding = 0, bool left = true)
         {
-            List<string> suffixes = NewStringList;
-            suffixes.AddRange(suffixesList ?? settingsListsStrings[setKeyDefaultSuffixes]);
+            return ShortNumber2(number, settingsListsStrings[setKeyDefaultSuffixes], decimals, padding, left);
+        }
+
+        static string ShortNumber2(double number, List<string> suffixesList, int decimals = 2, int padding = 0, bool left = true)
+        {
             string prefix = number < 0 ? "-" : "";
 
-            return left ? $"{prefix}{ShortNumberAbs2(Math.Abs(number), suffixes, decimals)}".PadLeft(padding) : $"{prefix}{ShortNumberAbs2(Math.Abs(number), suffixes, decimals)}".PadRight(padding);
+            return left ? $"{prefix}{ShortNumberAbs2(Math.Abs(number), suffixesList, decimals)}".PadLeft(padding) : $"{prefix}{ShortNumberAbs2(Math.Abs(number), suffixesList, decimals)}".PadRight(padding);
         }
 
         static bool TextHasLength(string text)
@@ -6060,37 +5674,9 @@ namespace IngameScript
             return lower ? text.Replace(" ", "").ToLower() : text.Replace(" ", "");
         }
 
-        bool IsWildCard(string text)
+        static bool IsWildCard(string text)
         {
             return StringsMatch(text, "all") || text == "*";
-        }
-
-        string GetFont(IMyTextSurface surface, string fontType)
-        {
-            List<string> fontList = NewStringList;
-            surface.GetFonts(fontList);
-            for (int i = 0; i < fontList.Count; i++)
-                if (StringsMatch(fontType, fontList[i]))
-                    return fontList[i];
-            return "Monospace";
-        }
-
-        bool GetColor(out Color color, string colorSet)
-        {
-            color = Color.White;
-            try
-            {
-                string[] colorArray = colorSet.Split(':');
-                if (colorArray.Length == 4)
-                    color = new Color(int.Parse(colorArray[0]), int.Parse(colorArray[1]), int.Parse(colorArray[2]), int.Parse(colorArray[3]));
-                else if (colorArray.Length == 3)
-                    color = new Color(int.Parse(colorArray[0]), int.Parse(colorArray[1]), int.Parse(colorArray[2]));
-                else
-                    return false;
-                return true;
-            }
-            catch { }
-            return false;
         }
 
 
@@ -6098,6 +5684,187 @@ namespace IngameScript
 
 
         #region Methods
+
+        void InitState(IEnumerator<FunctionState> stateFunction, FunctionIdentifier identifier)
+        {
+            stateRecords[identifier].enumerator = stateFunction;
+
+            stateRecords[identifier].lastStatus = stateContinue;
+
+            if (!booted) stateRecords[identifier].enumerator.MoveNext();
+        }
+
+        void InitializeStateV2(FunctionIdentifier identifier)
+        {
+            switch (identifier)
+            {
+                case FunctionIdentifier.Script:
+                    InitState(ScriptState(), identifier);
+                    break;
+                case FunctionIdentifier.Main_Control:
+                    InitState(ControlState(), identifier);
+                    break;
+                case FunctionIdentifier.Main_Output:
+                    InitState(OutputState(), identifier);
+                    break;
+                case FunctionIdentifier.Main_Sprites:
+                    InitState(panelMaster.PopulateSpriteState(), identifier);
+                    break;
+                case FunctionIdentifier.Processing_Block_Options:
+                    InitState(ProcessBlockOptionState(), identifier);
+                    break;
+                case FunctionIdentifier.Status_Panel:
+                    InitState(panelMaster.StatusPanelState(), identifier);
+                    break;
+                case FunctionIdentifier.Measuring_Capacities:
+                    InitState(panelMaster.CargoCapacityState(), identifier);
+                    break;
+                case FunctionIdentifier.Output_Panel:
+                    InitState(panelMaster.OutputPanelState(), identifier);
+                    break;
+                case FunctionIdentifier.Counting_Listed_Items:
+                    InitState(CountListState(), identifier);
+                    break;
+                case FunctionIdentifier.Distribution:
+                    InitState(DistributeState(), identifier);
+                    break;
+                case FunctionIdentifier.Distributing_Item:
+                    InitState(DistributeItemState(), identifier);
+                    break;
+                case FunctionIdentifier.Counting_Item_In_Inventory:
+                    InitState(AmountContainedState(), identifier);
+                    break;
+                case FunctionIdentifier.Processing_Limits:
+                    InitState(ProcessLimitsState(), identifier);
+                    break;
+                case FunctionIdentifier.Sorting:
+                    InitState(SortState(), identifier);
+                    break;
+                case FunctionIdentifier.Storing_Item:
+                    InitState(PutInStorageState(), identifier);
+                    break;
+                case FunctionIdentifier.Counting_Blueprints:
+                    InitState(CountBlueprintState(), identifier);
+                    break;
+                case FunctionIdentifier.Counting_Items:
+                    InitState(CountState(), identifier);
+                    break;
+                case FunctionIdentifier.Scanning:
+                    InitState(ScanState(), identifier);
+                    break;
+                case FunctionIdentifier.Generating_Sprites:
+                    InitState(panelMaster.PopulateSpriteListState(), identifier);
+                    break;
+                case FunctionIdentifier.Listing_Items:
+                    InitState(CollectionToStringState(), identifier);
+                    break;
+                case FunctionIdentifier.Item_Panel:
+                    InitState(panelMaster.ItemPanelState(), identifier);
+                    break;
+                case FunctionIdentifier.Order_Inventory:
+                    InitState(OrderInventoryState(), identifier);
+                    break;
+                case FunctionIdentifier.Processing_Tags:
+                    InitState(GetTagState(), identifier);
+                    break;
+                case FunctionIdentifier.Transferring_Item:
+                    InitState(TransferState(), identifier);
+                    break;
+                case FunctionIdentifier.Spreading_Items:
+                    InitState(BalanceState2(), identifier);
+                    break;
+                case FunctionIdentifier.Cargo_Panel:
+                    InitState(panelMaster.CargoPanelState(), identifier);
+                    break;
+                case FunctionIdentifier.Distributing_Blueprint:
+                    InitState(DistributeBlueprintState(), identifier);
+                    break;
+                case FunctionIdentifier.Removing_Excess_Assembly:
+                    InitState(RemoveExcessAssemblyState(), identifier);
+                    break;
+                case FunctionIdentifier.Generating_Block_Options:
+                    InitState(GenerateBlockOptionState(), identifier);
+                    break;
+                case FunctionIdentifier.Setting_Block_Quotas:
+                    InitState(SetBlockQuotaState(), identifier);
+                    break;
+                case FunctionIdentifier.Save:
+                    InitState(SaveState(), identifier);
+                    break;
+                case FunctionIdentifier.Queue_Assembly:
+                    InitState(QueueAssemblyState(), identifier);
+                    break;
+                case FunctionIdentifier.Queue_Disassembly:
+                    InitState(QueueDisassemblyState(), identifier);
+                    break;
+                case FunctionIdentifier.Inserting_Blueprint:
+                    InitState(InsertBlueprintState(), identifier);
+                    break;
+                case FunctionIdentifier.Process_Panel_Options:
+                    InitState(panelMaster.ProcessPanelOptionState(), identifier);
+                    break;
+                case FunctionIdentifier.Removing_Blueprint:
+                    InitState(RemoveBlueprintState(), identifier);
+                    break;
+                case FunctionIdentifier.Removing_Excess_Disassembly:
+                    InitState(RemoveExcessDisassemblyState(), identifier);
+                    break;
+                case FunctionIdentifier.Order_Blocks_By_Priority:
+                    InitState(OrderListByPriorityState(), identifier);
+                    break;
+                case FunctionIdentifier.Cargo_Priority_Loop:
+                    InitState(SortCargoPriorityState(), identifier);
+                    break;
+                case FunctionIdentifier.Sorting_Cargo_Priority:
+                    InitState(SortCargoListState(), identifier);
+                    break;
+                case FunctionIdentifier.Sort_Blueprints:
+                    InitState(SortBlueprintState(), identifier);
+                    break;
+                case FunctionIdentifier.Spread_Blueprints:
+                    InitState(SpreadBlueprintStateV2(), identifier);
+                    break;
+                case FunctionIdentifier.Load:
+                    InitState(LoadState(), identifier);
+                    break;
+                case FunctionIdentifier.Loadouts:
+                    InitState(LoadoutState(), identifier);
+                    break;
+                case FunctionIdentifier.Sort_Refineries:
+                    InitState(SortRefineryStateV2(), identifier);
+                    break;
+                case FunctionIdentifier.Custom_Logic:
+                    InitState(LogicState(), identifier);
+                    break;
+                case FunctionIdentifier.Matching_Items:
+                    InitState(MatchingItemState(), identifier);
+                    break;
+                case FunctionIdentifier.Process_Logic:
+                    InitState(ProcessTimerState(), identifier);
+                    break;
+                case FunctionIdentifier.Checking_Idle_Assemblers:
+                    InitState(IdleAssemblerState(), identifier);
+                    break;
+                case FunctionIdentifier.Find_Mod_Items:
+                    InitState(FindModItemState(), identifier);
+                    break;
+                case FunctionIdentifier.Process_Setting:
+                    InitState(ProcessSettingState(), identifier);
+                    break;
+                case FunctionIdentifier.Main_Panel:
+                    InitState(panelMaster.TotalPanelStateV2(), identifier);
+                    break;
+                case FunctionIdentifier.Assembly_Reserve:
+                    InitState(AddAssemblyState(), identifier);
+                    break;
+                case FunctionIdentifier.Processing_Item_Setting:
+                    InitState(ProcessItemSettingState(), identifier);
+                    break;
+                case FunctionIdentifier.Order_Storage:
+                    InitState(OrderCargoState(), identifier);
+                    break;
+            }
+        }
 
         static double TorchAverage(double a, double b)
         {
@@ -6115,7 +5882,7 @@ namespace IngameScript
                 Echo("");
         }
 
-        void FinalizeKeys(ref ItemDefinition definition)
+        void FinalizeKeys(ItemDefinition definition)
         {
             definition.FinalizeKeys();
             if (definition.oreKeys.Count > 0)
@@ -6132,7 +5899,7 @@ namespace IngameScript
                 indexesStorageLists[category] = NewLongList;
         }
 
-        void AppendHeader(ref StringBuilder builder, string header)
+        void AppendHeader(StringBuilder builder, string header)
         {
             string prefix = "", suffix = "", spacer = "", cap = "";
             for (int i = 0; i < header.Length; i++)
@@ -6167,19 +5934,6 @@ namespace IngameScript
         {
             lastString = text;
             lastActionClearTime = Now.AddSeconds(15);
-        }
-
-        void SetGroup(string name, string amountString)
-        {
-            ItemCollection collection;
-            double amount, maxAmount;
-            ParseAmountAndMax(amountString, out amount, out maxAmount);
-            if (customItemGroups.TryGetValue(name.ToLower(), out collection))
-            {
-                int count = collection.ItemTypeCount;
-                for (int i = 0; i < count; i++)
-                    SetQuota(collection.ItemIDByIndex(i), amount, maxAmount);
-            }
         }
 
         void SetQuota(string itemID, double amount, double maxAmount)
@@ -6278,12 +6032,9 @@ namespace IngameScript
 
         void ClearFunctions()
         {
-            int index = 0;
-            while (index < stateList.Count)
-                if (stateList.Keys[index] == functionList[0])
-                    index++;
-                else
-                    StateDisposal(stateList.Keys[index]);
+            foreach (FunctionIdentifier identifier in stateRecords.Keys)
+                if (StateInitialized(identifier))
+                    StateDisposal(identifier);
         }
 
         void Output(string output)
@@ -6294,14 +6045,14 @@ namespace IngameScript
                 {
                     currentErrorCount++;
                     totalErrorCount++;
-                    AddOutput(output, ref outputErrorList);
+                    AddOutput(output, outputErrorList);
                     SetLastString(output);
                 }
-                AddOutput(output, ref outputList, outputLimit);
+                AddOutput(output, outputList, outputLimit);
             }
         }
 
-        void AddOutput(string output, ref List<OutputObject> list, int limit = 30)
+        void AddOutput(string output, List<OutputObject> list, int limit = 30)
         {
             bool unique = true;
 
@@ -6319,16 +6070,6 @@ namespace IngameScript
 
             if (list.Count > limit)
                 list.RemoveRange(limit, list.Count - limit);
-        }
-
-        void InitializeState(IEnumerator<FunctionState> stateFunction, string identifier)
-        {
-
-            stateList[identifier] = stateFunction;
-            if (!stateRecords.ContainsKey(identifier))
-                stateRecords[identifier] = new StateRecord();
-
-            stateErrorCodes[identifier] = "";
         }
 
         void ResetRuntimes()
@@ -6373,20 +6114,13 @@ namespace IngameScript
         {
             ItemDefinition definition;
             if (GetDefinition(out definition, item.Type.ToString()))
-            {
                 definition.AddAmount(item.Amount);
-                if (definition.volume == 0)
-                {
-                    definition.volume = ItemVolume(item);
-                    definition.fractional = FractionalItem(item);
-                }
-            }
         }
 
         void ConveyorControl(BlockDefinition managedBlock)
         {
             IMyTerminalBlock block = managedBlock.block;
-            bool applyOverride = false, autoConveyor = managedBlock.Settings.AutoConveyor, tempBool;
+            bool applyOverride = false, autoConveyor = managedBlock.Settings.GetOption(setKeyBlockAutoConveyorKey), tempBool;
 
             if (block is IMyAssembler)
                 ((IMyProductionBlock)block).UseConveyorSystem = true;
@@ -6497,7 +6231,7 @@ namespace IngameScript
                 if (oreKeys != null)
                     definition.oreKeys.AddRange(oreKeys);
 
-                FinalizeKeys(ref definition);
+                FinalizeKeys(definition);
                 if (IsBlueprint(definition.blueprintID))
                     blueprintList.Remove(definition.blueprintID);
 
@@ -6528,21 +6262,21 @@ namespace IngameScript
                 modBlueprintList.Remove(definition.blueprintID);
         }
 
-        void StateDisposal(string identifier, bool dispose = true)
+        void StateDisposal(FunctionIdentifier identifier, bool dispose = true)
         {
             if (dispose)
             {
                 try
                 {
-                    stateList[identifier].Dispose();
+                    stateRecords[identifier].enumerator.Dispose();
                 }
                 catch { }
                 try
                 {
-                    stateList[identifier] = null;
+                    stateRecords[identifier].enumerator = null;
                 }
                 catch { }
-                stateList.Remove(identifier);
+                stateRecords[identifier].lastStatus = stateUninitialized;
             }
             stateErrorCodes.Remove(identifier);
         }
@@ -6566,945 +6300,12 @@ namespace IngameScript
                 AppendOption(builder, optionBuilder, option.Key, !option.Value);
         }
 
-        void SetPanelDefinition(BlockDefinition managedBlock, int surfaceIndex)
-        {
-            managedBlock.panelDefinitionList[surfaceIndex] = new PanelMasterClass.PanelDefinition { surfaceIndex = surfaceIndex, provider = !(managedBlock.block is IMyTextPanel), suffixes = settingsListsStrings[setKeyDefaultSuffixes], parent = managedBlock };
-        }
-
 
         #endregion
 
 
         #region Classes
 
-
-        public class PanelMasterClass
-        {
-            #region Variables
-
-            public static Program parent;
-
-            StringBuilder measurementBuilder = NewBuilder;
-
-            SortedList<string, PregeneratedPanels> generatedPanels = new SortedList<string, PregeneratedPanels>();
-
-            double tempCapacity = 0;
-
-            string selfContainedIdentifier;
-
-            SortedList<string, int> assemblyList = new SortedList<string, int>(),
-                                    disassemblyList = new SortedList<string, int>();
-
-            #endregion
-
-
-            #region Short Links
-
-            bool PauseTickRun { get { return parent.PauseTickRun; } }
-            bool IsStateActive { get { return StateActive(selfContainedIdentifier); } }
-            bool RunStateManager { get { return StateManager(selfContainedIdentifier); } }
-            public static List<PanelObject> NewPanelObjectList { get { return new List<PanelObject>(); } }
-
-            bool StateActive(string identifier)
-            {
-                return parent.StateActive(identifier);
-            }
-
-            bool StateManager(string identifier)
-            {
-                return parent.StateManager(identifier, true, false);
-            }
-
-            void InitializeState(IEnumerator<FunctionState> stateFunction, string identifier)
-            {
-                parent.InitializeState(stateFunction, identifier);
-            }
-
-            #endregion
-
-
-            #region Methods
-
-            public static string PresetPanelOption(string itemCategoryString)
-            {
-                StringBuilder builder = NewBuilder;
-                BuilderAppendLine(builder, $"Type=Item/Cargo/Output/Status/Span");
-                AppendOption(builder, "Font=Monospace");
-                AppendOption(builder, $"Categories={itemCategoryString}");
-                AppendOption(builder, "Items=ingot:Iron|ore:Iron");
-                AppendOption(builder, "Item Display=Standard|Detailed|CompactAmount|CompactPercent");
-                AppendOption(builder, "Sorting=Alphabetical|AscendingAmount|DescendingAmount|AscendingPercent|DescendingPercent");
-                AppendOption(builder, "Options=BelowQuota|HideProgressBar");
-                AppendOption(builder, "Minimum Value=1");
-                AppendOption(builder, "Maximum Value=150000");
-                AppendOption(builder, "Number Suffixes=K|M|B|T");
-                AppendOption(builder, "Text Color=0:0:0:255");
-                AppendOption(builder, "Number Color=120:0:0:255");
-                AppendOption(builder, "Back Color=255:255:255:0");
-                AppendOption(builder, "Rows=15");
-                AppendOption(builder, "Name Length=18");
-                AppendOption(builder, "Decimals=2");
-                AppendOption(builder, "Update Delay=1");
-                AppendOption(builder, "Span ID=Span A");
-                AppendOption(builder, "Span Child ID=Span B");
-                return builder.ToString().Trim();
-            }
-
-            public void CheckPanel(BlockDefinition blockDefinition, int surfaceIndex = 0)
-            {
-                PanelMasterClass.PanelDefinition panelDefinition = blockDefinition.panelDefinitionList[surfaceIndex];
-                string hashKey = panelDefinition.EntityFlickerID();
-
-                if (parent.antiflickerSet.Add(hashKey))
-                {
-                    IMyTextSurface surface = panelDefinition.GetSurface();
-                    if (surface.ContentType != ContentType.SCRIPT)
-                        surface.ContentType = ContentType.SCRIPT;
-
-                    if (surface.Script != nothingType)
-                        surface.Script = nothingType;
-
-                    if (surface.ScriptForegroundColor == parent.defPanelForegroundColor)
-                    {
-                        surface.ScriptForegroundColor = Color.Black;
-                        surface.ScriptBackgroundColor = new Color(73, 141, 255, 255);
-                    }
-                }
-            }
-
-            void ClonePanelObjects(List<PanelObject> panelObjects, List<PanelObject> list)
-            {
-                panelObjects.Clear();
-                foreach (PanelObject panelObject in list)
-                    panelObjects.Add(panelObject.Clone());
-            }
-
-            string BlockStatusTitle(string title, int disabled)
-            {
-                string formTitle = title;
-                if (disabled > 0)
-                    formTitle += $" -({ShortNumber2(disabled)})";
-                return formTitle;
-            }
-
-            Vector2 NewVector2(float x = 0f, float y = 0f)
-            {
-                return new Vector2(x, y);
-            }
-
-            MySprite GenerateTextureSprite(string textureType, Color detailColor, Vector2 position, Vector2 size)
-            {
-                return new MySprite(SpriteType.TEXTURE, textureType, position + (size / 2f), size, detailColor);
-            }
-
-            MySprite GenerateTextSprite(string text, Color detailColor, Vector2 position, Vector2 currentSize, TextAlignment alignment, string font, IMyTextSurface surface)
-            {
-                Vector2 textOffset, fontMeasurement, paddingOffset = currentSize * 0.035f, size;
-                size = currentSize * 0.93f;
-                measurementBuilder.Clear();
-                measurementBuilder.Append(text);
-                fontMeasurement = surface.MeasureStringInPixels(measurementBuilder, font, 1f);
-                float fontSize = Math.Min(size.X / fontMeasurement.X, size.Y / fontMeasurement.Y);
-                fontMeasurement = surface.MeasureStringInPixels(measurementBuilder, font, (float)fontSize);
-
-                textOffset = alignment == centerAlignment ? NewVector2(size.X * 0.5f) : NewVector2();
-                textOffset.Y = (size.Y * 0.5f) - (fontMeasurement.Y * 0.5f);
-                return new MySprite(SpriteType.TEXT, text, position + textOffset + paddingOffset, size, detailColor, font, alignment, fontSize);
-            }
-
-            List<PanelDetail> GenerateProgressBarDetails(float givenPercent)
-            {
-                float percent = Math.Max(Math.Min(1f, givenPercent), 0f);
-                List<PanelDetail> myDetails = new List<PanelDetail>
-            {
-                new PanelDetail { textureType = "SquareHollow", textureColor = new Color(0, 0, 0, 180), ratio = 0.25f },
-                new PanelDetail { textureType = "SquareSimple", textureColor = new Color((int)(230f * (float)percent), (int)(230f * (1f - (float)percent)), 0, 220), ratio = 0.25f * percent }
-            };
-                return myDetails;
-            }
-
-            List<MySprite> GenerateProgressBarSprites(float givenPercent, Vector2 offset, Vector2 size)
-            {
-                float percent = Math.Max(Math.Min(1f, givenPercent), 0f);
-                List<MySprite> mySprites = new List<MySprite>
-                {
-                    GenerateTextureSprite("SquareHollow", new Color(0, 0, 0, 180), offset, size),
-                    GenerateTextureSprite("SquareSimple", new Color((int)(230f * (1f - (float)percent)), (int)(230f * (float)percent), 0, 220), offset, NewVector2(size.X * percent, size.Y))
-                };
-                return mySprites;
-            }
-
-            void AddOutputItem(PanelDefinition panelDefinition, string text)
-            {
-                panelDefinition.AddPanelDetail(text.PadRight(panelDefinition.nameLength));
-            }
-
-            void BlockStatus(long index, ref int assembling, ref int disassembling, ref int idle, ref int disabled, SortedList<string, int> assemblyList, SortedList<string, int> disassemblyList)
-            {
-                IMyTerminalBlock block = managedBlocks[index].block;
-                MyInventoryItem item;
-                MyProductionItem productionItem;
-                string key;
-                if (!parent.IsBlockOk(index) || !((IMyFunctionalBlock)block).Enabled)
-                {
-                    disabled++;
-                    return;
-                }
-                if (block is IMyAssembler)
-                {
-                    IMyAssembler assembler = (IMyAssembler)block;
-                    if (assembler.IsQueueEmpty)
-                        idle++;
-                    else
-                    {
-                        List<MyProductionItem> productionList = NewProductionList;
-                        assembler.GetQueue(productionList);
-                        productionItem = productionList[0];
-                        key = BlueprintSubtype(productionItem);
-                        if (parent.blueprintList.ContainsKey(key))
-                        {
-                            Blueprint blueprint = parent.blueprintList[key];
-                            key = parent.ItemName(blueprint.typeID, blueprint.subtypeID);
-                        }
-                        if (assembler.Mode == assemblyMode)
-                        {
-                            assembling++;
-                            if (!assemblyList.ContainsKey(key))
-                                assemblyList[key] = (int)productionItem.Amount;
-                            else
-                                assemblyList[key] += (int)productionItem.Amount;
-                        }
-                        else
-                        {
-                            disassembling++;
-                            if (!disassemblyList.ContainsKey(key))
-                                disassemblyList[key] = (int)productionItem.Amount;
-                            else
-                                disassemblyList[key] += (int)productionItem.Amount;
-                        }
-                    }
-                }
-                else if (block is IMyRefinery)
-                {
-                    if (block.GetInventory(0).ItemCount == 0)
-                        idle++;
-                    else
-                    {
-                        assembling++;
-                        item = (MyInventoryItem)block.GetInventory(0).GetItemAt(0);
-                        key = parent.ItemName(item);
-                        if (!assemblyList.ContainsKey(key))
-                            assemblyList[key] = (int)(item).Amount;
-                        else
-                            assemblyList[key] += (int)(item).Amount;
-                    }
-                }
-                else if (block is IMyGasGenerator)
-                {
-                    if (block.GetInventory(0).ItemCount > 0)
-                    {
-                        item = (MyInventoryItem)block.GetInventory(0).GetItemAt(0);
-                        key = parent.ItemName(item);
-                        if (!assemblyList.ContainsKey(key))
-                            assemblyList[key] = (int)item.Amount;
-                        else
-                            assemblyList[key] += (int)item.Amount;
-                        if (parent.IsGas(item))
-                            assembling++;
-                        else
-                            idle++;
-                    }
-                    else
-                        idle++;
-                }
-            }
-
-
-            #endregion
-
-
-            #region State Functions
-
-            bool PopulateSprites(PanelDefinition panelDefinition)
-            {
-                selfContainedIdentifier = functionList[3];
-                if (!IsStateActive)
-                {
-                    parent.InitializeState(PopulateSpriteState(panelDefinition), selfContainedIdentifier);
-                    if (PauseTickRun) return false;
-                }
-                return RunStateManager;
-            }
-
-            IEnumerator<FunctionState> PopulateSpriteState(PanelDefinition panelDefinition)
-            {
-                panelDefinition.spriteList.Clear();
-                int column = 0;
-
-                if (panelDefinition.panelObjects.Count > 0)
-                {
-                    while (!PopulateSpriteList(panelDefinition, panelDefinition.panelObjects, column, false)) yield return stateActive;
-                    column = 1;
-                }
-                if (panelDefinition.spannableObjects.Count > 0)
-                    while (!PopulateSpriteList(panelDefinition, panelDefinition.spannableObjects, column, true)) yield return stateActive;
-
-                yield return stateComplete;
-            }
-
-            bool PopulateSpriteList(PanelDefinition panelDefinition, List<PanelObject> panelObjects, float column, bool span)
-            {
-                selfContainedIdentifier = functionList[18];
-                if (!IsStateActive)
-                {
-                    parent.InitializeState(PopulateSpriteListState(panelDefinition, panelObjects, column, span), selfContainedIdentifier);
-                    if (PauseTickRun) return false;
-                }
-                return RunStateManager;
-            }
-
-            IEnumerator<FunctionState> PopulateSpriteListState(PanelDefinition panelDefinition, List<PanelObject> panelObjects, float column, bool span)
-            {
-                List<PanelObject> leftoverObjects = NewPanelObjectList;
-                IMyTextSurface surface = panelDefinition.GetSurface();
-                int numberPadding = panelDefinition.decimals + 4;
-                float percent;
-                if (panelDefinition.decimals > 0)
-                    numberPadding++;
-                Vector2 maxLocation = NewVector2(panelDefinition.columns, panelDefinition.rows),
-                        currentLocation,
-                        objectSize,
-                        currentOffset,
-                        detailSize,
-                        subOffset;
-
-                if (!span)
-                    maxLocation.Y = panelObjects.Count;
-
-                objectSize = NewVector2(panelDefinition.size.X / maxLocation.X, panelDefinition.size.Y / maxLocation.Y);
-                currentLocation = NewVector2(column);
-
-                //Cycle objects
-                foreach (PanelObject panelObject in panelObjects)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    if (!span || currentLocation.Y < maxLocation.Y) // If objects are fixed (not spannable) and the row is within bounds
-                    {
-                        // Set current position
-                        currentOffset = NewVector2(currentLocation.X * objectSize.X, currentLocation.Y * objectSize.Y) + panelDefinition.positionOffset;
-
-                        //Generate single backdrop, if any
-                        if (TextHasLength(panelObject.backdropType) && panelDefinition.backdropColor.A > 0)
-                            panelDefinition.spriteList.Add(GenerateTextureSprite(panelObject.backdropType, panelDefinition.backdropColor, currentOffset, objectSize));
-
-                        //Cycle details
-                        foreach (PanelDetail panelDetail in panelObject.panelDetails)
-                        {
-                            if (PauseTickRun) yield return stateActive;
-                            if (panelObject.item) // Process item
-                            {
-                                percent = (float)(panelDetail.itemAmount / panelDetail.itemQuota);
-                                if (panelDetail.itemQuota <= 0f)
-                                    percent = 1f;
-                                switch (panelDefinition.displayType)
-                                {
-                                    case DisplayType.CompactAmount:
-                                        //Name @ 75%
-                                        detailSize = NewVector2(objectSize.X * 0.75f, objectSize.Y);
-                                        panelDefinition.spriteList.Add(GenerateTextSprite(panelDetail.itemName, panelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        subOffset = NewVector2(detailSize.X);
-                                        //Number @ 25%
-                                        detailSize = NewVector2(objectSize.X * 0.25f, objectSize.Y);
-                                        panelDefinition.spriteList.Add(GenerateTextSprite(ShortNumber2(panelDetail.itemAmount, panelDefinition.suffixes, panelDefinition.decimals, numberPadding), panelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        break;
-                                    case DisplayType.CompactPercent:
-                                        //Name @ 75%
-                                        detailSize = NewVector2(objectSize.X * 0.75f, objectSize.Y);
-                                        panelDefinition.spriteList.Add(GenerateTextSprite(panelDetail.itemName, panelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        subOffset = NewVector2(detailSize.X);
-                                        //Percentage @ 25%
-                                        if (panelDefinition.showProgressBar)
-                                        {
-                                            detailSize = NewVector2(objectSize.X * 0.25f, objectSize.Y);
-                                            panelDefinition.spriteList.AddRange(GenerateProgressBarSprites(percent, currentOffset + subOffset, detailSize));
-                                        }
-                                        break;
-                                    case DisplayType.Detailed:
-                                        //Name @ 60% x 50%
-                                        detailSize = NewVector2(objectSize.X * 0.6f, objectSize.Y / 2f);
-                                        panelDefinition.spriteList.Add(GenerateTextSprite(panelDetail.itemName, panelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        subOffset = NewVector2(detailSize.X);
-                                        //Count @ 20% x 50%
-                                        detailSize.X = objectSize.X * 0.2f;
-                                        panelDefinition.spriteList.Add(GenerateTextSprite($"{ShortNumber2(panelDetail.itemAmount, panelDefinition.suffixes, panelDefinition.decimals, numberPadding)}/", panelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        subOffset += NewVector2(detailSize.X);
-                                        //Percent @ 20% x 50%
-                                        if (panelDefinition.showProgressBar)
-                                            panelDefinition.spriteList.AddRange(GenerateProgressBarSprites(percent, currentOffset + subOffset, detailSize));
-                                        //Quota @ 20% x 50%
-                                        panelDefinition.spriteList.Add(GenerateTextSprite(ShortNumber2(panelDetail.itemQuota, panelDefinition.suffixes, panelDefinition.decimals, numberPadding), panelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        subOffset = NewVector2(0, detailSize.Y);
-                                        measurementBuilder.Clear();
-                                        if (panelDetail.assemblyAmount > 0)
-                                            measurementBuilder.Append($"Assembling: {ShortNumber2(panelDetail.assemblyAmount, panelDefinition.suffixes, panelDefinition.decimals, numberPadding)}");
-                                        if (panelDetail.disassemblyAmount > 0)
-                                        {
-                                            if (BuilderHasLength(measurementBuilder))
-                                                measurementBuilder.Append(", ");
-                                            measurementBuilder.Append($"Disassembling: {ShortNumber2(panelDetail.disassemblyAmount, panelDefinition.suffixes, panelDefinition.decimals, numberPadding)}");
-                                        }
-                                        //Assembly status @ 75% x 50%
-                                        detailSize.X = objectSize.X * 0.75f;
-                                        panelDefinition.spriteList.Add(GenerateTextSprite(measurementBuilder.ToString(), panelDefinition.textColor, currentOffset + subOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        subOffset += NewVector2(detailSize.X);
-                                        //Rate @ 25% x 50%
-                                        detailSize.X = objectSize.X * 0.25f;
-                                        panelDefinition.spriteList.Add(GenerateTextSprite($"Rate: {ShortNumber2(panelDetail.amountDifference, panelDefinition.suffixes, panelDefinition.decimals, numberPadding)}", panelDefinition.textColor, currentOffset + subOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        break;
-                                    case DisplayType.Standard:
-                                        //Name @ 60%
-                                        detailSize = NewVector2(objectSize.X * 0.6f, objectSize.Y);
-                                        panelDefinition.spriteList.Add(GenerateTextSprite(panelDetail.itemName, panelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        subOffset = NewVector2(detailSize.X);
-                                        //Count @ 20%
-                                        detailSize = NewVector2(objectSize.X * 0.2f, objectSize.Y);
-                                        panelDefinition.spriteList.Add(GenerateTextSprite($"{ShortNumber2(panelDetail.itemAmount, panelDefinition.suffixes, panelDefinition.decimals, numberPadding)}/", panelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        subOffset += NewVector2(detailSize.X);
-                                        //Percent @ 20%
-                                        panelDefinition.spriteList.AddRange(GenerateProgressBarSprites(percent, currentOffset + subOffset, detailSize));
-                                        //Quota @ 20%
-                                        panelDefinition.spriteList.Add(GenerateTextSprite(ShortNumber2(panelDetail.itemQuota, panelDefinition.suffixes, panelDefinition.decimals, numberPadding), panelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface));
-                                        break;
-                                }
-                            }
-                            else // Process everything else
-                            {
-                                detailSize = NewVector2(objectSize.X * panelDetail.ratio, objectSize.Y);
-
-                                panelDefinition.spriteList.Add
-                                    (
-                                        TextHasLength(panelDetail.textureType) ? GenerateTextureSprite(panelDetail.textureType, panelDetail.textureColor, currentOffset, detailSize) :
-                                        TextHasLength(panelDetail.text) ? GenerateTextSprite(panelDetail.text, panelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface) :
-                                        GenerateTextSprite(ShortNumber2(panelDetail.value, panelDefinition.suffixes, panelDefinition.decimals, numberPadding), panelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, panelDefinition.font, surface)
-                                    );
-
-                                if (panelDetail.reservedArea)
-                                    currentOffset += NewVector2(detailSize.X);
-                            }
-                        }
-                        currentLocation.Y += 1f;
-                    }
-                    else if (panelDefinition.span)
-                        leftoverObjects.Add(panelObject.Clone());
-                    else
-                        break;
-                }
-
-                foreach (SpanKey spanKey in panelDefinition.spannedPanelList)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    managedBlocks[spanKey.index].panelDefinitionList[spanKey.surfaceIndex].spannableObjects.Clear();
-                    if (leftoverObjects.Count > 0)
-                        ClonePanelObjects(managedBlocks[spanKey.index].panelDefinitionList[spanKey.surfaceIndex].spannableObjects, leftoverObjects);
-                }
-
-                yield return stateComplete;
-            }
-
-            public bool TotalPanelV2(PanelDefinition panelDefinition)
-            {
-                selfContainedIdentifier = functionList[51];
-                if (!IsStateActive)
-                {
-                    InitializeState(TotalPanelStateV2(panelDefinition), selfContainedIdentifier);
-                    if (PauseTickRun) return false;
-                }
-                return RunStateManager;
-            }
-
-            IEnumerator<FunctionState> TotalPanelStateV2(PanelDefinition panelDefinition)
-            {
-                if (Now >= panelDefinition.nextUpdateTime)
-                {
-                    string panelOptionString = panelDefinition.settingKey;
-                    panelDefinition.panelObjects.Clear();
-                    if (panelDefinition.panelType != PanelType.Span)
-                    {
-                        bool cachePanel = TextHasLength(panelOptionString);
-                        panelDefinition.spannableObjects.Clear();
-                        if (cachePanel && generatedPanels.ContainsKey(panelOptionString) && generatedPanels[panelOptionString].nextUpdateTime > Now)
-                        {
-                            ClonePanelObjects(panelDefinition.panelObjects, generatedPanels[panelOptionString].panelObjects);
-                            ClonePanelObjects(panelDefinition.spannableObjects, generatedPanels[panelOptionString].spannableObjects);
-                        }
-                        else
-                        {
-                            switch (panelDefinition.panelType)
-                            {
-                                case PanelType.Cargo:
-                                    while (!CargoPanel(panelDefinition)) yield return stateActive;
-                                    break;
-                                case PanelType.Item:
-                                    while (!ItemPanel(panelDefinition)) yield return stateActive;
-                                    break;
-                                case PanelType.Output:
-                                    while (!OutputPanel(panelDefinition)) yield return stateActive;
-                                    break;
-                                case PanelType.Status:
-                                    while (!StatusPanel(panelDefinition)) yield return stateActive;
-                                    break;
-                            }
-                            if (cachePanel)
-                            {
-                                if (!generatedPanels.ContainsKey(panelOptionString))
-                                    generatedPanels[panelOptionString] = new PregeneratedPanels();
-                                else
-                                {
-                                    generatedPanels[panelOptionString].panelObjects.Clear();
-                                    generatedPanels[panelOptionString].spannableObjects.Clear();
-                                }
-                                ClonePanelObjects(generatedPanels[panelOptionString].panelObjects, panelDefinition.panelObjects);
-                                ClonePanelObjects(generatedPanels[panelOptionString].spannableObjects, panelDefinition.spannableObjects);
-                                generatedPanels[panelOptionString].nextUpdateTime = Now.AddSeconds(panelDefinition.updateDelay);
-                            }
-                        }
-                    }
-                    panelDefinition.nextUpdateTime = Now.AddSeconds(panelDefinition.updateDelay);
-
-                    while (!PopulateSprites(panelDefinition)) yield return stateActive;
-                    if (PauseTickRun) yield return stateActive;
-                    MySpriteDrawFrame frame = panelDefinition.GetSurface().DrawFrame();
-                    frame.AddRange(panelDefinition.spriteList);
-                    frame.Dispose();
-                    for (int i = 0; i < generatedPanels.Count; i += 0)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        if ((Now - generatedPanels.Values[i].nextUpdateTime).TotalSeconds >= 60)
-                            generatedPanels.RemoveAt(i);
-                        else
-                            i++;
-                    }
-                }
-                yield return stateComplete;
-            }
-
-            bool CargoPanel(PanelDefinition panelDefinition)
-            {
-                selfContainedIdentifier = functionList[25];
-                if (!IsStateActive)
-                {
-                    InitializeState(CargoPanelState(panelDefinition), selfContainedIdentifier);
-                    if (PauseTickRun) return false;
-                }
-                return RunStateManager;
-            }
-
-            IEnumerator<FunctionState> CargoPanelState(PanelDefinition panelDefinition)
-            {
-                double capacity = 0;
-                if (panelDefinition.itemCategories.Contains("all"))
-                {
-                    while (!CargoCapacity(ref capacity, typedIndexes[setKeyIndexStorage])) yield return stateActive;
-                    panelDefinition.AddPanelDetail("Total:".PadRight(panelDefinition.nameLength), false, 0.75f, true, true);
-                    if (panelDefinition.showProgressBar)
-                        panelDefinition.AddPanelDetails(GenerateProgressBarDetails((float)capacity));
-                    panelDefinition.AddPanelDetail($"{ShortNumber2(capacity * 100.0, panelDefinition.suffixes, 2, 5)}%", false, 0.25f, false);
-                }
-                foreach (string category in panelDefinition.itemCategories)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    if (category != "all" && parent.indexesStorageLists.ContainsKey(category))
-                    {
-                        while (!CargoCapacity(ref capacity, parent.indexesStorageLists[category])) yield return stateActive;
-                        panelDefinition.AddPanelDetail($"{Formatted(category)}:".PadRight(panelDefinition.nameLength), false, 0.75f, true, true);
-                        if (panelDefinition.showProgressBar)
-                            panelDefinition.AddPanelDetails(GenerateProgressBarDetails((float)capacity));
-                        panelDefinition.AddPanelDetail($"{ShortNumber2(capacity * 100.0, panelDefinition.suffixes, 2, 5)}%", false, 0.25f, false);
-                    }
-                }
-                yield return stateComplete;
-            }
-
-            bool CargoCapacity(ref double percentage, List<long> indexList)
-            {
-                selfContainedIdentifier = functionList[6];
-                if (!IsStateActive)
-                {
-                    InitializeState(CargoCapacityState(indexList), selfContainedIdentifier);
-                    if (PauseTickRun) return false;
-                }
-                bool done = RunStateManager;
-
-                if (done)
-                    percentage = tempCapacity;
-
-                return done;
-            }
-
-            IEnumerator<FunctionState> CargoCapacityState(List<long> indexList)
-            {
-                double max = 0, current = 0;
-                IMyInventory inventory;
-                foreach (long index in indexList)
-                {
-                    if (PauseTickRun) yield return stateActive;
-
-                    if (!parent.IsBlockOk(index))
-                        continue;
-
-                    inventory = managedBlocks[index].Input;
-                    max += (double)inventory.MaxVolume;
-                    current += (double)inventory.CurrentVolume;
-                }
-                tempCapacity = current / max;
-                yield return stateComplete;
-            }
-
-            bool ItemPanel(PanelDefinition panelDefinition)
-            {
-                selfContainedIdentifier = functionList[20];
-                if (!IsStateActive)
-                {
-                    InitializeState(ItemPanelState(panelDefinition), selfContainedIdentifier);
-                    if (PauseTickRun) return false;
-                }
-                return RunStateManager;
-            }
-
-            IEnumerator<FunctionState> ItemPanelState(PanelDefinition panelDefinition)
-            {
-                List<ItemDefinition> allItemList = parent.GetAllItems, foundItemList = new List<ItemDefinition>();
-                bool found;
-                foreach (ItemDefinition item in allItemList)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    found = panelDefinition.itemCategories.Contains(item.category);
-                    if (!found) panelDefinition.items.ItemCount(out found, item.typeID, item.subtypeID, null);
-                    if (found && item.display && item.amount >= panelDefinition.minimumItemAmount && item.amount <= panelDefinition.maximumItemAmount &&
-                        (!panelDefinition.belowQuota || item.amount < item.currentQuota))
-                        foundItemList.Add(item);
-                }
-                switch (panelDefinition.panelItemSorting)
-                {
-                    case PanelItemSorting.Alphabetical:
-                        foundItemList = foundItemList.OrderBy(x => x.displayName).ToList();
-                        break;
-                    case PanelItemSorting.AscendingAmount:
-                        foundItemList = foundItemList.OrderBy(x => x.amount).ToList();
-                        break;
-                    case PanelItemSorting.DescendingAmount:
-                        foundItemList = foundItemList.OrderByDescending(x => x.amount).ToList();
-                        break;
-                    case PanelItemSorting.AscendingPercent:
-                        foundItemList = foundItemList.OrderBy(x => x.Percentage).ToList();
-                        break;
-                    case PanelItemSorting.DescendingPercent:
-                        foundItemList = foundItemList.OrderByDescending(x => x.Percentage).ToList();
-                        break;
-                }
-                foreach (ItemDefinition item in foundItemList)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    panelDefinition.AddPanelItem(item.displayName.PadRight(panelDefinition.nameLength), item.amount, item.currentQuota, item.queuedAssemblyAmount, item.queuedDisassemblyAmount, item.amountDifference);
-                }
-                yield return stateComplete;
-            }
-
-            bool OutputPanel(PanelDefinition panelDefinition)
-            {
-                selfContainedIdentifier = functionList[7];
-                if (!IsStateActive)
-                {
-                    InitializeState(OutputPanelState(panelDefinition), selfContainedIdentifier);
-                    if (PauseTickRun) return false;
-                }
-                return RunStateManager;
-            }
-
-            IEnumerator<FunctionState> OutputPanelState(PanelDefinition panelDefinition)
-            {
-                List<OutputObject> tempOutputList;
-
-                AddOutputItem(panelDefinition, $"NDS Inventory Manager {scriptVersion}");
-                AddOutputItem(panelDefinition, currentMajorFunction);
-                AddOutputItem(panelDefinition, $"Runtime:    {ShortMSTime(torchAverage)}");
-                AddOutputItem(panelDefinition, $"Blocks:     {ShortNumber2(managedBlocks.Count, panelDefinition.suffixes)}");
-                AddOutputItem(panelDefinition, $"Storages:   {ShortNumber2(typedIndexes[setKeyIndexStorage].Count, panelDefinition.suffixes)}");
-                AddOutputItem(panelDefinition, $"Assemblers: {ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, panelDefinition.suffixes)}");
-                AddOutputItem(panelDefinition, $"H2/O2 Gens: {ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, panelDefinition.suffixes)}");
-                AddOutputItem(panelDefinition, $"Refineries: {ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, panelDefinition.suffixes)}");
-                AddOutputItem(panelDefinition, $"H2 Tanks:   {ShortNumber2(typedIndexes[setKeyIndexHydrogenTank].Count, panelDefinition.suffixes)}");
-                AddOutputItem(panelDefinition, $"O2 Tanks:   {ShortNumber2(typedIndexes[setKeyIndexOxygenTank].Count, panelDefinition.suffixes)}");
-                AddOutputItem(panelDefinition, $"Weapons:    {ShortNumber2(typedIndexes[setKeyIndexGun].Count, panelDefinition.suffixes)}");
-                AddOutputItem(panelDefinition, $"Reactors:   {ShortNumber2(typedIndexes[setKeyIndexReactor].Count, panelDefinition.suffixes)}");
-
-                if (parent.errorFilter)
-                {
-                    tempOutputList = new List<OutputObject>(parent.outputErrorList);
-                    AddOutputItem(panelDefinition, $"Errors:     {ShortNumber2(parent.currentErrorCount, panelDefinition.suffixes, 0, 6)} of {ShortNumber2(parent.totalErrorCount, panelDefinition.suffixes, 0, 6)}");
-                }
-                else
-                {
-                    tempOutputList = new List<OutputObject>(parent.outputList);
-                    AddOutputItem(panelDefinition, $"Status:  {ShortNumber2(parent.scriptHealth, null, 3, 6)}%");
-                }
-
-                foreach (OutputObject outputObject in tempOutputList)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    panelDefinition.AddPanelDetail(outputObject.Output, true);
-                }
-
-                yield return stateComplete;
-            }
-
-            bool StatusPanel(PanelDefinition panelDefinition)
-            {
-                selfContainedIdentifier = functionList[5];
-                if (!IsStateActive)
-                {
-                    InitializeState(StatusPanelState(panelDefinition), selfContainedIdentifier);
-                    if (PauseTickRun) return false;
-                }
-                return RunStateManager;
-            }
-
-            IEnumerator<FunctionState> StatusPanelState(PanelDefinition panelDefinition)
-            {
-                int assembling, disassembling, idle, disabled;
-                assembling = disassembling = idle = disabled = 0;
-                assemblyList.Clear();
-                disassemblyList.Clear();
-                foreach (long index in typedIndexes[setKeyIndexAssemblers])
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
-                }
-                foreach (KeyValuePair<string, int> kvp in assemblyList)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    panelDefinition.AddPanelDetail($"Assembling x{ShortNumber2(kvp.Value, panelDefinition.suffixes, panelDefinition.decimals, 4, false)} {ShortenName(kvp.Key, panelDefinition.nameLength, true)}", true);
-                }
-                foreach (KeyValuePair<string, int> kvp in disassemblyList)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    panelDefinition.AddPanelDetail($"Disassembling x{ShortNumber2(kvp.Value, panelDefinition.suffixes, panelDefinition.decimals, 4, false)} {ShortenName(kvp.Key, panelDefinition.nameLength, true)}", true);
-                }
-                AddOutputItem(panelDefinition, BlockStatusTitle($"Assemblers x{ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, panelDefinition.suffixes, panelDefinition.decimals, 4, false)}", disabled).PadRight(panelDefinition.nameLength));
-                AddOutputItem(panelDefinition, $" Assembling:    {ShortNumber2(assembling, panelDefinition.suffixes, panelDefinition.decimals, 4)}".PadRight(panelDefinition.nameLength));
-                AddOutputItem(panelDefinition, $" Disassembling: {ShortNumber2(disassembling, panelDefinition.suffixes, panelDefinition.decimals, 4)}".PadRight(panelDefinition.nameLength));
-                AddOutputItem(panelDefinition, $" Idle:          {ShortNumber2(idle, panelDefinition.suffixes, panelDefinition.decimals, 4)}".PadRight(panelDefinition.nameLength));
-                assembling = idle = disabled = 0;
-                assemblyList.Clear();
-                foreach (long index in typedIndexes[setKeyIndexRefinery])
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
-                }
-                foreach (KeyValuePair<string, int> kvp in assemblyList)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    panelDefinition.AddPanelDetail($"Refining x{ShortNumber2(kvp.Value, panelDefinition.suffixes, panelDefinition.decimals, 4, false)} {ShortenName(kvp.Key, panelDefinition.nameLength, true)}", true);
-                }
-                AddOutputItem(panelDefinition, BlockStatusTitle($"Refineries x{ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, panelDefinition.suffixes, panelDefinition.decimals, 4, false)}", disabled).PadRight(panelDefinition.nameLength));
-                AddOutputItem(panelDefinition, $" Refining:      {ShortNumber2(assembling, panelDefinition.suffixes, panelDefinition.decimals, 4)}".PadRight(panelDefinition.nameLength));
-                AddOutputItem(panelDefinition, $" Idle:          {ShortNumber2(idle, panelDefinition.suffixes, panelDefinition.decimals, 4)}".PadRight(panelDefinition.nameLength));
-                assembling = idle = disabled = 0;
-                assemblyList.Clear();
-                foreach (long index in typedIndexes[setKeyIndexGasGenerators])
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
-                }
-                AddOutputItem(panelDefinition, BlockStatusTitle($"O2/H2 Gens x{ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, panelDefinition.suffixes, panelDefinition.decimals, 4, false)}", disabled).PadRight(panelDefinition.nameLength));
-                AddOutputItem(panelDefinition, $" Active:        {ShortNumber2(assembling, panelDefinition.suffixes, panelDefinition.decimals, 4)}".PadRight(panelDefinition.nameLength));
-                AddOutputItem(panelDefinition, $" Idle:          {ShortNumber2(idle, panelDefinition.suffixes, panelDefinition.decimals, 4)}".PadRight(panelDefinition.nameLength));
-                foreach (KeyValuePair<string, int> kvp in assemblyList)
-                {
-                    if (PauseTickRun) yield return stateActive;
-                    panelDefinition.AddPanelDetail($"Processing x{ShortNumber2(kvp.Value, panelDefinition.suffixes, panelDefinition.decimals, 4, false)} {ShortenName(kvp.Key, panelDefinition.nameLength, true)}", true);
-                }
-
-                yield return stateComplete;
-            }
-
-            #endregion
-
-            public class PregeneratedPanels
-            {
-                public DateTime nextUpdateTime = Now.AddSeconds(1);
-
-                public List<PanelObject> panelObjects = NewPanelObjectList, spannableObjects = NewPanelObjectList;
-            }
-
-            public class PanelDetail
-            {
-                public string itemName = "", text = "", textureType = "";
-                public double itemAmount = 0, itemQuota = 0, value = 0, assemblyAmount = 0, disassemblyAmount = 0, amountDifference = 0;
-                public TextAlignment alignment = leftAlignment;
-                public float ratio = -1;
-                public bool reservedArea = false;
-                public Color textureColor = Color.White;
-
-                public PanelDetail Clone()
-                {
-                    PanelDetail panelDetail = new PanelDetail()
-                    {
-                        itemName = itemName,
-                        text = text,
-                        textureType = textureType,
-                        itemAmount = itemAmount,
-                        itemQuota = itemQuota,
-                        value = value,
-                        assemblyAmount = assemblyAmount,
-                        disassemblyAmount = disassemblyAmount,
-                        amountDifference = amountDifference,
-                        alignment = alignment,
-                        ratio = ratio,
-                        reservedArea = reservedArea,
-                        textureColor = new Color(textureColor, textureColor.A)
-                    };
-
-                    return panelDetail;
-                }
-            }
-
-            public class PanelObject
-            {
-                public double sortableValue = 0;
-                public string backdropType = "SquareSimple", sortableText = "";
-                public bool item = false;
-                public List<PanelDetail> panelDetails = new List<PanelDetail>();
-
-                public PanelObject Clone()
-                {
-                    PanelObject panelObject = new PanelObject
-                    {
-                        sortableValue = sortableValue,
-                        backdropType = backdropType,
-                        sortableText = sortableText,
-                        item = item
-                    };
-
-                    foreach (PanelDetail panelDetail in panelDetails)
-                        panelObject.panelDetails.Add(panelDetail.Clone());
-
-                    return panelObject;
-                }
-            }
-
-            public class PanelDefinition
-            {
-                public BlockDefinition parent;
-
-                public List<MySprite> spriteList = new List<MySprite>();
-
-                public List<PanelMasterClass.PanelObject>
-                    panelObjects = PanelMasterClass.NewPanelObjectList,
-                    spannableObjects = PanelMasterClass.NewPanelObjectList;
-
-                public List<string> itemCategories = NewStringList, suffixes;
-
-                public List<SpanKey> spannedPanelList = new List<SpanKey>();
-
-                public int decimals = 2, rows = -1, columns = 1, nameLength = 18, surfaceIndex = 0;
-
-                public double updateDelay = 1, minimumItemAmount = 0, maximumItemAmount = double.MaxValue;
-
-                public bool span = false, cornerPanel = false, belowQuota = false, showProgressBar = true, provider = false;
-
-                public PanelItemSorting panelItemSorting = PanelItemSorting.Alphabetical;
-
-                public PanelType panelType = PanelType.None;
-
-                public DisplayType displayType = DisplayType.Standard;
-
-                public DateTime nextUpdateTime = Now;
-
-                public ItemCollection items = NewCollection;
-
-                public Color textColor = Color.Black, numberColor = Color.Black, backdropColor = Color.GhostWhite;
-
-                public Vector2 size = new Vector2(1, 1), positionOffset = new Vector2(0, 0);
-
-                public string font = "Monospace", settingKey = "", spanKey = "", childSpanKey = "", settingBackup = "";
-
-                public void AddPanelDetails(List<PanelMasterClass.PanelDetail> list)
-                {
-                    panelObjects[panelObjects.Count - 1].panelDetails.AddRange(list);
-                }
-
-                void AddPanelObject(bool spannable = false, bool item = false)
-                {
-                    if (spannable)
-                        spannableObjects.Add(new PanelMasterClass.PanelObject { item = item });
-                    else
-                        panelObjects.Add(new PanelMasterClass.PanelObject());
-                }
-
-                public void AddPanelItem(string name, double amount, double quota, double assemblyAmount, double disassemblyAmount, double amountDifference)
-                {
-                    AddPanelObject(true, true);
-                    spannableObjects[spannableObjects.Count - 1].sortableText = name.Trim();
-                    if (panelItemSorting == PanelItemSorting.AscendingPercent || panelItemSorting == PanelItemSorting.DescendingPercent)
-                        spannableObjects[spannableObjects.Count - 1].sortableValue = quota > 0 ? amount / quota : 0;
-                    spannableObjects[spannableObjects.Count - 1].panelDetails.Add(new PanelMasterClass.PanelDetail { itemAmount = amount, itemName = name, itemQuota = quota, assemblyAmount = assemblyAmount, disassemblyAmount = disassemblyAmount, amountDifference = amountDifference });
-                }
-
-                public void AddPanelDetail(string text, bool spannable = false, float ratio = 1f, bool nextObject = true, bool reservedArea = false, TextAlignment alignment = leftAlignment)
-                {
-                    if (nextObject)
-                        AddPanelObject(spannable);
-                    if (spannable)
-                        spannableObjects[spannableObjects.Count - 1].panelDetails.Add(new PanelMasterClass.PanelDetail { text = text, ratio = ratio, reservedArea = reservedArea, alignment = alignment });
-                    else
-                        panelObjects[panelObjects.Count - 1].panelDetails.Add(new PanelMasterClass.PanelDetail { text = text, ratio = ratio, reservedArea = reservedArea, alignment = alignment });
-                }
-
-                public IMyTextSurface GetSurface()
-                {
-                    if (!provider)
-                        return (IMyTextPanel)parent.block;
-                    return ((IMyTextSurfaceProvider)parent.block).GetSurface(surfaceIndex);
-                }
-
-                public string DataSource
-                {
-                    get
-                    {
-                        if (provider)
-                        {
-                            IMyTextSurface surface = GetSurface();
-                            StringBuilder builder = NewBuilder;
-                            surface.ReadText(builder);
-                            return builder.ToString();
-                        }
-                        return parent.DataSource;
-                    }
-                    set
-                    {
-                        if (provider)
-                        {
-                            IMyTextSurface surface = GetSurface();
-                            StringBuilder builder = new StringBuilder(value);
-                            surface.WriteText(builder);
-                        }
-                        else
-                            parent.DataSource = value;
-                    }
-                }
-
-                public string EntityFlickerID()
-                {
-                    string id = parent.block.EntityId.ToString();
-                    if (provider)
-                        id += $":{surfaceIndex}";
-                    return id;
-                }
-            }
-
-
-        }
 
         public class BlueprintSpreadInformation
         {
@@ -7525,6 +6326,10 @@ namespace IngameScript
 
         public class StateRecord
         {
+            public IEnumerator<FunctionState> enumerator;
+
+            public FunctionState lastStatus = stateUninitialized;
+
             public int currentTicks = 0, currentActions = 0, lastTicks = 0, lastActions = 0, runs = 0,
                        minTicks = 0, maxTicks = 0, minActions = 0, maxActions = 0;
             public TimeSpan
@@ -7581,6 +6386,14 @@ namespace IngameScript
                     }
                 }
             }
+
+            public override string ToString()
+            {
+                return $"Ticks:{minTicks}-{maxTicks}{newLine}" +
+                       $"Actions:{minActions}-{maxActions} ~{averageActions:N0}{newLine}" +
+                       $"Time:{minSpan.Milliseconds:N1}-{maxSpan.Milliseconds:N1} ~{averageTime:N3}ms{Environment.NewLine}" +
+                       $"Status: {health:N1}%";
+            }
         }
 
         public class MonitoredAssembler
@@ -7588,28 +6401,20 @@ namespace IngameScript
             MyAssemblerMode mode;
             public SortedList<string, double> productionComparison = new SortedList<string, double>();
             DateTime nextCheck = Now;
-            public float currentProgress = 0f;
+            float currentProgress = 0f;
             public IMyAssembler assembler;
             public bool stalling = false;
 
-            public bool Check(double delay)
-            {
-                if (Now < nextCheck)
-                    return false;
+            public bool CheckNow { get { return Now >= nextCheck; } }
 
-                bool check = assembler.Enabled && !assembler.IsQueueEmpty && assembler.CurrentProgress == currentProgress && assembler.Mode == mode;
-                if (!check)
-                {
-                    productionComparison.Clear();
-                    stalling = false;
-                    nextCheck = Now.AddSeconds(5);
-                }
-                else
-                    nextCheck = Now.AddSeconds(delay);
+            public bool HasChanged(double delay)
+            {
+                bool changed = !assembler.Enabled || assembler.IsQueueEmpty || assembler.CurrentProgress != currentProgress || assembler.Mode != mode;
 
                 mode = assembler.Mode;
                 currentProgress = assembler.CurrentProgress;
-                return check;
+
+                return changed;
             }
 
             public void Reset()
@@ -7617,6 +6422,7 @@ namespace IngameScript
                 stalling = false;
                 productionComparison.Clear();
                 nextCheck = Now.AddSeconds(5);
+                currentProgress = 0f;
             }
         }
 
@@ -7784,13 +6590,43 @@ namespace IngameScript
                 found = false;
                 return 0;
             }
+
+            public override string ToString()
+            {
+                SortedList<string, SortedList<string, List<ItemDAO>>> groupedItems = new SortedList<string, SortedList<string, List<ItemDAO>>>();
+                List<string> itemGroups = new List<string>();
+
+                string typeID, subtypeID;
+                foreach (KeyValuePair<string, VariableItemCount> kvp in itemList)
+                {
+                    SplitID(kvp.Key, out typeID, out subtypeID);
+
+                    ItemDAO itemDAO = new ItemDAO(typeID, subtypeID, kvp.Value.ToString(), parent.ItemName(typeID, subtypeID));
+
+                    if (!groupedItems.ContainsKey(typeID))
+                        groupedItems[typeID] = new SortedList<string, List<ItemDAO>>();
+
+                    if (!groupedItems[typeID].ContainsKey(itemDAO.amount))
+                        groupedItems[typeID][itemDAO.amount] = new List<ItemDAO>();
+
+                    groupedItems[typeID][itemDAO.amount].Add(itemDAO);
+                }
+
+                foreach (KeyValuePair<string, SortedList<string, List<ItemDAO>>> kvpA in groupedItems)
+                    foreach (KeyValuePair<string, List<ItemDAO>> kvpB in kvpA.Value)
+                        itemGroups.Add($"{kvpB.Key}:{kvpA.Key}:{String.Join(":", kvpB.Value)}");
+
+                return String.Join("|", itemGroups);
+            }
         }
 
         public class LogicComparison
         {
+            public static Program parent;
+
             public string typeID = "", comparison = "", compareAgainst = "";
 
-            public string GetString { get { ItemDefinition def; return $"{(GetDefinition(out def, typeID) ? $"{def.category}:{def.displayName}" : typeID)}{comparison}{compareAgainst}"; } }
+            public string GetString { get { ItemDefinition def; return $"{(parent.GetDefinition(out def, typeID) ? $"{def.category}:{def.displayName}" : typeID)}{comparison}{compareAgainst}"; } }
         }
 
         public class PotentialAssembler
@@ -7846,54 +6682,35 @@ namespace IngameScript
         {
             public List<LogicComparison> logicComparisons = new List<LogicComparison>();
 
-            public List<string> storageCategories = NewStringList;
+            public List<string> storageCategories = NewStringList, tempSettings;
 
-            public SortedList<string, bool>
-                toggles,
-                inventoryToggles = new SortedList<string, bool>
-                {
-                    { storageKey, false }, { autoConveyorKey, false }, { keepInputKey, false },
-                    { removeInputKey, false },  { noSortingKey, false }, { noSpreadKey, false },
-                    { noCountKey, false }, { gunOverrideKey, false }
+            public SortedList<string, SortedList<string, bool>> settingDictionaryBools = new SortedList<string, SortedList<string, bool>>
+            {
+                { setKeyBlockToggles, new SortedList<string, bool>
+                    {
+                        { setKeyToggleCountItems, true }, { setKeyToggleCountBlueprints, true }, { setKeyToggleSortItems, true },
+                        { setKeyToggleQueueAssembly, true}, { setKeyToggleQueueDisassembly, true }, { setKeyToggleDistribution, true },
+                        { setKeyToggleAutoLoadSettings, true }
+                    }
                 },
-                multiInventoryToggles = new SortedList<string, bool>
-                {
-                    { keepOutputKey, false }, { removeOutputKey, false },
+                { setKeyBlockInputToggles, new SortedList<string, bool>
+                    {
+                        { setKeyBlockStorageKey, false }, { setKeyBlockAutoConveyorKey, false }, { setKeyBlockKeepInputKey, false },
+                        { setKeyBlockRemoveInputKey, false },  { setKeyBlockNoSortingKey, false }, { setKeyBlockNoSpreadKey, false },
+                        { setKeyBlockNoCountKey, false }, { setKeyBlockGunOverrideKey, false }
+                    }
                 },
-                assemblerToggles = new SortedList<string, bool>
-                {
-                    { assemblyOnlyKey, false }, { disassemblyOnlyKey, false }, { uniqueBlueprinteOnlyKey, false}, { noIdleResetKey, false }
-                };
-
-            private string
-                crossGridKey, includeGridKey,
-                excludedKey, excludeGridKey;
-
-            private const string
-                storageKey = "storage", autoConveyorKey = "autoconveyor", assemblyOnlyKey = "assemblyonly",
-                disassemblyOnlyKey = "disassemblyonly", keepInputKey = "keepinput", keepOutputKey = "keepoutput",
-                removeInputKey = "removeinput", removeOutputKey = "removeoutput", noIdleResetKey = "noidlereset",
-                noSortingKey = "nosorting", noSpreadKey = "nospreading", noCountKey = "nocounting",
-                uniqueBlueprinteOnlyKey = "uniqueblueprintsonly", gunOverrideKey = "gunoverride";
-
-            public bool CrossGrid { get { return toggles[crossGridKey]; } set { toggles[crossGridKey] = value; } }
-            public bool IncludeGrid { get { return toggles[includeGridKey]; } set { toggles[includeGridKey] = value; } }
-            public bool Excluded { get { return toggles[excludedKey]; } set { toggles[excludedKey] = value; } }
-            public bool ExcludedGrid { get { return toggles[excludeGridKey]; } set { toggles[excludeGridKey] = value; } }
-            public bool Storage { get { return inventoryToggles[storageKey]; } set { inventoryToggles[storageKey] = value; } }
-            public bool AutoConveyor { get { return inventoryToggles[autoConveyorKey]; } set { inventoryToggles[autoConveyorKey] = value; } }
-            public bool KeepInput { get { return inventoryToggles[keepInputKey]; } set { inventoryToggles[keepInputKey] = value; } }
-            public bool RemoveInput { get { return inventoryToggles[removeInputKey]; } set { inventoryToggles[removeInputKey] = value; } }
-            public bool NoSorting { get { return inventoryToggles[noSortingKey]; } set { inventoryToggles[noSortingKey] = value; } }
-            public bool NoSpreading { get { return inventoryToggles[noSpreadKey]; } set { inventoryToggles[noSpreadKey] = value; } }
-            public bool NoCounting { get { return inventoryToggles[noCountKey]; } set { inventoryToggles[noCountKey] = value; } }
-            public bool GunOverride { get { return inventoryToggles[gunOverrideKey]; } set { inventoryToggles[gunOverrideKey] = value; } }
-            public bool KeepOutput { get { return multiInventoryToggles[keepOutputKey]; } set { multiInventoryToggles[keepOutputKey] = value; } }
-            public bool RemoveOutput { get { return multiInventoryToggles[removeOutputKey]; } set { multiInventoryToggles[removeOutputKey] = value; } }
-            public bool AssemblyOnly { get { return assemblerToggles[assemblyOnlyKey]; } set { assemblerToggles[assemblyOnlyKey] = value; } }
-            public bool DisassemblyOnly { get { return assemblerToggles[disassemblyOnlyKey]; } set { assemblerToggles[disassemblyOnlyKey] = value; } }
-            public bool UniqueBlueprintsOnly { get { return assemblerToggles[uniqueBlueprinteOnlyKey]; } set { assemblerToggles[uniqueBlueprinteOnlyKey] = value; } }
-            public bool NoIdleReset { get { return assemblerToggles[noIdleResetKey]; } set { assemblerToggles[noIdleResetKey] = value; } }
+                { setKeyBlockOutputToggles, new SortedList<string, bool>
+                    {
+                        { setKeyBlockKeepOutputKey, false }, { setKeyBlockRemoveOutputKey, false }
+                    }
+                },
+                { setKeyBlockAssemblerToggles, new SortedList<string, bool>
+                    {
+                        { setKeyBlockAssemblyOnlyKey, false }, { setKeyBlockDisassemblyOnlyKey, false }, { setKeyBlockUniqueBlueprinteOnlyKey, false}, { setKeyBlockNoIdleResetKey, false }
+                    }
+                },
+            };
 
             public bool andComparison, manual;
 
@@ -7901,19 +6718,21 @@ namespace IngameScript
 
             public double priority;
 
-            public void Initialize(string crossGridKey, string includeGridKey, string excludedKey, string excludeGridKey)
+            public void Initialize()
             {
-                this.crossGridKey = crossGridKey;
-                this.includeGridKey = includeGridKey;
-                this.excludedKey = excludedKey;
-                this.excludeGridKey = excludeGridKey;
-                toggles = new SortedList<string, bool>
+                settingDictionaryBools[setKeyBlockToggles].Clear();
+
+                foreach (string setCategory in settingDictionaryBools.Keys)
                 {
-                    { crossGridKey, false }, { includeGridKey, false }, { excludedKey, false }, { excludeGridKey, false }
-                };
-                inventoryToggles.Keys.ToList().ForEach(b => inventoryToggles[b] = false);
-                multiInventoryToggles.Keys.ToList().ForEach(b => multiInventoryToggles[b] = false);
-                assemblerToggles.Keys.ToList().ForEach(b => assemblerToggles[b] = false);
+                    tempSettings = settingDictionaryBools[setCategory].Keys.ToList();
+                    tempSettings.ForEach(setKey => settingDictionaryBools[setCategory][setKey] = false);
+                }
+
+                settingDictionaryBools[setKeyBlockToggles][crossGridKeyword] = false;
+                settingDictionaryBools[setKeyBlockToggles][includeGridKeyword] = false;
+                settingDictionaryBools[setKeyBlockToggles][exclusionKeyword] = false;
+                settingDictionaryBools[setKeyBlockToggles][excludeGridKeyword] = false;
+
                 limits.Clear();
                 loadout.Clear();
                 storageCategories.Clear();
@@ -7922,12 +6741,23 @@ namespace IngameScript
                 priority = 1;
             }
 
-            public void ParseOption(string key)
+            public bool GetOption(string key)
             {
-                if (assemblerToggles.ContainsKey(key)) assemblerToggles[key] = true;
-                else if (inventoryToggles.ContainsKey(key)) inventoryToggles[key] = true;
-                else if (multiInventoryToggles.ContainsKey(key)) multiInventoryToggles[key] = true;
-                else if (toggles.ContainsKey(key)) toggles[key] = true;
+                foreach (string setCategory in settingDictionaryBools.Keys)
+                    if (settingDictionaryBools[setCategory].ContainsKey(key))
+                        return settingDictionaryBools[setCategory][key];
+
+                return false;
+            }
+
+            public void SetOption(string key, bool enabled = true)
+            {
+                foreach (string setCategory in settingDictionaryBools.Keys)
+                    if (settingDictionaryBools[setCategory].ContainsKey(key))
+                    {
+                        settingDictionaryBools[setCategory][key] = enabled;
+                        break;
+                    }
             }
         }
 
@@ -7951,11 +6781,9 @@ namespace IngameScript
                           currentMax = 0, currentNeededAssembly = 0, displayQuota = 0,
                           postAssemblyAmount = 0;
 
-            public float volume = 0f;
-
             public bool fuel = false, assemble = true,
                 disassemble = true, refine = true, display = true,
-                disassembleAll = false, gas = false, fractional = true;
+                disassembleAll = false, gas = false;
 
             public List<string> oreKeys = NewStringList;
 
@@ -8164,6 +6992,17 @@ namespace IngameScript
                 if (disassembleAll)
                     displayQuota = -1;
             }
+
+            public override string ToString()
+            {
+                return $"Name={displayName}||Category={Formatted(category)}||Quota={quota}{(quota >= 0 && quotaMax > quota ? $"<{quotaMax}" : "")}{newLine}" +
+                       $"^Type={typeID}||Subtype={subtypeID}" +
+                       $"{(IsBlueprint(blueprintID) ? $"||Blueprint={blueprintID}||Assembly Multiplier={assemblyMultiplier}||Assemble={assemble}||Disassemble={disassemble}" : StringsMatch(blueprintID, "none") ? "||Blueprint=None" : "")}" +
+                       $"{(IsOre(typeID) ? $"||Refine={refine}" : "")}" +
+                       $"||Fuel={fuel}||Display={display}" +
+                       $"{(gas || IsIce(typeID, subtypeID) ? $"||Gas={gas}" : "")}" +
+                       $"{(IsIngot(typeID) || oreKeys.Count > 0 ? $"||Ore Keys=[{String.Join("|", oreKeys)}]" : "")}{newLine}";
+            }
         }
 
         public class SpanKey
@@ -8172,6 +7011,23 @@ namespace IngameScript
             public int surfaceIndex = 0;
         }
 
+        public struct ItemDAO
+        {
+            public string typeID, subtypeID, amount, name;
+
+            public ItemDAO(string typeID, string subtypeID, string amount, string name)
+            {
+                this.typeID = typeID;
+                this.subtypeID = subtypeID;
+                this.amount = amount;
+                this.name = name;
+            }
+
+            public override string ToString()
+            {
+                return name;
+            }
+        }
 
         #endregion
     }
