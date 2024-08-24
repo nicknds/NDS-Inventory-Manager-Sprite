@@ -47,6 +47,8 @@ namespace IngameScript
 
         int echoDelay { get { return EchoDelay; } }
 
+        Array functionArray { get { return Enum.GetValues(typeof(FunctionIdentifier)); } }
+
         static List<long> NewLongList { get { return new List<long>(); } }
         static List<MyInventoryItem> NewItemList { get { return new List<MyInventoryItem>(); } }
         static List<string> NewStringList { get { return new List<string>(); } }
@@ -230,6 +232,8 @@ namespace IngameScript
                       includedIDs = NewHashSetLong,
                       setRemoveIDs = NewHashSetLong;
 
+        List<char> spacerChars = new List<char> { '.', '-', '`', '-' };
+
         HashSet<IMyCubeGrid> gridList = new HashSet<IMyCubeGrid>(), excludedGridList = new HashSet<IMyCubeGrid>();
 
         List<LogicComparison> tempLogicComparisons;
@@ -316,7 +320,7 @@ namespace IngameScript
             Script, Main_Control, Main_Output, Main_Sprites, Processing_Block_Options, Status_Panel,
             Measuring_Capacities, Output_Panel, Counting_Listed_Items, Distribution, Distributing_Item, Counting_Item_In_Inventory,
             Processing_Limits, Sorting, Storing_Item, Counting_Blueprints, Counting_Items, Scanning,
-            Generating_Sprites, Listing_Items, Item_Panel, Order_Inventory, Processing_Tags, Transferring_Item,
+            Generating_Sprites, Item_Panel, Order_Inventory, Processing_Tags, Transferring_Item,
             Spreading_Items, Cargo_Panel, Distributing_Blueprint, Removing_Excess_Assembly, Generating_Block_Options, Setting_Block_Quotas,
             Save, Queue_Assembly, Queue_Disassembly, Inserting_Blueprint, Process_Panel_Options, Removing_Blueprint,
             Removing_Excess_Disassembly, Order_Blocks_By_Priority, Cargo_Priority_Loop, Sorting_Cargo_Priority, Sort_Blueprints, Spread_Blueprints,
@@ -495,7 +499,7 @@ namespace IngameScript
             scanning = false, allowEcho = true,
             prioritySystemActivated = false, errorFilter = false, useDynamicQuota, increaseDynamicQuotaWhenLow, update = false,
             tempMatchingItemAppend, tempMatchingItemAcceptZero, tempOrderByPriority, tempDistributeBlueprintCount,
-            tempInsertBlueprintCount, tempCollectionToBuilderIncludeAmount, tempGetTagsAcceptZero;
+            tempInsertBlueprintCount, tempGetTagsAcceptZero;
 
         FunctionIdentifier selfContainedIdentifier, currentFunction = FunctionIdentifier.Idle;
 
@@ -506,7 +510,7 @@ namespace IngameScript
         int echoTicks = 10, activeOres = 0, overheatTicks = 0,
             currentErrorCount = 0, totalErrorCount = 0, checkTicks = 0, mergeLengthTolerance = 0, updateFrequency = 1,
             outputLimit = 15, tempStorageInventoryIndex, tempStoragePriorityMax,
-            tempStorageIndexStart, performanceIndex = 0;
+            tempStorageIndexStart, performanceIndex = 0, spacerIndex = 0;
 
         double transferredAmount = 0, countedAmount = 0,
             transferAmount, dynamicQuotaMultiplierIncrement, dynamicQuotaMaxMultiplier, dynamicQuotaPositiveThreshold,
@@ -530,6 +534,8 @@ namespace IngameScript
             tempAmountContainedTypeID, tempAmountContainedSubtypeID,
             tempGetTagsText;
 
+        string echoSpacer { get { return ColoredEcho("".PadRight(4, spacerChars[spacerIndex]), 3); } }
+
         static string newLine;
 
         TimeSpan fillBottleSpan = TimeSpan.Zero;
@@ -542,10 +548,10 @@ namespace IngameScript
 
         PanelMasterClass panelMaster = new PanelMasterClass();
 
-        ItemCollection itemCollectionProcessSetting = NewCollection, itemCollectionMain = NewCollection,
+        ItemCollection itemCollectionMain = NewCollection,
                        itemCollectionAlternate = NewCollection, itemCollectionProcessTotalLoadout = NewCollection,
                        tempMatchingItemsCollection, tempSetBlockQuotaCollection,
-                       tempCountItemsInListCollection, tempCollectionToBuilderCollection,
+                       tempCountItemsInListCollection,
                        tempGetTagsCollection;
 
         BlockDefinition mainBlockDefinition, alternateBlockDefinition, storageDefinitionA, blockCheckDefinitionA, tempBlockOptionDefinition,
@@ -558,8 +564,6 @@ namespace IngameScript
         MyDefinitionId tempInsertBlueprintID;
 
         IMyInventory tempTransferOriginInventory, tempOrderInventory, tempAmountContainedInventory;
-
-        StringBuilder tempCollectionToBuilder;
 
         #endregion
 
@@ -890,40 +894,46 @@ namespace IngameScript
 
         void MainEcho()
         {
-            Echo($"Main: {currentMajorFunction.Replace("_", " ")}");
-            Echo($"Current: {currentFunction.ToString().Replace("_", " ")}");
+            spacerIndex = (spacerIndex + 1) % spacerChars.Count;
+
+            Echo($"Main: {ColoredEcho(currentMajorFunction.Replace("_", " "))}");
+            Echo($"Current: {ColoredEcho(currentFunction.ToString().Replace("_", " "))}");
             Echo($"Last: {Round(Runtime.LastRunTimeMs, 4)}");
             Echo($"Avg: {Round(torchAverage, 4)}");
             Echo($"Blocks: {managedBlocks.Count}");
             Echo($"Panels: {typedIndexes[setKeyIndexPanel].Count}");
             Echo($"Active Functions: {stateErrorCodes.Count}");
-            if (modItemDictionary.Count + modBlueprintList.Count > 0)
-            {
-                Echo($"Mod Items: {modItemDictionary.Count}");
-                Echo($"Mod Blueprints: {modBlueprintList.Count}");
-                if (modItemDictionary.Count > 0 && modBlueprintList.Count > 0)
-                    Echo("-Enter 'merge' to begin merge");
-            }
-            Echo(overheatTicks > 0 ? $"Overheat x{overheatTicks}" : "");
 
-            if (TextHasLength(lastString))
-            {
-                Echo($"Last: {lastString}");
-                if (Now >= lastActionClearTime)
-                    lastString = "";
-            }
+            OptionalEcho($"Mod Items: {modItemDictionary.Count}", modItemDictionary.Count > 0);
+            OptionalEcho($"Mod Blueprints: {modBlueprintList.Count}", modBlueprintList.Count > 0);
+            OptionalEcho("-Enter 'merge' to begin merge", modItemDictionary.Count > 0 && modBlueprintList.Count > 0);
 
-            Echo("");
+            OptionalEcho($"{ColoredEcho($"Overheat x{overheatTicks}", 1)}", overheatTicks > 0);
+
+            OptionalEcho($"Last: {ColoredEcho(lastString)}", TextHasLength(lastString));
+
+            if (TextHasLength(lastString) && Now >= lastActionClearTime)
+                lastString = "";
+
             Echo($"Uptime: {scriptSpan:c}");
 
+            int count = 0;
             while (DateTime.Now >= nextPerformanceTime ||
                   (FunctionIdentifier)performanceIndex == FunctionIdentifier.Idle ||
-                  !stateRecords.ContainsKey((FunctionIdentifier)performanceIndex))
+                  !stateRecords.ContainsKey((FunctionIdentifier)performanceIndex) ||
+                  (stateRecords[(FunctionIdentifier)performanceIndex].runs == 0 && stateRecords[(FunctionIdentifier)performanceIndex].currentTicks == 0))
             {
-                performanceIndex = (performanceIndex + 1) % Enum.GetValues(typeof(FunctionIdentifier)).Length;
+                performanceIndex = (performanceIndex + 1) % functionArray.Length;
                 nextPerformanceTime = Now.AddSeconds(10);
+                count++;
+                if (count >= functionArray.Length)
+                {
+                    performanceIndex = 0;
+                    break;
+                }
             }
-            Echo("");
+
+            PadEcho(2);
             Echo($"Performance: {((FunctionIdentifier)performanceIndex).ToString().Replace("_", " ")}");
             Echo(stateRecords[(FunctionIdentifier)performanceIndex].ToString());
         }
@@ -1404,7 +1414,6 @@ namespace IngameScript
                 if (index != -1)
                 {
                     key = tempScriptSetting.Substring(0, index).Trim();
-                    stringValue = tempScriptSetting.Substring(index + 1).Trim();
                     if (StringsMatch(key, "name"))
                     {
                         while (!ProcessItemSetting(tempScriptSetting))
@@ -1518,7 +1527,7 @@ namespace IngameScript
                     monitoredAssembler = managedBlocks[index].monitoredAssembler;
                     assembler = (IMyAssembler)managedBlocks[index].block;
 
-                    changed = monitoredAssembler.HasChanged(delayResetIdleAssembler);
+                    changed = monitoredAssembler.HasChanged();
 
                     if (!changed && monitoredAssembler.CheckNow)
                     {
@@ -1564,13 +1573,13 @@ namespace IngameScript
 
                             Output($"Reset Idle Assembler: {ShortenName(assembler.CustomName, 12)}");
 
-                            monitoredAssembler.Reset();
+                            monitoredAssembler.Reset(delayResetIdleAssembler);
                         }
                         else
                             monitoredAssembler.stalling = true;
                     }
                     else if (changed || assembler.IsQueueEmpty)
-                        monitoredAssembler.Reset();
+                        monitoredAssembler.Reset(delayResetIdleAssembler);
 
                     if (!assembler.IsQueueEmpty)
                     {
@@ -4377,66 +4386,6 @@ namespace IngameScript
             }
         }
 
-        bool CollectionToString(StringBuilder builder, ItemCollection collection, bool includeAmount = true)
-        {
-            if (collection == null || collection.ItemTypeCount == 0) return true;
-
-            selfContainedIdentifier = FunctionIdentifier.Listing_Items;
-
-            if (!IsStateRunning)
-            {
-                tempCollectionToBuilder = builder;
-                tempCollectionToBuilderCollection = collection;
-                tempCollectionToBuilderIncludeAmount = includeAmount;
-            }
-
-            return RunStateManager;
-        }
-
-        IEnumerator<FunctionState> CollectionToStringState()
-        {
-            SortedList<string, SortedList<string, List<string>>> likeValues = new SortedList<string, SortedList<string, List<string>>>();
-            int items;
-            string amountString;
-            ItemDefinition item;
-            yield return stateContinue;
-
-            while (true)
-            {
-                items = 0;
-                likeValues.Clear();
-                for (int i = 0; i < tempCollectionToBuilderCollection.ItemTypeCount; i++)
-                {
-                    if (PauseTickRun) yield return stateActive;
-
-                    item = tempCollectionToBuilderCollection.ItemByIndex(i);
-                    amountString = tempCollectionToBuilderCollection.CountByIndex(i);
-                    item.category = Formatted(GetItemCategory(item.FullID));
-                    if (!likeValues.ContainsKey(item.category))
-                        likeValues[item.category] = new SortedList<string, List<string>>();
-                    if (!likeValues[item.category].ContainsKey(amountString))
-                        likeValues[item.category][amountString] = NewStringList;
-                    likeValues[item.category][amountString].Add($"{ItemName(item.typeID, item.subtypeID)}");
-                }
-                foreach (KeyValuePair<string, SortedList<string, List<string>>> kvpA in likeValues)
-                    foreach (KeyValuePair<string, List<string>> kvp in kvpA.Value)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-
-                        tempCollectionToBuilder.Append($"{(items > 0 ? "|" : "")}{(tempCollectionToBuilderIncludeAmount ? kvp.Key : "")}:{kvpA.Key}");
-                        items++;
-
-                        foreach (string itemID in kvp.Value)
-                        {
-                            if (PauseTickRun) yield return stateActive;
-                            tempCollectionToBuilder.Append($":'{itemID}'");
-                        }
-                    }
-
-                yield return stateContinue;
-            }
-        }
-
         bool GetTags(ItemCollection quota, string text, bool acceptZero = true)
         {
             if (!TextHasLength(text)) return true;
@@ -4452,7 +4401,7 @@ namespace IngameScript
 
             return RunStateManager;
         }
-
+        
         IEnumerator<FunctionState> GetTagState()
         {
             Dictionary<char, char> limiters = new Dictionary<char, char> { { '{', '}' }, { '[', ']' }, { '<', '>' } };
@@ -4724,17 +4673,15 @@ namespace IngameScript
                     if (PauseTickRun) yield return stateActive;
                     if (tempGenerateBlockOptionBlockDefinition.Settings.loadout.ItemTypeCount > 0)
                     {
-                        builder.Append("Loadout=");
-                        while (!CollectionToString(builder, tempGenerateBlockOptionBlockDefinition.Settings.loadout, true)) yield return stateActive;
-                        BuilderAppendLine(builder);
+                        BuilderAppendLine(builder, $"Loadout={tempGenerateBlockOptionBlockDefinition.Settings.loadout}");
+                        if (PauseTickRun) yield return stateActive;
                     }
                     else
                         AppendOption(builder, "Loadout=20%:ingot:iron:silicon:nickel|50:ore:ice");
                     if (tempGenerateBlockOptionBlockDefinition.Settings.limits.ItemTypeCount > 0)
                     {
-                        builder.Append("Limit=");
-                        while (!CollectionToString(builder, tempGenerateBlockOptionBlockDefinition.Settings.limits, true)) yield return stateActive;
-                        BuilderAppendLine(builder);
+                        BuilderAppendLine(builder, $"Limit={tempGenerateBlockOptionBlockDefinition.Settings.limits}");
+                        if (PauseTickRun) yield return stateActive;
                     }
                     else
                         AppendOption(builder, "Limit=25:ingot:*|10%:ore:*");
@@ -4776,6 +4723,20 @@ namespace IngameScript
 
 
         #region Return Methods
+
+        string ColoredEcho(string text, int color = 2)
+        {
+            if (text.Length < 2) return text;
+
+            if (color == 1)
+                return $"[Color=#FFFF0000]{text}[/Color]";
+            if (color == 2)
+                return $"[Color=#FF00FF00]{text}[/Color]";
+            if (color == 3)
+                return $"[Color=#FF0000FF]{text}[/Color]";
+
+            return text;
+        }
 
         string OptionLead(StringBuilder builder)
         {
@@ -5685,6 +5646,11 @@ namespace IngameScript
 
         #region Methods
 
+        void OptionalEcho(string text, bool condition)
+        {
+            Echo($"{(condition ? text : echoSpacer)}");
+        }
+
         void InitState(IEnumerator<FunctionState> stateFunction, FunctionIdentifier identifier)
         {
             stateRecords[identifier].enumerator = stateFunction;
@@ -5754,9 +5720,6 @@ namespace IngameScript
                     break;
                 case FunctionIdentifier.Generating_Sprites:
                     InitState(panelMaster.PopulateSpriteListState(), identifier);
-                    break;
-                case FunctionIdentifier.Listing_Items:
-                    InitState(CollectionToStringState(), identifier);
                     break;
                 case FunctionIdentifier.Item_Panel:
                     InitState(panelMaster.ItemPanelState(), identifier);
@@ -5876,10 +5839,10 @@ namespace IngameScript
             builder.AppendLine(text);
         }
 
-        void PadEcho()
+        void PadEcho(int count = 10)
         {
-            for (int i = 0; i < 10; i++)
-                Echo("");
+            for (int i = 1; i <= count; i++)
+                Echo(echoSpacer);
         }
 
         void FinalizeKeys(ItemDefinition definition)
@@ -5911,10 +5874,7 @@ namespace IngameScript
             }
             BuilderAppendLine(builder);
 
-            BuilderAppendLine(builder, $"{prefix}{spacer}{suffix}");
-            BuilderAppendLine(builder, $"{cap}  {header}  {cap}");
-            BuilderAppendLine(builder, $"{suffix}{spacer}{prefix}");
-            BuilderAppendLine(builder);
+            BuilderAppendLine(builder, $"{prefix}{spacer}{suffix}{newLine}{cap}  {header}  {cap}{newLine}{suffix}{spacer}{prefix}");
         }
 
         static void SplitID(string itemID, out string typeID, out string subtypeID)
@@ -5934,20 +5894,6 @@ namespace IngameScript
         {
             lastString = text;
             lastActionClearTime = Now.AddSeconds(15);
-        }
-
-        void SetQuota(string itemID, double amount, double maxAmount)
-        {
-            string typeId, subtypeID;
-            SplitID(itemID, out typeId, out subtypeID);
-            SetQuota(typeId, subtypeID, amount, maxAmount);
-        }
-
-        void SetQuota(string typeID, string subtypeID, double amount, double maxAmount)
-        {
-            ItemDefinition definition;
-            if (GetDefinition(out definition, $"{typeID}/{subtypeID}"))
-                SetDefinitionQuota(definition, amount, maxAmount);
         }
 
         void SetItemQuotaMain(string name, string amountString)
@@ -6407,7 +6353,7 @@ namespace IngameScript
 
             public bool CheckNow { get { return Now >= nextCheck; } }
 
-            public bool HasChanged(double delay)
+            public bool HasChanged()
             {
                 bool changed = !assembler.Enabled || assembler.IsQueueEmpty || assembler.CurrentProgress != currentProgress || assembler.Mode != mode;
 
@@ -6417,11 +6363,11 @@ namespace IngameScript
                 return changed;
             }
 
-            public void Reset()
+            public void Reset(double delay)
             {
                 stalling = false;
                 productionComparison.Clear();
-                nextCheck = Now.AddSeconds(5);
+                nextCheck = Now.AddSeconds(delay);
                 currentProgress = 0f;
             }
         }
@@ -6478,6 +6424,8 @@ namespace IngameScript
             public SortedList<string, VariableItemCount> itemList = new SortedList<string, VariableItemCount>();
 
             public int ItemTypeCount { get { return itemList.Count; } }
+
+            public bool trackAmounts = true;
 
             public bool IsEmpty
             {
@@ -6614,7 +6562,7 @@ namespace IngameScript
 
                 foreach (KeyValuePair<string, SortedList<string, List<ItemDAO>>> kvpA in groupedItems)
                     foreach (KeyValuePair<string, List<ItemDAO>> kvpB in kvpA.Value)
-                        itemGroups.Add($"{kvpB.Key}:{kvpA.Key}:{String.Join(":", kvpB.Value)}");
+                        itemGroups.Add($"{(trackAmounts ? $"{kvpB.Key}:" : "")}{kvpA.Key}:{String.Join(":", kvpB.Value)}");
 
                 return String.Join("|", itemGroups);
             }

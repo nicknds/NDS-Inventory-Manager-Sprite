@@ -100,6 +100,7 @@ namespace IngameScript
             void SetPanelDefinition(BlockDefinition managedBlock, int surfaceIndex)
             {
                 managedBlock.panelDefinitionList[surfaceIndex] = new PanelMasterClass.PanelDefinition { surfaceIndex = surfaceIndex, provider = !(managedBlock.block is IMyTextPanel), suffixes = settingsListsStrings[setKeyDefaultSuffixes], parent = managedBlock };
+                managedBlock.panelDefinitionList[surfaceIndex].items.trackAmounts = false;
             }
 
             public static string PresetPanelOption(string itemCategoryString)
@@ -399,7 +400,7 @@ namespace IngameScript
                                         while (!parent.GetTags(panelDefinition.items, data.ToLower()))
                                             yield return stateActive;
                                         if (panelDefinition.items.ItemTypeCount > 0)
-                                            while (!parent.CollectionToString(keyBuilder, panelDefinition.items, false)) yield return stateActive;
+                                            keyBuilder.Append(panelDefinition.items.ToString());
                                         break;
                                     case "sorting":
                                         switch (data.ToLower())
@@ -604,7 +605,7 @@ namespace IngameScript
                     numberPadding = tempPanelDefinition.decimals + 4;
                     if (tempPanelDefinition.decimals > 0)
                         numberPadding++;
-                    maxLocation = NewVector2(tempPanelDefinition.columns, tempPanelDefinition.rows > 0 ? tempPanelDefinition.rows : Math.Max(1, tempPanelObjects.Count));
+                    maxLocation = NewVector2(tempPanelDefinition.columns, tempPanelDefinition.rows >= 0 ? tempPanelDefinition.rows : Math.Max(1, tempPanelObjects.Count));
 
                     if (!tempSpan)
                         maxLocation.Y = tempPanelObjects.Count;
