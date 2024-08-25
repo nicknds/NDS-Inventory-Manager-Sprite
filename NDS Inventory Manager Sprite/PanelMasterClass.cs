@@ -47,7 +47,7 @@ namespace IngameScript
             PanelDefinition tempPanelDefinition;
             int tempProcessPanelOptionSurfaceIndex;
             List<PanelObject> tempPanelObjects;
-            List<long> tempIndexList;
+            List<long> tempIndexList = NewLongList;
             float tempColumn;
             bool tempSpan;
 
@@ -866,7 +866,10 @@ namespace IngameScript
                 selfContainedIdentifier = FunctionIdentifier.Measuring_Capacities;
 
                 if (!IsStateRunning)
-                    tempIndexList = indexList;
+                {
+                    tempIndexList.Clear();
+                    tempIndexList.AddRange(indexList);
+                }
 
                 if (RunStateManager)
                 {
