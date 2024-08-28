@@ -326,7 +326,7 @@ namespace IngameScript
             Removing_Excess_Disassembly, Order_Blocks_By_Priority, Cargo_Priority_Loop, Sorting_Cargo_Priority, Sort_Blueprints, Spread_Blueprints,
             Load, Loadouts, Sort_Refineries, Custom_Logic, Matching_Items, Process_Logic,
             Checking_Idle_Assemblers, Find_Mod_Items, Process_Setting, Main_Panel, Assembly_Reserve, Processing_Item_Setting,
-            Order_Storage, Save_Dictionary, Idle
+            Order_Storage, Idle
             #endregion
         };
 
