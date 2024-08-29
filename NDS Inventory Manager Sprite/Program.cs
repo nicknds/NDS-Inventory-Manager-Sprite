@@ -469,7 +469,8 @@ namespace IngameScript
             setKeyBlockNoSpreadKey = "nospreading",
             setKeyBlockNoCountKey = "nocounting",
             setKeyBlockUniqueBlueprinteOnlyKey = "uniqueblueprintsonly",
-            setKeyBlockGunOverrideKey = "gunoverride";
+            setKeyBlockGunOverrideKey = "gunoverride",
+            setKeyBlockLoadoutNoCount = "nocountloadout";
 
         #endregion
 
@@ -4308,7 +4309,7 @@ namespace IngameScript
                             if (currentDefinition.Settings.loadout.ItemTypeCount > 0)
                             {
                                 typedIndexes[setKeyIndexLoadout].Add(index);
-                                if (addLoadoutsToQuota)
+                                if (addLoadoutsToQuota && !currentDefinition.Settings.GetOption(setKeyBlockLoadoutNoCount))
                                     itemCollectionProcessTotalLoadout.AddCollection(currentDefinition.Settings.loadout, currentDefinition.block);
                                 if (currentPriority)
                                     priorityTypes.Add(setKeyIndexLoadout);
@@ -5882,7 +5883,7 @@ namespace IngameScript
             }
             BuilderAppendLine(builder);
 
-            BuilderAppendLine(builder, $"{prefix}{spacer}{suffix}{newLine}{cap}  {header}  {cap}{newLine}{suffix}{spacer}{prefix}");
+            BuilderAppendLine(builder, $"{prefix}{spacer}{suffix}{newLine}{cap}  {header}  {cap}{newLine}{suffix}{spacer}{prefix}{newLine}");
         }
 
         static void SplitID(string itemID, out string typeID, out string subtypeID)
@@ -6653,7 +6654,7 @@ namespace IngameScript
                     {
                         { setKeyBlockStorageKey, false }, { setKeyBlockAutoConveyorKey, false }, { setKeyBlockKeepInputKey, false },
                         { setKeyBlockRemoveInputKey, false },  { setKeyBlockNoSortingKey, false }, { setKeyBlockNoSpreadKey, false },
-                        { setKeyBlockNoCountKey, false }, { setKeyBlockGunOverrideKey, false }
+                        { setKeyBlockNoCountKey, false }, { setKeyBlockGunOverrideKey, false }, { setKeyBlockLoadoutNoCount, false }
                     }
                 },
                 { setKeyBlockOutputToggles, new SortedList<string, bool>
