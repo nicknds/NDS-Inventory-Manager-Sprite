@@ -3,5 +3,5 @@ Backup/*
 NDS Inventory Manager Sprite/bin/*
 NDS Inventory Manager Sprite/obj/*
 *MDK.paths.props
-.vs/*
+**/.vs/**
 *.ruleset

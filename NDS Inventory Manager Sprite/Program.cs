@@ -487,7 +487,7 @@ namespace IngameScript
             toolKeyword, globalFilterKeyword,
             panelTag, optionBlockFilter, currentMajorFunction = "Idle";
 
-        static double scriptVersion = 5.27, torchAverage = 0, tickWeight = 0.005;
+        static double scriptVersion = 5.28, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
@@ -2590,20 +2590,24 @@ namespace IngameScript
         IEnumerator<FunctionState> QueueAssemblyState()
         {
             double queueAmount;
+            List<Blueprint> tempBlueprintList = new List<Blueprint>();
+
             yield return stateContinue;
 
             while (true)
             {
-                foreach (KeyValuePair<string, Blueprint> kvp in blueprintList)
+                tempBlueprintList.AddRange(blueprintList.Values);
+                foreach (Blueprint blueprint in tempBlueprintList)
                 {
                     if (PauseTickRun)
                         yield return stateActive;
 
-                    queueAmount = AssemblyAmount(kvp.Value);
+                    queueAmount = AssemblyAmount(blueprint);
                     if (queueAmount > 0)
-                        while (!DistributeBlueprint(kvp.Value, queueAmount, typedIndexes[setKeyIndexAssemblers]))
+                        while (!DistributeBlueprint(blueprint, queueAmount, typedIndexes[setKeyIndexAssemblers]))
                             yield return stateActive;
                 }
+                tempBlueprintList.Clear();
                 int queuedIngots = settingsInts[setKeySurvivalKitQueuedIngots];
                 if (queuedIngots > 0)
                 {
@@ -2618,19 +2622,23 @@ namespace IngameScript
         IEnumerator<FunctionState> QueueDisassemblyState()
         {
             double queueAmount;
+            List<Blueprint> tempBlueprintList = new List<Blueprint>();
+
             yield return stateContinue;
 
             while (true)
             {
-                foreach (KeyValuePair<string, Blueprint> kvp in blueprintList)
+                tempBlueprintList.AddRange(blueprintList.Values);
+                foreach (Blueprint blueprint in tempBlueprintList)
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    queueAmount = AssemblyAmount(kvp.Value, true);
+                    queueAmount = AssemblyAmount(blueprint, true);
                     if (queueAmount > 0)
-                        while (!DistributeBlueprint(kvp.Value, queueAmount, typedIndexes[setKeyIndexAssemblers], disassemblyMode))
+                        while (!DistributeBlueprint(blueprint, queueAmount, typedIndexes[setKeyIndexAssemblers], disassemblyMode))
                             yield return stateActive;
                 }
+                tempBlueprintList.Clear();
                 yield return stateContinue;
             }
         }
@@ -4401,7 +4409,7 @@ namespace IngameScript
 
             return RunStateManager;
         }
-        
+
         IEnumerator<FunctionState> GetTagState()
         {
             Dictionary<char, char> limiters = new Dictionary<char, char> { { '{', '}' }, { '[', ']' }, { '<', '>' } };
