@@ -8,7 +8,6 @@ using VRage;
 using VRage.Game;
 using VRage.Game.GUI.TextPanel;
 using VRage.Game.ModAPI.Ingame;
-using VRage.Network;
 using VRageMath;
 
 namespace IngameScript
@@ -6735,7 +6734,7 @@ namespace IngameScript
                           quotaMax = 0, differenceNeeded = 0, currentQuota = 0,
                           currentAssemblyAmount = 0, currentDisassemblyAmount = 0,
                           currentExcessAssembly = 0, currentExcessDisassembly = 0,
-                          currentMax = 0, currentNeededAssembly = 0, displayQuota = 0,
+                          currentMax = 0, currentNeededAssembly = 0,
                           postAssemblyAmount = 0;
 
             public bool fuel = false, assemble = true,
@@ -6945,9 +6944,6 @@ namespace IngameScript
                     currentQuota *= quotaMultiplier;
 
                 currentQuota = Math.Floor(currentQuota);
-                displayQuota = currentQuota;
-                if (disassembleAll)
-                    displayQuota = -1;
             }
 
             public override string ToString()
