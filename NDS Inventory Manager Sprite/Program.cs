@@ -14,7 +14,7 @@ namespace IngameScript
     partial class Program : MyGridProgram
     {
         #region mdk preserve
-        double OverheatAverage = 0.085, ActionLimiterMultiplier = 005, RunTimeLimiter = 0.075;
+        double OverheatAverage = 0.085, ActionLimiterMultiplier = 0.05, RunTimeLimiter = 0.075;
         int EchoDelay = 6, IdleTicks = 0;
         bool UseVanillaLibrary = true;
         #endregion
