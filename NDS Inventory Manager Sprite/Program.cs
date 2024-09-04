@@ -8,15 +8,14 @@ using VRage;
 using VRage.Game;
 using VRage.Game.GUI.TextPanel;
 using VRage.Game.ModAPI.Ingame;
-using VRageMath;
 
 namespace IngameScript
 {
     partial class Program : MyGridProgram
     {
         #region mdk preserve
-        double OverheatAverage = 0.085, ActionLimiterMultiplier = 0.005, RunTimeLimiter = 0.075;
-        int EchoDelay = 6;
+        double OverheatAverage = 0.085, ActionLimiterMultiplier = 005, RunTimeLimiter = 0.075;
+        int EchoDelay = 6, IdleTicks = 0;
         bool UseVanillaLibrary = true;
         #endregion
 
@@ -35,7 +34,6 @@ namespace IngameScript
         const FunctionState stateActive = FunctionState.Active, stateContinue = FunctionState.Continue, stateUninitialized = FunctionState.Uninitialized, stateError = FunctionState.Error;
 
         const TextAlignment leftAlignment = TextAlignment.LEFT, centerAlignment = TextAlignment.CENTER;
-
         bool PauseTickRun { get { return UnavailableActions(); } }
         bool IsStateRunning { get { return StateRunning(selfContainedIdentifier); } }
         bool RunStateManager { get { return StateManager(selfContainedIdentifier); } }
@@ -45,8 +43,6 @@ namespace IngameScript
         double runTimeLimiter { get { return RunTimeLimiter; } set { RunTimeLimiter = value; } }
 
         int echoDelay { get { return EchoDelay; } }
-
-        Array functionArray { get { return Enum.GetValues(typeof(FunctionIdentifier)); } }
 
         static List<long> NewLongList { get { return new List<long>(); } }
         static List<MyInventoryItem> NewItemList { get { return new List<MyInventoryItem>(); } }
@@ -73,99 +69,115 @@ namespace IngameScript
         #region Script Settings
 
         SortedList<string, SortedList<string, string>> settingDictionaryStrings = new SortedList<string, SortedList<string, string>>
-{
-    { "1/2 Global Tags", new SortedList<string, string>
         {
-            { setKeyExclusion, "exclude" }, { setKeyIncludeGrid, "includeGrid" }, { setKeyCrossGrid, "crossGrid" },
-            { setKeyPanel, "[nds]" }, { setKeyGlobalFilter, "" }, { setKeyExcludeGrid, "excludeGrid" }, { setKeyOptionBlockFilter, "" }
-        }
-    },
-    { "2/2 Default Categories", new SortedList<string, string>
-        {
-            { setKeyIngot, "ingot" }, { setKeyOre, "ore" }, { setKeyComponent, "component" },
-            { setKeyTool, "tool" }, { setKeyAmmo, "ammo" }
-        }
-    }
-};
+            { "1/2 Global Tags", new SortedList<string, string>
+                {
+                    { setKeyExclusion, "exclude" }, { setKeyIncludeGrid, "includeGrid" }, { setKeyCrossGrid, "crossGrid" },
+                    { setKeyPanel, "[nds]" }, { setKeyGlobalFilter, "" }, { setKeyExcludeGrid, "excludeGrid" }, { setKeyOptionBlockFilter, "" }
+                }
+            },
+            { "2/2 Default Categories", new SortedList<string, string>
+                {
+                    { setKeyIngot, "ingot" }, { setKeyOre, "ore" }, { setKeyComponent, "component" },
+                    { setKeyTool, "tool" }, { setKeyAmmo, "ammo" }
+                }
+            }
+        };
 
         SortedList<string, SortedList<string, double>> settingDictionaryDoubles = new SortedList<string, SortedList<string, double>>
-{
-    { "1/4 Delays", new SortedList<string, double>
         {
-            { setKeyDelayScan, 10 }, { setKeyDelayProcessLimits, 20 }, { setKeyDelaySorting, 7.5 },
-            { setKeyDelayDistribution, 20 }, { setKeyDelaySpreading, 15 }, { setKeyDelayQueueAssembly, 5 },
-            { setKeyDelayQueueDisassembly, 10 }, { setKeyDelayRemoveExcessAssembly, 20 }, { setKeyDelayRemoveExcessDisassembly, 20 },
-            { setKeyDelaySortBlueprints, 12.5 }, { setKeyDelaySortCargoPriority, 90 }, { setKeyDelaySpreadBlueprints, 20 },
-            { setKeyDelayLoadouts, 15}, { setKeyDelayFillingBottles, 30 }, { setKeyDelayLogic, 10 },
-            { setKeyDelayIdleAssemblerCheck, 15 }, { setKeyDelayResetIdleAssembler, 45 }, { setKeyDelayFindModItems, 5 },
-            { setKeyDelaySortRefinery, 6 }, { setKeyDelayOrderCargo, 15 }
-        }
-    },
-    { "2/4 Performance", new SortedList<string, double>
-        {
-            { setKeyActionLimiterMultiplier, 0.35 }, { setKeyRunTimeLimiter, 0.45 },
-            { setKeyOverheatAverage, 0.6 }
-        }
-    },
-    { "3/4 Defaults", new SortedList<string, double>
-        {
-            { setKeyIcePerGenerator, 5000 }, { setKeyFuelPerReactor, 25 }, { setKeyAmmoPerGun, 40 },
-            { setKeyCanvasPerParachute, 4 }
-        }
-    },
-    { "4/4 Adjustments", new SortedList<string, double>
-        {
-            { setKeyBalanceRange, 0.05 }, { setKeyAllowedExcessPercent, 0.1 }, { setKeyDynamicQuotaPercentageIncrement, 0.05 },
-            { setKeyDynamicuotaMaxMultiplier, 2.5 }, { setKeyDynamicQuotaNegativeThreshold, 3 }, { setKeyDynamicQuotaPositiveThreshold, 9 }
-        }
-    }
-};
+            { "1/4 Delays", new SortedList<string, double>
+                {
+                    { setKeyDelayScan, 10 }, { setKeyDelayProcessLimits, 20 }, { setKeyDelaySorting, 7.5 },
+                    { setKeyDelayDistribution, 20 }, { setKeyDelaySpreading, 15 }, { setKeyDelayQueueAssembly, 5 },
+                    { setKeyDelayQueueDisassembly, 10 }, { setKeyDelayRemoveExcessAssembly, 20 }, { setKeyDelayRemoveExcessDisassembly, 20 },
+                    { setKeyDelaySortBlueprints, 12.5 }, { setKeyDelaySortCargoPriority, 90 }, { setKeyDelaySpreadBlueprints, 20 },
+                    { setKeyDelayLoadouts, 15}, { setKeyDelayFillingBottles, 30 }, { setKeyDelayLogic, 10 },
+                    { setKeyDelayIdleAssemblerCheck, 15 }, { setKeyDelayResetIdleAssembler, 45 }, { setKeyDelayFindModItems, 5 },
+                    { setKeyDelaySortRefinery, 6 }, { setKeyDelayOrderCargo, 15 }
+                }
+            },
+            { "2/4 Performance", new SortedList<string, double>
+                {
+                    { setKeyActionLimiterMultiplier, 0.35 }, { setKeyRunTimeLimiter, 0.45 },
+                    { setKeyOverheatAverage, 0.6 }
+                }
+            },
+            { "3/4 Defaults", new SortedList<string, double>
+                {
+                    { setKeyIcePerGenerator, 5000 }, { setKeyFuelPerReactor, 25 }, { setKeyAmmoPerGun, 40 },
+                    { setKeyCanvasPerParachute, 4 }
+                }
+            },
+            { "4/4 Adjustments", new SortedList<string, double>
+                {
+                    { setKeyBalanceRange, 0.05 }, { setKeyAllowedExcessPercent, 0.1 }, { setKeyDynamicQuotaPercentageIncrement, 0.05 },
+                    { setKeyDynamicuotaMaxMultiplier, 2.5 }, { setKeyDynamicQuotaNegativeThreshold, 3 }, { setKeyDynamicQuotaPositiveThreshold, 9 },
+                    { setKeyOreMinimum, 0.5 }
+                }
+            }
+        };
 
         SortedList<string, SortedList<string, bool>> settingDictionaryBools = new SortedList<string, SortedList<string, bool>>
-{
-    { "1/3 Basic", new SortedList<string, bool>
         {
-            { setKeyToggleCountItems, true }, { setKeyToggleCountBlueprints, true }, { setKeyToggleSortItems, true },
-            { setKeyToggleQueueAssembly, true}, { setKeyToggleQueueDisassembly, true }, { setKeyToggleDistribution, true },
-            { setKeyToggleAutoLoadSettings, true }
-        }
-    },
-    { "2/3 Advanced", new SortedList<string, bool>
-        {
-            { setKeyToggleProcessLimits, true }, { setKeyToggleSpreadRefieries, true },
-            { setKeyToggleSpreadReactors, true }, { setKeyToggleSpreadGuns, true }, { setKeyToggleSpreadGasGenerators, true },
-            { setKeyToggleSpreadGravelSifters, true }, { setKeyToggleSpreadParachutes, true }, { setKeyToggleRemoveExcessAssembly, true },
-            { setKeyToggleRemoveExcessDisassembly, true }, { setKeyToggleSortBlueprints, true }, { setKeyToggleSortCargoPriority, true},
-            { setKeyToggleSpreadBlueprints, true }, { setKeyToggleDoLoadouts, true }, { setKeyToggleLogic, true },
-            { setKeyToggleResetIdleAssemblers, true }, { setKeyToggleFindModItems, true }, { setKeyToggleToggleSortRefineries, true},
-            { setKeyToggleOrderCargo, true }
-        }
-    },
-    { "3/3 Settings", new SortedList<string, bool>
-        {
-            { setKeyAutoConveyorRefineries, false }, { setKeyAutoConveyorReactors, false }, { setKeyAutoConveyorGasGenerators, false },
-            { setKeyAutoConveyorGuns, false }, { setKeyToggleDynamicQuota, true }, { setKeyDynamicQuotaIncreaseWhenLow, true },
-            { setKeySameGridOnly, false }, { setKeySurvivalKitAssembly, false }, { setKeyAddLoadoutsToQuota, true },
-            { setKeyControlConveyors, true }, { setKeyAutoTagBlocks, true }
-        }
-    }
-};
+            { "1/3 Basic", new SortedList<string, bool>
+                {
+                    { setKeyToggleCountItems, true }, { setKeyToggleCountBlueprints, true }, { setKeyToggleSortItems, true },
+                    { setKeyToggleQueueAssembly, true}, { setKeyToggleQueueDisassembly, true }, { setKeyToggleDistribution, true },
+                    { setKeyToggleAutoLoadSettings, true }
+                }
+            },
+            { "2/3 Advanced", new SortedList<string, bool>
+                {
+                    { setKeyToggleProcessLimits, true }, { setKeyToggleSpreadRefieries, true },
+                    { setKeyToggleSpreadReactors, true }, { setKeyToggleSpreadGuns, true }, { setKeyToggleSpreadGasGenerators, true },
+                    { setKeyToggleSpreadGravelSifters, true }, { setKeyToggleSpreadParachutes, true }, { setKeyToggleRemoveExcessAssembly, true },
+                    { setKeyToggleRemoveExcessDisassembly, true }, { setKeyToggleSortBlueprints, true }, { setKeyToggleSortCargoPriority, true},
+                    { setKeyToggleSpreadBlueprints, true }, { setKeyToggleDoLoadouts, true }, { setKeyToggleLogic, true },
+                    { setKeyToggleResetIdleAssemblers, true }, { setKeyToggleFindModItems, true }, { setKeyToggleToggleSortRefineries, true},
+                    { setKeyToggleOrderCargo, true }
+                }
+            },
+            { "3/3 Settings", new SortedList<string, bool>
+                {
+                    { setKeyAutoConveyorRefineries, false }, { setKeyAutoConveyorReactors, false }, { setKeyAutoConveyorGasGenerators, false },
+                    { setKeyAutoConveyorGuns, false }, { setKeyToggleDynamicQuota, true }, { setKeyDynamicQuotaIncreaseWhenLow, true },
+                    { setKeySameGridOnly, false }, { setKeySurvivalKitAssembly, false }, { setKeyAddLoadoutsToQuota, true },
+                    { setKeyControlConveyors, true }, { setKeyAutoTagBlocks, true }, { setKeyUseAcceptanceFilter, true }
+                }
+            }
+        };
 
-        SortedList<string, int> settingsInts = new SortedList<string, int>() {
-    { setKeyUpdateFrequency, 1 }, { setKeyOutputLimit, 15 },
-    { setKeySurvivalKitQueuedIngots, 0 }, { setKeyAutoMergeLengthTolerance, 6 },
-    { setKeyPrioritizedOreCount, 0 } };
+        SortedList<string, int> settingsInts = new SortedList<string, int>()
+        {
+            { setKeyUpdateFrequency, 1 }, { setKeyOutputLimit, 15 },
+            { setKeySurvivalKitQueuedIngots, 0 }, { setKeyAutoMergeLengthTolerance, 6 },
+            { setKeyPrioritizedOreCount, 0 }
+        };
 
         SortedList<string, List<string>> settingsListsStrings = new SortedList<string, List<string>>()
-{
-    { setKeyExcludedDefinitions, new List<string>() { "LargeBlockBed", "LargeBlockLockerRoom",
-        "LargeBlockLockerRoomCorner", "LargeBlockLockers", "PassengerSeatSmall", "PassengerSeatLarge", "LargeInteriorTurret" } },
-    { setKeyGravelSifterKeys, new List<string>() { "gravelrefinery", "gravelseparator", "gravelsifter" } },
-    { setKeyDefaultSuffixes, new List<string>() {
-        "K", "M", "B", "T"
-        }
-    }
-};
+        {
+            {
+                setKeyExcludedDefinitions, new List<string>()
+                {
+                    "LargeBlockBed", "LargeBlockLockerRoom", "LargeBlockLockerRoomCorner", "LargeBlockLockers", "PassengerSeatSmall", "PassengerSeatLarge", "LargeInteriorTurret"
+                }
+            },
+            {
+                setKeyGravelSifterKeys,
+                new List<string>()
+                {
+                    "gravelrefinery", "gravelseparator", "gravelsifter"
+                }
+            },
+            {
+                setKeyDefaultSuffixes,
+                new List<string>()
+                {
+                "K", "M", "B", "T"
+                }
+            }
+        };
 
         SortedList<string, SortedList<string, ItemDefinition>> itemListMain = new SortedList<string, SortedList<string, ItemDefinition>>();
 
@@ -209,6 +221,8 @@ namespace IngameScript
 
         SortedList<long, double> tempDistributeItemIndexes;
 
+        List<MyItemType> acceptedItemList = new List<MyItemType>();
+
         Dictionary<long, BlockDefinition> managedBlocks = new Dictionary<long, BlockDefinition>(1500);
 
         Dictionary<string, Blueprint>
@@ -217,6 +231,8 @@ namespace IngameScript
         Dictionary<string, string>
             gunAmmoDictionary = new Dictionary<string, string>(),
             itemCategoryDictionary = new Dictionary<string, string>();
+
+        Dictionary<string, HashSet<string>> itemAcceptanceDictionary = new Dictionary<string, HashSet<string>>();
 
         HashSet<string> antiflickerSet = NewHashSetString,
                         priorityCategories = NewHashSetString,
@@ -269,7 +285,6 @@ namespace IngameScript
 
         #region Constants
 
-        Color defPanelForegroundColor = new Color(0.7019608f, 0.9294118f, 1f, 1f);
 
         enum EchoMode
         {
@@ -328,6 +343,8 @@ namespace IngameScript
             Order_Storage, Idle
             #endregion
         };
+
+        IEqualityComparer<string> stringComparer = StringComparer.OrdinalIgnoreCase;
 
         #region Constant Strings
 
@@ -396,6 +413,7 @@ namespace IngameScript
             setKeySurvivalKitQueuedIngots = "survivalKitQueuedIngots",
             setKeyAutoMergeLengthTolerance = "autoMergeLengthTolerance",
             setKeyPrioritizedOreCount = "prioritizedOreCount",
+            setKeyOreMinimum = "oreMinimum",
             setKeyToggleCountItems = "countItems", //basic toggles
             setKeyToggleCountBlueprints = "countBlueprints",
             setKeyToggleSortItems = "sortItems",
@@ -432,6 +450,7 @@ namespace IngameScript
             setKeyAddLoadoutsToQuota = "addLoadoutsToQuota",
             setKeyControlConveyors = "controlConveyors",
             setKeyAutoTagBlocks = "autoTagBlocks",
+            setKeyUseAcceptanceFilter = "useAcceptanceFilter",
             setKeyExcludedDefinitions = "excludedDefinitions", //setting lists
             setKeyGravelSifterKeys = "gravelSifterKeys",
             setKeyDefaultSuffixes = "numberSuffixes",
@@ -469,7 +488,8 @@ namespace IngameScript
             setKeyBlockNoCountKey = "nocounting",
             setKeyBlockUniqueBlueprinteOnlyKey = "uniqueblueprintsonly",
             setKeyBlockGunOverrideKey = "gunoverride",
-            setKeyBlockLoadoutNoCount = "nocountloadout";
+            setKeyBlockLoadoutNoCount = "nocountloadout",
+            setKeyBlockNoAutolimit = "noautolimit";
 
         #endregion
 
@@ -499,7 +519,7 @@ namespace IngameScript
             scanning = false, allowEcho = true,
             prioritySystemActivated = false, errorFilter = false, useDynamicQuota, increaseDynamicQuotaWhenLow, update = false,
             tempMatchingItemAppend, tempMatchingItemAcceptZero, tempOrderByPriority, tempDistributeBlueprintCount,
-            tempInsertBlueprintCount, tempGetTagsAcceptZero;
+            tempInsertBlueprintCount, tempGetTagsAcceptZero, useAcceptanceFilter = true;
 
         FunctionIdentifier selfContainedIdentifier, currentFunction = FunctionIdentifier.Idle;
 
@@ -510,7 +530,7 @@ namespace IngameScript
         int echoTicks = 10, activeOres = 0, overheatTicks = 0,
             currentErrorCount = 0, totalErrorCount = 0, checkTicks = 0, mergeLengthTolerance = 0, updateFrequency = 1,
             outputLimit = 15, tempStorageInventoryIndex, tempStoragePriorityMax,
-            tempStorageIndexStart, performanceIndex = 0, spacerIndex = 0;
+            tempStorageIndexStart, spacerIndex = 0, currentIdleTicks = 0;
 
         double transferredAmount = 0, countedAmount = 0,
             transferAmount, dynamicQuotaMultiplierIncrement, dynamicQuotaMaxMultiplier, dynamicQuotaPositiveThreshold,
@@ -518,7 +538,7 @@ namespace IngameScript
             allowedExcessPercent = 0,
             delayResetIdleAssembler = 45,
             scriptHealth = 100, tempTransferAmount, tempStorageMax, tempDistributeItemMax,
-            tempDistributeBlueprintAmount, tempInsertBlueprintAmount, tempRemoveBlueprintAmount;
+            tempDistributeBlueprintAmount, tempInsertBlueprintAmount, tempRemoveBlueprintAmount, oreMinimum = 0.5;
 
         long tempStorageBlockIndex;
 
@@ -540,7 +560,7 @@ namespace IngameScript
 
         TimeSpan fillBottleSpan = TimeSpan.Zero;
 
-        DateTime tickStartTime = Now, lastActionClearTime = Now, nextPerformanceTime = Now.AddSeconds(10);
+        DateTime tickStartTime = Now, lastActionClearTime = Now, itemAddedOrChanged = Now;
 
         #endregion
 
@@ -712,6 +732,7 @@ namespace IngameScript
             autoLoadSettings = GetKeyBool(setKeyToggleAutoLoadSettings);
             useDynamicQuota = GetKeyBool(setKeyToggleDynamicQuota);
             increaseDynamicQuotaWhenLow = GetKeyBool(setKeyDynamicQuotaIncreaseWhenLow);
+            useAcceptanceFilter = GetKeyBool(setKeyUseAcceptanceFilter);
 
             //Doubles
             dynamicQuotaMultiplierIncrement = GetKeyDouble(setKeyDynamicQuotaPercentageIncrement);
@@ -721,6 +742,7 @@ namespace IngameScript
             allowedExcessPercent = GetKeyDouble(setKeyAllowedExcessPercent);
             balanceRange = GetKeyDouble(setKeyBalanceRange);
             delayResetIdleAssembler = GetKeyDouble(setKeyDelayResetIdleAssembler);
+            oreMinimum = GetKeyDouble(setKeyOreMinimum);
 
             //Ints
             updateFrequency = settingsInts[setKeyUpdateFrequency];
@@ -768,26 +790,31 @@ namespace IngameScript
                     {
                         Output($"Error running command: {argument}");
                     }
-                if (overheatAverage <= 0 || torchAverage < overheatAverage)
+                if (IdleTicks <= 0 || currentIdleTicks >= IdleTicks)
                 {
-                    if (autoLoadSettings && !reset)
+                    currentIdleTicks = 0;
+                    if (overheatAverage <= 0 || torchAverage < overheatAverage)
                     {
-                        checkTicks++;
-                        if (checkTicks >= 600)
+                        if (autoLoadSettings && !reset)
                         {
-                            if (!StringsMatch(Me.CustomData.Trim(), settingBackup))
+                            checkTicks++;
+                            if (checkTicks >= 600)
                             {
-                                loading = true;
-                                checkTicks = -300;
+                                if (!StringsMatch(Me.CustomData.Trim(), settingBackup))
+                                {
+                                    loading = true;
+                                    checkTicks = -300;
+                                }
+                                else checkTicks = 0;
                             }
-                            else checkTicks = 0;
                         }
-                    }
 
-                    overheatTicks = 0;
-                    StateManager(FunctionIdentifier.Script);
+                        overheatTicks = 0;
+                        StateManager(FunctionIdentifier.Script);
+                    }
+                    else overheatTicks++;
                 }
-                else overheatTicks++;
+                else currentIdleTicks++;
 
                 echoTicks += updateFrequency;
                 if (echoMode == EchoMode.MergeMenu)
@@ -895,7 +922,6 @@ namespace IngameScript
         void MainEcho()
         {
             spacerIndex = (spacerIndex + 1) % spacerChars.Count;
-
             Echo($"Main: {ColoredEcho(currentMajorFunction.Replace("_", " "))}");
             Echo($"Current: {ColoredEcho(currentFunction.ToString().Replace("_", " "))}");
             Echo($"Last: {Round(Runtime.LastRunTimeMs, 4)}");
@@ -916,26 +942,6 @@ namespace IngameScript
                 lastString = "";
 
             Echo($"Uptime: {scriptSpan:c}");
-
-            int count = 0;
-            while (DateTime.Now >= nextPerformanceTime ||
-                  (FunctionIdentifier)performanceIndex == FunctionIdentifier.Idle ||
-                  !stateRecords.ContainsKey((FunctionIdentifier)performanceIndex) ||
-                  (stateRecords[(FunctionIdentifier)performanceIndex].runs == 0 && stateRecords[(FunctionIdentifier)performanceIndex].currentTicks == 0))
-            {
-                performanceIndex = (performanceIndex + 1) % functionArray.Length;
-                nextPerformanceTime = Now.AddSeconds(10);
-                count++;
-                if (count >= functionArray.Length)
-                {
-                    performanceIndex = 0;
-                    break;
-                }
-            }
-
-            PadEcho(2);
-            Echo($"Performance: {((FunctionIdentifier)performanceIndex).ToString().Replace("_", " ")}");
-            Echo(stateRecords[(FunctionIdentifier)performanceIndex].ToString());
         }
 
         void Commands(string argument)
@@ -1091,7 +1097,6 @@ namespace IngameScript
 
 
         #region State Functions
-
         IEnumerator<FunctionState> OrderCargoState()
         {
             IMyInventory inventory;
@@ -1112,7 +1117,7 @@ namespace IngameScript
                     foreach (MyInventoryItem item in mainFunctionItemList)
                     {
                         if (PauseTickRun) yield return stateActive;
-                        sortableListMain.Add(new SortableObject { text = item.Type.ToString(), key = $"{GetItemCategory(item.Type.ToString())}|{ItemName(item)}" });
+                        sortableListMain.Add(new SortableObject { text = item.Type.ToString(), key = $"{GetItemCategory(item)}|{ItemName(item)}" });
                     }
                     sortableListMain = sortableListMain.OrderBy(x => x.key).ToList();
 
@@ -1527,9 +1532,11 @@ namespace IngameScript
                     monitoredAssembler = managedBlocks[index].monitoredAssembler;
                     assembler = (IMyAssembler)managedBlocks[index].block;
 
+                    if (!monitoredAssembler.CheckNow) continue;
+
                     changed = monitoredAssembler.HasChanged();
 
-                    if (!changed && monitoredAssembler.CheckNow)
+                    if (!changed)
                     {
                         assembler.GetQueue(productionList);
                         foreach (MyProductionItem myProductionItem in productionList)
@@ -1557,8 +1564,13 @@ namespace IngameScript
                             }
                             changed = changed || monitoredAssembler.productionComparison.Count > 0;
                         }
+                        monitoredAssembler.productionComparison.Clear();
+                        foreach (KeyValuePair<string, double> kvp in productionComparison)
+                            monitoredAssembler.productionComparison[kvp.Key] = kvp.Value;
+                        productionComparison.Clear();
                     }
-                    if (!changed && monitoredAssembler.CheckNow)
+
+                    if (!changed)
                     {
                         if (monitoredAssembler.stalling)
                         {
@@ -1572,22 +1584,17 @@ namespace IngameScript
                             }
 
                             Output($"Reset Idle Assembler: {ShortenName(assembler.CustomName, 12)}");
-
-                            monitoredAssembler.Reset(delayResetIdleAssembler);
                         }
                         else
                             monitoredAssembler.stalling = true;
                     }
-                    else if (changed || assembler.IsQueueEmpty)
-                        monitoredAssembler.Reset(delayResetIdleAssembler);
+                    else
+                        monitoredAssembler.stalling = false;
 
-                    if (!assembler.IsQueueEmpty)
-                    {
-                        monitoredAssembler.productionComparison.Clear();
-                        foreach (KeyValuePair<string, double> kvp in productionComparison)
-                            monitoredAssembler.productionComparison[kvp.Key] = kvp.Value;
-                        productionComparison.Clear();
-                    }
+                    if (assembler.IsQueueEmpty)
+                        monitoredAssembler.Reset();
+
+                    monitoredAssembler.SetNextCheck(delayResetIdleAssembler / 2.0);
                 }
                 yield return stateContinue;
             }
@@ -1860,7 +1867,7 @@ namespace IngameScript
                 foreach (ItemDefinition itemDef in itemListMain[oreType].Values)
                 {
                     if (PauseTickRun) yield return stateActive;
-                    if (itemDef.amount > 0.5)
+                    if (itemDef.amount >= oreMinimum)
                         orePriorities[itemDef.ItemType] = LeastKeyedOrePercentage(itemDef.subtypeID);
                 }
                 foreach (long index in typedIndexes[setKeyIndexRefinery])
@@ -1887,7 +1894,7 @@ namespace IngameScript
                         for (int x = 0; x < mainFunctionItemList.Count; x++)
                         {
                             if (PauseTickRun) yield return stateActive;
-                            if ((double)mainFunctionItemList[x].Amount >= 0.01)
+                            if ((double)mainFunctionItemList[x].Amount >= oreMinimum)
                             {
                                 if (!orePriorities.ContainsKey(mainFunctionItemList[x].Type))
                                     orePriorities[mainFunctionItemList[x].Type] = LeastKeyedOrePercentage(mainFunctionItemList[x]);
@@ -1895,6 +1902,7 @@ namespace IngameScript
                                 minPercent = Math.Min(minPercent, sortableListMain[sortableListMain.Count - 1].amount);
                                 maxPercent = Math.Max(maxPercent, sortableListMain[sortableListMain.Count - 1].amount);
                             }
+                            else while (!PutInStorage(new List<MyInventoryItem> { mainFunctionItemList[x] }, index, 0)) yield return stateActive;
                         }
                         if (minPercent < maxPercent)
                         {
@@ -1904,7 +1912,7 @@ namespace IngameScript
                         }
                     }
                     //Set automatic limits
-                    if (activeOres > 1 && !managedBlocks[index].IsClone)
+                    if (!mainBlockDefinition.IsClone && !mainBlockDefinition.Settings.GetOption(setKeyBlockNoAutolimit) && activeOres > 1)
                     {
                         sortableListMain.Clear();
                         foreach (KeyValuePair<MyItemType, double> pair in orePriorities)
@@ -1923,12 +1931,12 @@ namespace IngameScript
                         for (int x = 0; x < sortableListMain.Count; x++)
                         {
                             if (PauseTickRun) yield return stateActive;
-                            currentShares = (sortableListMain.Count - x) + 1;
+                            currentShares = (sortableListMain.Count - (x + 1)) + 1;
 
                             if (x < prioritizedOres)
                                 currentShares += 10;
 
-                            mainBlockDefinition.Settings.limits.AddItem(oreType, sortableListMain[x].text, new VariableItemCount((currentShares / maxShares) * 0.985, true));
+                            mainBlockDefinition.Settings.limits.AddItem(oreType, sortableListMain[x].text, new VariableItemCount(currentShares / maxShares, true));
                         }
                     }
 
@@ -3454,6 +3462,8 @@ namespace IngameScript
                                 foreach (long subIndex in tempIndexes)
                                 {
                                     if (PauseTickRun) yield return stateActive;
+                                    if (!AcceptsItem(managedBlocks[subIndex], mainFunctionItemList[x]))
+                                        continue;
                                     acceptingIndexes[subIndex] = -1;
                                 }
 
@@ -3748,6 +3758,7 @@ namespace IngameScript
 
             if (!IsStateRunning)
             {
+                if (items.Count == 0) return true;
                 tempStorageItemList = items;
                 tempStorageBlockIndex = blockIndex;
                 tempStorageInventoryIndex = inventoryIndex;
@@ -3766,6 +3777,7 @@ namespace IngameScript
             List<long> tempIndexList = NewLongList;
             string itemID, typeID, typeKey;
             bool bottleException;
+            long storageIndex;
             yield return stateContinue;
 
             while (true)
@@ -3779,14 +3791,13 @@ namespace IngameScript
                     itemID = item.Type.ToString();
                     typeID = item.Type.TypeId;
                     transferAmount = (double)item.Amount;
+
                     if (tempStorageMax > 0 && transferAmount > tempStorageMax)
                         transferAmount = tempStorageMax;
 
-                    if (transferAmount > (double)item.Amount)
-                        transferAmount = (double)item.Amount;
-
                     originInventory = origBlock.GetInventory(tempStorageInventoryIndex);
                     bottleException = fillingBottles && IsBottle(item) && !(origBlock is IMyGasGenerator || origBlock is IMyGasTank);
+
                     if (transferAmount > 0)
                     {
                         if (!bottleException && itemCategoryDictionary.ContainsKey(itemID) && indexesStorageLists.ContainsKey(itemCategoryDictionary[itemID]))
@@ -3818,13 +3829,15 @@ namespace IngameScript
                         {
                             if (PauseTickRun) yield return stateActive;
 
-                            if (!IsBlockOk(tempIndexList[i]) || CurrentVolumePercentage(tempIndexList[i]) >= 0.985)
+                            storageIndex = tempIndexList[i];
+
+                            if (!IsBlockOk(storageIndex) || CurrentVolumePercentage(storageIndex) >= 0.99 || !AcceptsItem(managedBlocks[storageIndex], item))
                                 continue;
 
-                            destBlock = managedBlocks[tempIndexList[i]].block;
+                            destBlock = managedBlocks[storageIndex].block;
                             if (storageDefinitionA.block != destBlock)
                             {
-                                while (!Transfer(ref transferAmount, originInventory, managedBlocks[tempIndexList[i]], item))
+                                while (!Transfer(ref transferAmount, originInventory, managedBlocks[storageIndex], item))
                                     yield return stateActive;
 
                                 if (transferAmount <= 0)
@@ -4264,24 +4277,25 @@ namespace IngameScript
                                 typedIndexes[setKeyIndexStorage].Add(index);
                                 if (currentPriority)
                                     priorityCategories.Add(setKeyIndexStorage);
-                                foreach (string storageType in currentDefinition.Settings.storageCategories)
-                                {
-                                    if (PauseTickRun) yield return stateActive;
-                                    if (storageType == "all")
-                                        for (int x = 0; x < indexesStorageLists.Count; x++)
-                                        {
-                                            if (PauseTickRun) yield return stateActive;
-                                            indexesStorageLists.Values[x].Add(index);
-                                            if (currentPriority)
-                                                priorityCategories.Add(indexesStorageLists.Keys[x]);
-                                        }
-                                    else if (indexesStorageLists.ContainsKey(storageType))
+                                if (currentDefinition.Settings.storageCategories.Contains("all", stringComparer) || currentDefinition.Settings.storageCategories.Contains("*"))
+                                    for (int x = 0; x < indexesStorageLists.Count; x++)
                                     {
-                                        indexesStorageLists[storageType].Add(index);
+                                        if (PauseTickRun) yield return stateActive;
+                                        indexesStorageLists.Values[x].Add(index);
                                         if (currentPriority)
-                                            priorityCategories.Add(storageType);
+                                            priorityCategories.Add(indexesStorageLists.Keys[x]);
                                     }
-                                }
+                                else
+                                    foreach (string storageType in currentDefinition.Settings.storageCategories)
+                                    {
+                                        if (PauseTickRun) yield return stateActive;
+                                        if (indexesStorageLists.ContainsKey(storageType))
+                                        {
+                                            indexesStorageLists[storageType].Add(index);
+                                            if (currentPriority)
+                                                priorityCategories.Add(storageType);
+                                        }
+                                    }
                             }
                         }
                         //Index blocks with inventories
@@ -4332,17 +4346,7 @@ namespace IngameScript
                                 ConveyorControl(currentDefinition);
                         }
                     }
-                    if (currentBlock is IMyTextPanel)
-                    {
-                        while (!panelMaster.ProcessPanelOptions(currentDefinition)) yield return stateActive;
-
-                        if (IsPanel(currentDefinition))
-                        {
-                            typedIndexes[setKeyIndexPanel].Add(index);
-                            panelMaster.CheckPanel(currentDefinition);
-                        }
-                    }
-                    else if (IsPanelProvider(currentBlock) && ContainsString(currentBlock.CustomName, panelTag))
+                    if (currentBlock is IMyTextPanel || (IsPanelProvider(currentBlock) && ContainsString(currentBlock.CustomName, panelTag)))
                     {
                         provider = (IMyTextSurfaceProvider)currentBlock;
                         for (int s = 0; s < provider.SurfaceCount; s++)
@@ -4361,7 +4365,20 @@ namespace IngameScript
 
                     if (currentDefinition.Settings.logicComparisons.Count > 0)
                         typedIndexes[setKeyIndexLogic].Add(currentBlock.EntityId);
+
+                    if (useAcceptanceFilter && currentBlock.HasInventory && !itemAcceptanceDictionary.ContainsKey(BlockSubtype(currentBlock)))
+                    {
+                        itemAcceptanceDictionary[BlockSubtype(currentBlock)] = new HashSet<string>();
+                        acceptedItemList.Clear();
+                        currentBlock.GetInventory(0).GetAcceptedItems(acceptedItemList);
+                        foreach (MyItemType itemType in acceptedItemList)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+                            itemAcceptanceDictionary[BlockSubtype(currentBlock)].Add(itemType.ToString());
+                        }
+                    }
                 }
+                panelMaster.updateTime = Now;
 
                 //Order blocks by priority and remove duplicates
                 foreach (KeyValuePair<string, List<long>> kvp in typedIndexes)
@@ -4396,14 +4413,13 @@ namespace IngameScript
 
         bool GetTags(ItemCollection quota, string text, bool acceptZero = true)
         {
-            if (!TextHasLength(text)) return true;
-
             selfContainedIdentifier = FunctionIdentifier.Processing_Tags;
 
             if (!IsStateRunning)
             {
+                if (!TextHasLength(text)) return true;
                 tempGetTagsCollection = quota;
-                tempGetTagsText = text;
+                tempGetTagsText = RemoveSpaces(text, true);
                 tempGetTagsAcceptZero = acceptZero;
             }
 
@@ -4530,11 +4546,11 @@ namespace IngameScript
                                     break;
                                 case "loadout":
                                     if (hasInventory)
-                                        while (!GetTags(tempBlockOptionDefinition.Settings.loadout, RemoveSpaces(data, true), false)) yield return stateActive;
+                                        tempBlockOptionDefinition.Settings.loadoutSearchString = $"{(tempBlockOptionDefinition.Settings.loadoutSearchString.Length > 0 ? $"{tempBlockOptionDefinition.Settings.loadoutSearchString}|" : "")}{data}";
                                     break;
                                 case "limit":
                                     if (hasInventory)
-                                        while (!GetTags(tempBlockOptionDefinition.Settings.limits, RemoveSpaces(data, true))) yield return stateActive;
+                                        tempBlockOptionDefinition.Settings.limitSearchString = $"{(tempBlockOptionDefinition.Settings.limitSearchString.Length > 0 ? $"{tempBlockOptionDefinition.Settings.limitSearchString}|" : "")}{data}";
                                     break;
                                 case "logicand":
                                     while (!ProcessTimer(tempBlockOptionDefinition.Settings.logicComparisons, data)) yield return stateActive;
@@ -4569,22 +4585,23 @@ namespace IngameScript
                         storageSet = true;
                     }
 
-                    if (tempBlockOptionDefinition.Settings.GetOption(setKeyBlockStorageKey))
-                    {
-                        if (tempBlockOptionDefinition.Settings.storageCategories.Count == 0)
-                        {
-                            tempBlockOptionDefinition.Settings.storageCategories.Add("all");
-                            tempBlockOptionDefinition.Settings.storageCategories.AddRange(itemCategoryList);
-                        }
-                    }
-                    else if (processBlockOptionList.Count == 0 && !storageSet && !tempBlockOptionDefinition.Settings.manual && tempBlockOptionDefinition.block is IMyCargoContainer && !IsGun(tempBlockOptionDefinition))
-                    {
+                    if (processBlockOptionList.Count == 0 && !storageSet && !tempBlockOptionDefinition.Settings.manual && tempBlockOptionDefinition.block is IMyCargoContainer && !IsGun(tempBlockOptionDefinition))
                         tempBlockOptionDefinition.Settings.SetOption(setKeyBlockStorageKey);
+
+                    if (tempBlockOptionDefinition.Settings.GetOption(setKeyBlockStorageKey) &&
+                        tempBlockOptionDefinition.Settings.storageCategories.Count == 0)
                         tempBlockOptionDefinition.Settings.storageCategories.Add("all");
-                        tempBlockOptionDefinition.Settings.storageCategories.AddRange(itemCategoryList);
-                    }
 
                     tempBlockOptionDefinition.settingBackup = dataSource;
+                }
+                // Update
+                if (tempBlockOptionDefinition.Settings.updateTime < itemAddedOrChanged ||
+                    (tempBlockOptionDefinition.Settings.loadout.ItemTypeCount == 0 && tempBlockOptionDefinition.Settings.loadoutSearchString.Length > 0) ||
+                    (tempBlockOptionDefinition.Settings.limits.ItemTypeCount == 0 && tempBlockOptionDefinition.Settings.limitSearchString.Length > 0))
+                {
+                    while (!GetTags(tempBlockOptionDefinition.Settings.loadout, tempBlockOptionDefinition.Settings.loadoutSearchString, false)) yield return stateActive;
+                    while (!GetTags(tempBlockOptionDefinition.Settings.limits, tempBlockOptionDefinition.Settings.limitSearchString)) yield return stateActive;
+                    tempBlockOptionDefinition.Settings.updateTime = Now;
                 }
                 if (TextHasLength(tempBlockOptionDefinition.cloneGroup))
                 {
@@ -4625,15 +4642,19 @@ namespace IngameScript
         IEnumerator<FunctionState> GenerateBlockOptionState()
         {
             IMyTerminalBlock block;
-            StringBuilder builder = NewBuilder, optionBuilder = NewBuilder;
-            bool none;
+            BlockSettings Settings;
+            StringBuilder builder = NewBuilder;
+            List<string> values = new List<string>();
             yield return stateContinue;
 
             while (true)
             {
                 block = tempGenerateBlockOptionBlockDefinition.block;
+                Settings = tempGenerateBlockOptionBlockDefinition.Settings;
+
                 builder.Clear();
-                optionBuilder.Clear();
+
+                // Preserve when empty
                 if (TextHasLength(optionBlockFilter) && TextHasLength(tempGenerateBlockOptionBlockDefinition.DataSource))
                 {
                     BuilderAppendLine(builder, tempGenerateBlockOptionBlockDefinition.DataSource);
@@ -4641,73 +4662,63 @@ namespace IngameScript
                 }
                 if (TextHasLength(optionBlockFilter))
                     BuilderAppendLine(builder, optionBlockFilter);
-                BuilderAppendLine(builder, $"Automatic={!tempGenerateBlockOptionBlockDefinition.Settings.manual}");
-                builder.Append("Options=");
 
-                AppendOption(tempGenerateBlockOptionBlockDefinition.Settings.settingDictionaryBools[setKeyBlockToggles], builder, optionBuilder);
+                // Automatic=
+                BuilderAppendLine(builder, $"Automatic={!Settings.manual}");
+
+                // Options=
+                foreach (KeyValuePair<string, SortedList<string, bool>> l in Settings.settingDictionaryBools)
+                    values.AddRange(l.Value.Keys.Where(k => l.Value[k]));
                 if (PauseTickRun) yield return stateActive;
+                BuilderAppendLine(builder, $"Options={String.Join("|", values.Select(i => Formatted(i)))}");
+                values.Clear();
 
-                if (tempGenerateBlockOptionBlockDefinition.HasInventory)
-                {
-                    AppendOption(tempGenerateBlockOptionBlockDefinition.Settings.settingDictionaryBools[setKeyBlockInputToggles], builder, optionBuilder);
-
-                    if (block.InventoryCount > 1)
-                    {
-                        AppendOption(tempGenerateBlockOptionBlockDefinition.Settings.settingDictionaryBools[setKeyBlockOutputToggles], builder, optionBuilder);
-
-                        if (block is IMyAssembler)
-                            AppendOption(tempGenerateBlockOptionBlockDefinition.Settings.settingDictionaryBools[setKeyBlockAssemblerToggles], builder, optionBuilder);
-                    }
-                }
-                BuilderAppendLine(builder);
-                if (BuilderHasLength(optionBuilder))
-                    BuilderAppendLine(builder, optionBuilder.ToString());
+                // Optional options
+                // Basic
+                values.AddRange(Settings.settingDictionaryBools[setKeyBlockToggles].Keys.Where(k => !Settings.settingDictionaryBools[setKeyBlockToggles][k]));
+                // Input
+                if (block.HasInventory)
+                    values.AddRange(Settings.settingDictionaryBools[setKeyBlockInputToggles].Keys.Where(k => !Settings.settingDictionaryBools[setKeyBlockInputToggles][k]));
+                // Output
+                if (block.InventoryCount > 1)
+                    values.AddRange(Settings.settingDictionaryBools[setKeyBlockOutputToggles].Keys.Where(k => !Settings.settingDictionaryBools[setKeyBlockOutputToggles][k]));
+                // Assembler
+                if (block is IMyAssembler)
+                    values.AddRange(Settings.settingDictionaryBools[setKeyBlockAssemblerToggles].Keys.Where(k => !Settings.settingDictionaryBools[setKeyBlockAssemblerToggles][k]));
                 if (PauseTickRun) yield return stateActive;
-                optionBuilder.Clear();
-                AppendOption(builder, $"Priority={tempGenerateBlockOptionBlockDefinition.Settings.priority}", tempGenerateBlockOptionBlockDefinition.Settings.priority == 1.0);
+                AppendOption(builder, String.Join("|", values.Select(i => Formatted(i))));
+                values.Clear();
+
+                // Priority
+                AppendOption(builder, $"Priority={Settings.priority}", Settings.priority == 1.0);
+
+                // Clone group
                 AppendOption(builder, $"Clone Group={tempGenerateBlockOptionBlockDefinition.cloneGroup}", !TextHasLength(tempGenerateBlockOptionBlockDefinition.cloneGroup));
-                if (tempGenerateBlockOptionBlockDefinition.HasInventory)
-                {
-                    none = !tempGenerateBlockOptionBlockDefinition.Settings.GetOption(setKeyBlockStorageKey);
-                    AppendOption(builder, optionBuilder, "Storage=", none);
 
-                    AppendOption(builder, optionBuilder, "All", none || !tempGenerateBlockOptionBlockDefinition.Settings.storageCategories.Contains("all"));
-                    itemCategoryList.ForEach(category => AppendOption(builder, optionBuilder, category, none || !tempGenerateBlockOptionBlockDefinition.Settings.storageCategories.Contains(category)));
-                    if (!none)
-                        BuilderAppendLine(builder);
-                    if (BuilderHasLength(optionBuilder))
-                        BuilderAppendLine(builder, optionBuilder.ToString());
-                    optionBuilder.Clear();
-                    if (PauseTickRun) yield return stateActive;
-                    if (tempGenerateBlockOptionBlockDefinition.Settings.loadout.ItemTypeCount > 0)
-                    {
-                        BuilderAppendLine(builder, $"Loadout={tempGenerateBlockOptionBlockDefinition.Settings.loadout}");
-                        if (PauseTickRun) yield return stateActive;
-                    }
-                    else
-                        AppendOption(builder, "Loadout=20%:ingot:iron:silicon:nickel|50:ore:ice");
-                    if (tempGenerateBlockOptionBlockDefinition.Settings.limits.ItemTypeCount > 0)
-                    {
-                        BuilderAppendLine(builder, $"Limit={tempGenerateBlockOptionBlockDefinition.Settings.limits}");
-                        if (PauseTickRun) yield return stateActive;
-                    }
-                    else
-                        AppendOption(builder, "Limit=25:ingot:*|10%:ore:*");
+                // Storage
+                if (block.HasInventory)
+                {
+                    values.AddRange(Settings.storageCategories.Count > 0 ? Settings.storageCategories : itemCategoryList);
+                    if (Settings.storageCategories.Count == 0)
+                        values.Insert(0, "all");
+                    AppendOption(builder, $"Storage={String.Join("|", values.Select(i => Formatted(i)))}", Settings.storageCategories.Count == 0);
                 }
+                if (PauseTickRun) yield return stateActive;
+
+                // Loadout
+                AppendOption(builder, $"Loadout={(Settings.loadout.ItemTypeCount > 0 ? $"{Settings.loadout}" : "20%:ingot:iron:silicon:nickel|50:ore:ice")}", Settings.loadout.ItemTypeCount == 0);
+                if (PauseTickRun) yield return stateActive;
+
+                // Limit
+                AppendOption(builder, $"Limit={(Settings.limits.ItemTypeCount > 0 ? $"{Settings.limits}" : "25:ingot:*|10%:ore:*")}", Settings.limits.ItemTypeCount == 0);
+                if (PauseTickRun) yield return stateActive;
+
+                // Logic
                 if (block is IMyFunctionalBlock)
                 {
-                    if (tempGenerateBlockOptionBlockDefinition.Settings.logicComparisons.Count > 0)
+                    if (Settings.logicComparisons.Count > 0)
                     {
-                        builder.Append(tempGenerateBlockOptionBlockDefinition.Settings.andComparison ? "LogicAnd=" : "LogicOr=");
-
-                        foreach (LogicComparison logicComparison in tempGenerateBlockOptionBlockDefinition.Settings.logicComparisons)
-                        {
-                            if (PauseTickRun) yield return stateActive;
-                            if (builder[builder.Length - 1] != '=')
-                                builder.Append("|");
-                            builder.Append(logicComparison.GetString);
-                        }
-                        BuilderAppendLine(builder);
+                        BuilderAppendLine(builder, $"{(tempGenerateBlockOptionBlockDefinition.Settings.andComparison ? "LogicAnd=" : "LogicOr=")}{String.Join("|", Settings.logicComparisons)}");
                     }
                     else
                     {
@@ -4715,7 +4726,10 @@ namespace IngameScript
                         AppendOption(builder, "LogicOr=ingot:iron<quota*0.95 | ingot:silicon<quota*0.95");
                     }
                 }
+                // Definition
                 AppendOption(builder, $"Definition={block.BlockDefinition}");
+
+                // Header
                 if (TextHasLength(optionBlockFilter))
                     BuilderAppendLine(builder, optionBlockFilter);
 
@@ -4744,12 +4758,6 @@ namespace IngameScript
                 return $"[Color=#FF0000FF]{text}[/Color]";
 
             return text;
-        }
-
-        string OptionLead(StringBuilder builder)
-        {
-            char last = BuilderHasLength(builder) ? builder[builder.Length - 1] : '\0';
-            return !BuilderHasLength(builder) ? "//" : last != '=' && last != '\r' && last != '\n' ? "|" : "";
         }
 
         static string[] SplitLines(string data)
@@ -4817,6 +4825,11 @@ namespace IngameScript
                 IsIngot(typeID) ? ingotKeyword :
                 IsOre(typeID) ? oreKeyword :
                 IsTool(typeID) ? toolKeyword : typeID;
+        }
+
+        string GetItemCategory(MyInventoryItem item)
+        {
+            return GetItemCategory($"{item.Type}");
         }
 
         static bool IsBlueprint(string data)
@@ -4935,11 +4948,14 @@ namespace IngameScript
         {
             IMyTerminalBlock block = managedBlock.block;
 
+            if (useAcceptanceFilter && itemAcceptanceDictionary.ContainsKey(BlockSubtype(block)) && (itemAcceptanceDictionary[BlockSubtype(block)].Count == 0 || !itemAcceptanceDictionary[BlockSubtype(block)].Contains($"{typeID}/{subtypeID}")))
+                return false;
+
             bool limited;
 
             double limit = managedBlock.Settings.limits.ItemCount(out limited, typeID, subtypeID, block);
 
-            if (limited && limit <= 0)
+            if (limited && limit <= 0.0)
                 return false;
 
             if (IsAmmo(typeID) && gunAmmoDictionary.ContainsKey(BlockSubtype(block)))
@@ -5041,15 +5057,11 @@ namespace IngameScript
             double leastFound = 0.5, keyOffset;
             ItemDefinition definition;
             bool first = true;
-            for (int x = 0; x < oreKeyedItemDictionary.Count; x++)
-                if (GetDefinition(out definition, oreKeyedItemDictionary.Keys[x]))
+            foreach (KeyValuePair<string, string> kvp in oreKeyedItemDictionary)
+                if (GetDefinition(out definition, kvp.Key) && (keyOffset = definition.oreKeys.IndexOf(subtypeID)) != -1)
                 {
-                    keyOffset = definition.oreKeys.IndexOf(subtypeID);
-                    if (keyOffset != -1)
-                    {
-                        leastFound = first ? definition.Percentage + (keyOffset * 0.00001) : Math.Min(leastFound, definition.Percentage + (keyOffset * 0.00001));
-                        first = false;
-                    }
+                    leastFound = first ? definition.Percentage + (keyOffset * 0.00001) : Math.Min(leastFound, definition.Percentage + (keyOffset * 0.00001));
+                    first = false;
                 }
             return leastFound;
         }
@@ -5265,7 +5277,7 @@ namespace IngameScript
 
             string subtypeID = item.Type.SubtypeId;
 
-            return (IsOre(item) && RefinedOre(item)) || IsAmmo(item) || IsFuel(item) || (typedIndexes[setKeyIndexGravelSifters].Count > 0 && IsIngot(item) && subtypeID == stoneType) ||
+            return (IsOre(item) && RefinedOre(item) && (double)item.Amount >= oreMinimum) || IsAmmo(item) || IsFuel(item) || (typedIndexes[setKeyIndexGravelSifters].Count > 0 && IsIngot(item) && subtypeID == stoneType) ||
                    (IsComponent(item) && subtypeID == canvasType) || IsGas(item);
         }
 
@@ -5425,8 +5437,8 @@ namespace IngameScript
 
         bool IsStorage(BlockDefinition block, MyInventoryItem item)
         {
-            return block.Settings.storageCategories.Contains("all") || block.Settings.storageCategories.Contains("*") ||
-                   block.Settings.storageCategories.Contains(GetItemCategory(item.Type.ToString()));
+            return block.Settings.storageCategories.Contains("all", stringComparer) || block.Settings.storageCategories.Contains("*") ||
+                   block.Settings.storageCategories.Contains(GetItemCategory(item), stringComparer);
         }
 
         bool LoadoutHome(BlockDefinition block, MyInventoryItem item)
@@ -5534,7 +5546,7 @@ namespace IngameScript
 
         bool IsCategory(string typeID)
         {
-            return IsWildCard(typeID) || itemCategoryList.Contains(typeID.ToLower());
+            return IsWildCard(typeID) || itemCategoryList.Contains(typeID, stringComparer);
         }
 
         bool UnavailableActions()
@@ -6144,6 +6156,7 @@ namespace IngameScript
                     display = display
                 };
                 InitialDefinition($"{typeID}/{subtypeID}", blueprintID, oreKeys);
+                itemAddedOrChanged = Now;
                 return true;
             }
             return false;
@@ -6197,6 +6210,7 @@ namespace IngameScript
                 itemCategoryDictionary[definition.FullID] = category;
                 AddCategory(category);
                 CheckModdedItem(definition);
+                itemAddedOrChanged = Now;
                 return true;
             }
             return false;
@@ -6238,20 +6252,6 @@ namespace IngameScript
         static void AppendOption(StringBuilder builder, string option, bool optional = true)
         {
             BuilderAppendLine(builder, $"{(optional ? "//" : "")}{option}");
-        }
-
-        void AppendOption(StringBuilder builder, StringBuilder optionBuilder, string option, bool optional)
-        {
-            if (optional)
-                optionBuilder.Append($"{OptionLead(optionBuilder)}{Formatted(option)}");
-            else
-                builder.Append($"{OptionLead(builder)}{Formatted(option)}");
-        }
-
-        void AppendOption(SortedList<string, bool> list, StringBuilder builder, StringBuilder optionBuilder)
-        {
-            foreach (KeyValuePair<string, bool> option in list)
-                AppendOption(builder, optionBuilder, option.Key, !option.Value);
         }
 
 
@@ -6371,11 +6371,15 @@ namespace IngameScript
                 return changed;
             }
 
-            public void Reset(double delay)
+            public void SetNextCheck(double delay)
+            {
+                nextCheck = Now.AddSeconds(delay);
+            }
+
+            public void Reset()
             {
                 stalling = false;
                 productionComparison.Clear();
-                nextCheck = Now.AddSeconds(delay);
                 currentProgress = 0f;
             }
         }
@@ -6552,25 +6556,26 @@ namespace IngameScript
                 SortedList<string, SortedList<string, List<ItemDAO>>> groupedItems = new SortedList<string, SortedList<string, List<ItemDAO>>>();
                 List<string> itemGroups = new List<string>();
 
-                string typeID, subtypeID;
+                string typeID, subtypeID, category;
                 foreach (KeyValuePair<string, VariableItemCount> kvp in itemList)
                 {
                     SplitID(kvp.Key, out typeID, out subtypeID);
+                    category = parent.GetItemCategory(kvp.Key);
 
-                    ItemDAO itemDAO = new ItemDAO(typeID, subtypeID, kvp.Value.ToString(), parent.ItemName(typeID, subtypeID));
+                    ItemDAO itemDAO = new ItemDAO(category, subtypeID, kvp.Value.ToString(), parent.ItemName(typeID, subtypeID));
 
-                    if (!groupedItems.ContainsKey(typeID))
-                        groupedItems[typeID] = new SortedList<string, List<ItemDAO>>();
+                    if (!groupedItems.ContainsKey(category))
+                        groupedItems[category] = new SortedList<string, List<ItemDAO>>();
 
-                    if (!groupedItems[typeID].ContainsKey(itemDAO.amount))
-                        groupedItems[typeID][itemDAO.amount] = new List<ItemDAO>();
+                    if (!groupedItems[category].ContainsKey(itemDAO.amount))
+                        groupedItems[category][itemDAO.amount] = new List<ItemDAO>();
 
-                    groupedItems[typeID][itemDAO.amount].Add(itemDAO);
+                    groupedItems[category][itemDAO.amount].Add(itemDAO);
                 }
 
                 foreach (KeyValuePair<string, SortedList<string, List<ItemDAO>>> kvpA in groupedItems)
                     foreach (KeyValuePair<string, List<ItemDAO>> kvpB in kvpA.Value)
-                        itemGroups.Add($"{(trackAmounts ? $"{kvpB.Key}:" : "")}{kvpA.Key}:{String.Join(":", kvpB.Value)}");
+                        itemGroups.Add($"{(trackAmounts ? $"{kvpB.Key}:" : "")}{kvpA.Key}:{String.Join(":", kvpB.Value.Select(s => $"'{s}'"))}");
 
                 return String.Join("|", itemGroups);
             }
@@ -6582,7 +6587,11 @@ namespace IngameScript
 
             public string typeID = "", comparison = "", compareAgainst = "";
 
-            public string GetString { get { ItemDefinition def; return $"{(parent.GetDefinition(out def, typeID) ? $"{def.category}:{def.displayName}" : typeID)}{comparison}{compareAgainst}"; } }
+            public override string ToString()
+            {
+                ItemDefinition def;
+                return $"{(parent.GetDefinition(out def, typeID) ? $"{def.category}:{def.displayName}" : typeID)}{comparison}{compareAgainst}";
+            }
         }
 
         public class PotentialAssembler
@@ -6642,18 +6651,13 @@ namespace IngameScript
 
             public SortedList<string, SortedList<string, bool>> settingDictionaryBools = new SortedList<string, SortedList<string, bool>>
             {
-                { setKeyBlockToggles, new SortedList<string, bool>
-                    {
-                        { setKeyToggleCountItems, true }, { setKeyToggleCountBlueprints, true }, { setKeyToggleSortItems, true },
-                        { setKeyToggleQueueAssembly, true}, { setKeyToggleQueueDisassembly, true }, { setKeyToggleDistribution, true },
-                        { setKeyToggleAutoLoadSettings, true }
-                    }
-                },
+                { setKeyBlockToggles, new SortedList<string, bool>() },
                 { setKeyBlockInputToggles, new SortedList<string, bool>
                     {
                         { setKeyBlockStorageKey, false }, { setKeyBlockAutoConveyorKey, false }, { setKeyBlockKeepInputKey, false },
                         { setKeyBlockRemoveInputKey, false },  { setKeyBlockNoSortingKey, false }, { setKeyBlockNoSpreadKey, false },
-                        { setKeyBlockNoCountKey, false }, { setKeyBlockGunOverrideKey, false }, { setKeyBlockLoadoutNoCount, false }
+                        { setKeyBlockNoCountKey, false }, { setKeyBlockGunOverrideKey, false }, { setKeyBlockLoadoutNoCount, false },
+                        { setKeyBlockNoAutolimit, false }
                     }
                 },
                 { setKeyBlockOutputToggles, new SortedList<string, bool>
@@ -6674,6 +6678,10 @@ namespace IngameScript
 
             public double priority;
 
+            public string limitSearchString = "", loadoutSearchString = "";
+
+            public DateTime updateTime = Now;
+
             public void Initialize()
             {
                 settingDictionaryBools[setKeyBlockToggles].Clear();
@@ -6688,6 +6696,8 @@ namespace IngameScript
                 settingDictionaryBools[setKeyBlockToggles][includeGridKeyword] = false;
                 settingDictionaryBools[setKeyBlockToggles][exclusionKeyword] = false;
                 settingDictionaryBools[setKeyBlockToggles][excludeGridKeyword] = false;
+
+                limitSearchString = loadoutSearchString = "";
 
                 limits.Clear();
                 loadout.Clear();
