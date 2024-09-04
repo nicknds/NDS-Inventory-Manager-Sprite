@@ -18,6 +18,8 @@ namespace IngameScript
 
             public static Program parent;
 
+            Color defPanelForegroundColor = new Color(0.7019608f, 0.9294118f, 1f, 1f);
+
             public string presetPanelOptions;
 
             StringBuilder measurementBuilder = NewBuilder;
@@ -38,6 +40,7 @@ namespace IngameScript
             int tempProcessPanelOptionSurfaceIndex;
             List<PanelObject> tempPanelObjects;
             List<long> tempIndexList = NewLongList;
+            public DateTime updateTime = Now;
             float tempColumn;
             bool tempSpan;
 
@@ -132,7 +135,7 @@ namespace IngameScript
                     if (surface.Script != nothingType)
                         surface.Script = nothingType;
 
-                    if (surface.ScriptForegroundColor == parent.defPanelForegroundColor)
+                    if (surface.ScriptForegroundColor == defPanelForegroundColor)
                     {
                         surface.ScriptForegroundColor = Color.Black;
                         surface.ScriptBackgroundColor = new Color(73, 141, 255, 255);
@@ -335,6 +338,7 @@ namespace IngameScript
                     }
                     else if (!StringsMatch(dataSource, panelDefinition.settingBackup))
                     {
+                        panelDefinition.itemSearchString = "";
                         panelDefinition.items.Clear();
                         keyBuilder.Clear();
                         dataLines = SplitLines(dataSource);
@@ -387,10 +391,7 @@ namespace IngameScript
                                         }
                                         break;
                                     case "items":
-                                        while (!parent.GetTags(panelDefinition.items, data.ToLower()))
-                                            yield return stateActive;
-                                        if (panelDefinition.items.ItemTypeCount > 0)
-                                            keyBuilder.Append(panelDefinition.items.ToString());
+                                        panelDefinition.itemSearchString = $"{(panelDefinition.itemSearchString.Length > 0 ? $"{panelDefinition.itemSearchString}|" : "")}{data}";
                                         break;
                                     case "sorting":
                                         switch (data.ToLower())
@@ -487,6 +488,7 @@ namespace IngameScript
                                         break;
                                 }
                             }
+                            keyBuilder.Append(panelDefinition.itemSearchString);
                         }
                         if (panelDefinition.panelType != PanelType.None)
                         {
@@ -527,6 +529,12 @@ namespace IngameScript
                         else
                             tempBlockOptionDefinition.panelDefinitionList.Remove(tempProcessPanelOptionSurfaceIndex);
                     }
+                    if (updateTime < parent.itemAddedOrChanged ||
+                        (panelDefinition.items.ItemTypeCount == 0 && panelDefinition.itemSearchString.Length > 0))
+                        while (!parent.GetTags(panelDefinition.items, panelDefinition.itemSearchString))
+                            yield return stateActive;
+                    if (panelDefinition.items.ItemTypeCount > 0)
+                        keyBuilder.Append(panelDefinition.items.ToString());
 
                     panelDefinition.settingBackup = dataSource;
 
@@ -1002,6 +1010,7 @@ namespace IngameScript
             public IEnumerator<FunctionState> StatusPanelState()
             {
                 int assembling, disassembling, idle, disabled;
+                List<long> tempIndices = new List<long>();
                 yield return stateContinue;
 
                 while (true)
@@ -1009,11 +1018,13 @@ namespace IngameScript
                     assembling = disassembling = idle = disabled = 0;
                     assemblyList.Clear();
                     disassemblyList.Clear();
-                    foreach (long index in typedIndexes[setKeyIndexAssemblers])
+                    tempIndices.AddRange(typedIndexes[setKeyIndexAssemblers]);
+                    foreach (long index in tempIndices)
                     {
                         if (PauseTickRun) yield return stateActive;
                         BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
                     }
+                    tempIndices.Clear();
                     foreach (KeyValuePair<string, int> kvp in assemblyList)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -1030,11 +1041,13 @@ namespace IngameScript
                     AddOutputItem(tempPanelDefinition, $" Idle:          {ShortNumber2(idle, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
                     assembling = idle = disabled = 0;
                     assemblyList.Clear();
-                    foreach (long index in typedIndexes[setKeyIndexRefinery])
+                    tempIndices.AddRange(typedIndexes[setKeyIndexRefinery]);
+                    foreach (long index in tempIndices)
                     {
                         if (PauseTickRun) yield return stateActive;
                         BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
                     }
+                    tempIndices.Clear();
                     foreach (KeyValuePair<string, int> kvp in assemblyList)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -1045,11 +1058,13 @@ namespace IngameScript
                     AddOutputItem(tempPanelDefinition, $" Idle:          {ShortNumber2(idle, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
                     assembling = idle = disabled = 0;
                     assemblyList.Clear();
-                    foreach (long index in typedIndexes[setKeyIndexGasGenerators])
+                    tempIndices.AddRange(typedIndexes[setKeyIndexGasGenerators]);
+                    foreach (long index in tempIndices)
                     {
                         if (PauseTickRun) yield return stateActive;
                         BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
                     }
+                    tempIndices.Clear();
                     AddOutputItem(tempPanelDefinition, BlockStatusTitle($"O2/H2 Gens x{ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4, false)}", disabled).PadRight(tempPanelDefinition.nameLength));
                     AddOutputItem(tempPanelDefinition, $" Active:        {ShortNumber2(assembling, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
                     AddOutputItem(tempPanelDefinition, $" Idle:          {ShortNumber2(idle, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
@@ -1155,7 +1170,7 @@ namespace IngameScript
 
                 public DisplayType displayType = DisplayType.Standard;
 
-                public DateTime nextUpdateTime = Now;
+                public DateTime nextUpdateTime = Now, updateTime = Now;
 
                 public ItemCollection items = NewCollection;
 
@@ -1163,7 +1178,7 @@ namespace IngameScript
 
                 public Vector2 size = new Vector2(1, 1), positionOffset = new Vector2(0, 0);
 
-                public string font = "Monospace", settingKey = "", spanKey = "", childSpanKey = "", settingBackup = "";
+                public string font = "Monospace", settingKey = "", spanKey = "", childSpanKey = "", settingBackup = "", itemSearchString = "";
 
                 public IMyTextSurface Surface { get { return provider ? ((IMyTextSurfaceProvider)parent.block).GetSurface(surfaceIndex) : (IMyTextPanel)parent.block; } }
 
