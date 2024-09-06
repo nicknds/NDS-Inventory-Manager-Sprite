@@ -1232,6 +1232,8 @@ namespace IngameScript
                             switch (RemoveSpaces(key, true).Trim())
                             {
                                 case "name":
+                                    if (!StringsMatch(definition.displayName, data))
+                                        itemAddedOrChanged = Now;
                                     definition.displayName = data;
                                     break;
                                 case "quota":
@@ -1262,6 +1264,8 @@ namespace IngameScript
                                     break;
                                 case "category":
                                     data = data.ToLower();
+                                    if (!StringsMatch(definition.category, data))
+                                        itemAddedOrChanged = Now;
                                     definition.category = data;
                                     AddCategory(data);
                                     break;
@@ -4599,6 +4603,9 @@ namespace IngameScript
                     (tempBlockOptionDefinition.Settings.loadout.ItemTypeCount == 0 && tempBlockOptionDefinition.Settings.loadoutSearchString.Length > 0) ||
                     (tempBlockOptionDefinition.Settings.limits.ItemTypeCount == 0 && tempBlockOptionDefinition.Settings.limitSearchString.Length > 0))
                 {
+
+                    tempBlockOptionDefinition.Settings.limits.Clear();
+                    tempBlockOptionDefinition.Settings.loadout.Clear();
                     while (!GetTags(tempBlockOptionDefinition.Settings.loadout, tempBlockOptionDefinition.Settings.loadoutSearchString, false)) yield return stateActive;
                     while (!GetTags(tempBlockOptionDefinition.Settings.limits, tempBlockOptionDefinition.Settings.limitSearchString)) yield return stateActive;
                     tempBlockOptionDefinition.Settings.updateTime = Now;

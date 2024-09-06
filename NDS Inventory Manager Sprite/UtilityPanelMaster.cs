@@ -531,8 +531,11 @@ namespace IngameScript
                     }
                     if (updateTime < parent.itemAddedOrChanged ||
                         (panelDefinition.items.ItemTypeCount == 0 && panelDefinition.itemSearchString.Length > 0))
+                    {
+                        panelDefinition.items.Clear();
                         while (!parent.GetTags(panelDefinition.items, panelDefinition.itemSearchString))
                             yield return stateActive;
+                    }
                     if (panelDefinition.items.ItemTypeCount > 0)
                         keyBuilder.Append(panelDefinition.items.ToString());
 
