@@ -4709,6 +4709,7 @@ namespace IngameScript
                     if (Settings.storageCategories.Count == 0)
                         values.Insert(0, "all");
                     AppendOption(builder, $"Storage={String.Join("|", values.Select(i => Formatted(i)))}", Settings.storageCategories.Count == 0);
+                    values.Clear();
                 }
                 if (PauseTickRun) yield return stateActive;
 
