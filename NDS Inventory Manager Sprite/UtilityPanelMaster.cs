@@ -235,7 +235,7 @@ namespace IngameScript
                         if (parent.blueprintList.ContainsKey(key))
                         {
                             Blueprint blueprint = parent.blueprintList[key];
-                            key = parent.ItemName(blueprint.typeID, blueprint.subtypeID);
+                            key = parent.ItemName(blueprint.TypeID, blueprint.SubtypeID);
                         }
                         if (assembler.Mode == assemblyMode)
                         {
@@ -930,8 +930,8 @@ namespace IngameScript
                         if (PauseTickRun) yield return stateActive;
                         found = tempPanelDefinition.itemCategories.Contains(item.category);
                         if (!found) tempPanelDefinition.items.ItemCount(out found, item.typeID, item.subtypeID, null);
-                        if (found && item.display && item.amount >= tempPanelDefinition.minimumItemAmount && item.amount <= tempPanelDefinition.maximumItemAmount &&
-                            (!tempPanelDefinition.belowQuota || item.amount < item.currentQuota))
+                        if (found && item.display && item.Amount >= tempPanelDefinition.minimumItemAmount && item.Amount <= tempPanelDefinition.maximumItemAmount &&
+                            (!tempPanelDefinition.belowQuota || item.Amount < item.currentQuota))
                             foundItemList.Add(item);
                     }
                     switch (tempPanelDefinition.panelItemSorting)
@@ -940,10 +940,10 @@ namespace IngameScript
                             foundItemList = foundItemList.OrderBy(x => x.displayName).ToList();
                             break;
                         case PanelItemSorting.AscendingAmount:
-                            foundItemList = foundItemList.OrderBy(x => x.amount).ToList();
+                            foundItemList = foundItemList.OrderBy(x => x.Amount).ToList();
                             break;
                         case PanelItemSorting.DescendingAmount:
-                            foundItemList = foundItemList.OrderByDescending(x => x.amount).ToList();
+                            foundItemList = foundItemList.OrderByDescending(x => x.Amount).ToList();
                             break;
                         case PanelItemSorting.AscendingPercent:
                             foundItemList = foundItemList.OrderBy(x => x.Percentage).ToList();
@@ -955,7 +955,7 @@ namespace IngameScript
                     foreach (ItemDefinition item in foundItemList)
                     {
                         if (PauseTickRun) yield return stateActive;
-                        tempPanelDefinition.AddPanelItem(item.displayName.PadRight(tempPanelDefinition.nameLength), item.amount, item.currentQuota, item.queuedAssemblyAmount, item.queuedDisassemblyAmount, item.amountDifference);
+                        tempPanelDefinition.AddPanelItem(item.displayName.PadRight(tempPanelDefinition.nameLength), item.Amount, item.currentQuota, item.queuedAssemblyAmount, item.queuedDisassemblyAmount, item.amountDifference);
                     }
                     yield return stateContinue;
                 }

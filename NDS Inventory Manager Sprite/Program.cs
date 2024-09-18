@@ -8,6 +8,7 @@ using VRage;
 using VRage.Game;
 using VRage.Game.GUI.TextPanel;
 using VRage.Game.ModAPI.Ingame;
+using VRage.Network;
 
 namespace IngameScript
 {
@@ -48,21 +49,11 @@ namespace IngameScript
         static List<MyInventoryItem> NewItemList { get { return new List<MyInventoryItem>(); } }
         static List<string> NewStringList { get { return new List<string>(); } }
         static List<MyProductionItem> NewProductionList { get { return new List<MyProductionItem>(); } }
-        static ItemCollection NewCollection { get { return new ItemCollection(); } }
         static StringBuilder NewBuilder { get { return new StringBuilder(); } }
         static SortedList<long, double> NewSortedListLongDouble { get { return new SortedList<long, double>(); } }
         static HashSet<long> NewHashSetLong { get { return new HashSet<long>(); } }
         static HashSet<string> NewHashSetString { get { return new HashSet<string>(); } }
         static DateTime Now { get { return DateTime.Now; } }
-        List<ItemDefinition> GetAllItems
-        {
-            get
-            {
-                if (itemListAllItems.Count > 0) return itemListAllItems;
-                itemListMain.Values.ToList().ForEach(b => itemListAllItems.AddRange(b.Values));
-                return itemListAllItems;
-            }
-        }
 
         #endregion
 
@@ -179,8 +170,6 @@ namespace IngameScript
             }
         };
 
-        SortedList<string, SortedList<string, ItemDefinition>> itemListMain = new SortedList<string, SortedList<string, ItemDefinition>>();
-
         #endregion
 
         #region Lists
@@ -188,10 +177,6 @@ namespace IngameScript
         SortedList<string, List<long>> indexesStorageLists = new SortedList<string, List<long>>();
 
         SortedList<string, List<PotentialAssembler>> potentialAssemblerList = new SortedList<string, List<PotentialAssembler>>();
-
-        SortedList<string, string>
-            modItemDictionary = new SortedList<string, string>(),
-            oreKeyedItemDictionary = new SortedList<string, string>();
 
         SortedList<FunctionIdentifier, string> stateErrorCodes = new SortedList<FunctionIdentifier, string>();
 
@@ -225,14 +210,10 @@ namespace IngameScript
 
         Dictionary<long, BlockDefinition> managedBlocks = new Dictionary<long, BlockDefinition>(1500);
 
-        Dictionary<string, Blueprint>
-            blueprintList = new Dictionary<string, Blueprint>();
+        Dictionary<string, MyItemType>
+            gunAmmoDictionary = new Dictionary<string, MyItemType>();
 
-        Dictionary<string, string>
-            gunAmmoDictionary = new Dictionary<string, string>(),
-            itemCategoryDictionary = new Dictionary<string, string>();
-
-        Dictionary<string, HashSet<string>> itemAcceptanceDictionary = new Dictionary<string, HashSet<string>>();
+        Dictionary<string, HashSet<MyItemType>> itemAcceptanceDictionary = new Dictionary<string, HashSet<MyItemType>>();
 
         HashSet<string> antiflickerSet = NewHashSetString,
                         priorityCategories = NewHashSetString,
@@ -259,7 +240,7 @@ namespace IngameScript
 
         List<string>
             fullExclude = new List<string> { setKeySameGridOnly, setKeySurvivalKitAssembly },
-            itemCategoryList = NewStringList, modBlueprintList = NewStringList,
+            itemCategoryList = NewStringList,
             tagTempStringList = NewStringList,
             processBlockStorageList = NewStringList, processBlockOptionList = NewStringList;
 
@@ -274,8 +255,6 @@ namespace IngameScript
         List<IMyBlockGroup> groupList = new List<IMyBlockGroup>();
 
         List<IMyTerminalBlock> groupBlocks = new List<IMyTerminalBlock>(), scannedBlocks = new List<IMyTerminalBlock>(1500);
-
-        List<ItemDefinition> itemListAllItems = new List<ItemDefinition>();
 
         List<MyInventoryItem> countByListA = NewItemList, amountContainedListA = NewItemList, mainFunctionItemList = NewItemList, tempStorageItemList;
 
@@ -519,7 +498,8 @@ namespace IngameScript
             scanning = false, allowEcho = true,
             prioritySystemActivated = false, errorFilter = false, useDynamicQuota, increaseDynamicQuotaWhenLow, update = false,
             tempMatchingItemAppend, tempMatchingItemAcceptZero, tempOrderByPriority, tempDistributeBlueprintCount,
-            tempInsertBlueprintCount, tempGetTagsAcceptZero, useAcceptanceFilter = true;
+            tempInsertBlueprintCount, tempGetTagsAcceptZero, useAcceptanceFilter = true, mergeItemSelected = false,
+            tempCountItemsInListNegativeCounting;
 
         FunctionIdentifier selfContainedIdentifier, currentFunction = FunctionIdentifier.Idle;
 
@@ -544,7 +524,7 @@ namespace IngameScript
 
         string
             scriptName = "NDS Inventory Manager",
-            settingBackup = "", mergeItem = "",
+            settingBackup = "",
             stoneOreToIngotBasicID = PositionPrefix("0010", "StoneOreToIngotBasic"),
             lastString = "", itemCategoryString,
             tempItemSetting, tempScriptSetting,
@@ -553,6 +533,8 @@ namespace IngameScript
             tempCountItemsInListTypeID, tempCountItemsInListSubtypeID,
             tempAmountContainedTypeID, tempAmountContainedSubtypeID,
             tempGetTagsText;
+
+        MyItemType mergeType;
 
         string echoSpacer { get { return ColoredEcho("".PadRight(4, spacerChars[spacerIndex]), 3); } }
 
@@ -568,20 +550,17 @@ namespace IngameScript
 
         PanelMasterClass panelMaster = new PanelMasterClass();
 
-        ItemCollection itemCollectionMain = NewCollection,
-                       itemCollectionAlternate = NewCollection, itemCollectionProcessTotalLoadout = NewCollection,
-                       tempMatchingItemsCollection, tempSetBlockQuotaCollection,
-                       tempCountItemsInListCollection,
-                       tempGetTagsCollection;
+        ItemRepo itemRepo = new ItemRepo();
 
-        BlockDefinition mainBlockDefinition, alternateBlockDefinition, storageDefinitionA, blockCheckDefinitionA, tempBlockOptionDefinition,
-                        tempDistributeItemBlockDefinition, tempInsertBlueprintBlockDefinition, tempGenerateBlockOptionBlockDefinition;
+        ItemCollection itemCollectionMain, tempMatchingItemsCollection, tempCountItemsInListCollection;
 
         Blueprint tempDistributeBlueprint, tempRemoveBlueprint;
 
         MyInventoryItem tempTransferInventoryItem, tempDistributeItem;
 
         MyDefinitionId tempInsertBlueprintID;
+
+        BlockDefinition mainBlockDefinition, alternateBlockDefinition;
 
         IMyInventory tempTransferOriginInventory, tempOrderInventory, tempAmountContainedInventory;
 
@@ -773,7 +752,6 @@ namespace IngameScript
             if ((!reset && !update) || saving)
             {
                 tickStartTime = Now;
-                itemListAllItems.Clear();
 
                 bool handledCommand = false;
 
@@ -855,7 +833,7 @@ namespace IngameScript
                 string subArg = RemoveSpaces(argument, true);
                 if (subArg == "merge")
                 {
-                    mergeItem = "";
+                    mergeItemSelected = false;
                     echoMode = EchoMode.Main;
                     SetLastString("Closed Merge Menu");
                     return;
@@ -864,16 +842,16 @@ namespace IngameScript
                 if (int.TryParse(argument, out index))
                 {
                     index--;
-                    if (!TextHasLength(mergeItem))
+                    if (!mergeItemSelected)
                     {
-                        if (index < modItemDictionary.Count)
-                            mergeItem = modItemDictionary.Keys[index];
+                        if (index < itemRepo.modItems.Count)
+                            mergeType = itemRepo.modItems.Keys[index];
                     }
-                    else if (index < modBlueprintList.Count)
+                    else if (index < itemRepo.modBlueprints.Count)
                     {
-                        UpdateItemDef(mergeItem, modBlueprintList[index]);
-                        mergeItem = "";
-                        echoMode = modItemDictionary.Count > 0 && modBlueprintList.Count > 0 ? EchoMode.MergeMenu : EchoMode.Main;
+                        itemRepo.AddItemBlueprint(mergeType, itemRepo.modBlueprints[index], 1);
+                        mergeItemSelected = false;
+                        echoMode = itemRepo.modItems.Count > 0 && itemRepo.modBlueprints.Count > 0 ? EchoMode.MergeMenu : EchoMode.Main;
                         saving = true;
                     }
                 }
@@ -884,25 +862,25 @@ namespace IngameScript
         {
             Echo("--Merging Menu--");
             Echo("--Enter 'merge' to cancel--");
-            if (!TextHasLength(mergeItem))
+            if (mergeItemSelected)
             {
                 Echo("Choose Item");
-                for (int i = 0, max = modItemDictionary.Count; i < max; i++)
-                    Echo($"{i + 1} : {modItemDictionary.Values[i]}");
+                for (int i = 0; i < itemRepo.modItems.Count; i++)
+                    Echo($"{i + 1} : {itemRepo.modItems.Values[i]}");
 
-                if (modItemDictionary.Count == 0)
+                if (itemRepo.modItems.Count == 0)
                     echoMode = EchoMode.Main;
             }
             else
             {
-                Echo($"Choose Blueprint For {mergeItem}");
-                for (int i = 0, max = modBlueprintList.Count; i < max; i++)
-                    Echo($"{i + 1} : {modBlueprintList[i]}");
+                Echo($"Choose Blueprint For {mergeType}");
+                for (int i = 0, max = itemRepo.modBlueprints.Count; i < max; i++)
+                    Echo($"{i + 1} : {itemRepo.modBlueprints[i]}");
 
-                if (modBlueprintList.Count == 0)
+                if (itemRepo.modBlueprints.Count == 0)
                 {
                     echoMode = EchoMode.Main;
-                    mergeItem = "";
+                    mergeItemSelected = false;
                 }
             }
         }
@@ -912,11 +890,11 @@ namespace IngameScript
             Echo("--Merge Help List--");
             Echo("--Enter 'merge?' to hide--");
             Echo("--Enter 'merge' to begin merge--");
-            for (int i = 0; i < modItemDictionary.Count; i++)
-                Echo($"ITM: {modItemDictionary.Values[i]}");
+            for (int i = 0; i < itemRepo.modItems.Count; i++)
+                Echo($"ITM: {itemRepo.modItems.Values[i]}");
 
-            for (int i = 0; i < modBlueprintList.Count; i++)
-                Echo($"BPT: {modBlueprintList[i]}");
+            for (int i = 0; i < itemRepo.modBlueprints.Count; i++)
+                Echo($"BPT: {itemRepo.modBlueprints[i]}");
         }
 
         void MainEcho()
@@ -930,9 +908,9 @@ namespace IngameScript
             Echo($"Panels: {typedIndexes[setKeyIndexPanel].Count}");
             Echo($"Active Functions: {stateErrorCodes.Count}");
 
-            OptionalEcho($"Mod Items: {modItemDictionary.Count}", modItemDictionary.Count > 0);
-            OptionalEcho($"Mod Blueprints: {modBlueprintList.Count}", modBlueprintList.Count > 0);
-            OptionalEcho("-Enter 'merge' to begin merge", modItemDictionary.Count > 0 && modBlueprintList.Count > 0);
+            OptionalEcho($"Mod Items: {itemRepo.modItems.Count}", itemRepo.modItems.Count > 0);
+            OptionalEcho($"Mod Blueprints: {itemRepo.modBlueprints.Count}", itemRepo.modBlueprints.Count > 0);
+            OptionalEcho("-Enter 'merge' to begin merge", itemRepo.modItems.Count > 0 && itemRepo.modBlueprints.Count > 0);
 
             OptionalEcho($"{ColoredEcho($"Overheat x{overheatTicks}", 1)}", overheatTicks > 0);
 
@@ -1005,11 +983,11 @@ namespace IngameScript
                     }
                     break;
                 case "merge?":
-                    echoMode = (echoMode == EchoMode.Main && modItemDictionary.Count + modBlueprintList.Count > 0) ? EchoMode.MergeHelp : EchoMode.Main;
+                    echoMode = (echoMode == EchoMode.Main && itemRepo.modItems.Count + itemRepo.modBlueprints.Count > 0) ? EchoMode.MergeHelp : EchoMode.Main;
                     SetLastString(echoMode == EchoMode.MergeHelp ? "Opened Merge Help List" : "Closed Merge Help List");
                     break;
                 case "merge":
-                    echoMode = (echoMode == EchoMode.Main && modItemDictionary.Count > 0 && modBlueprintList.Count > 0) ? EchoMode.MergeMenu : EchoMode.Main;
+                    echoMode = (echoMode == EchoMode.Main && itemRepo.modItems.Count > 0 && itemRepo.modBlueprints.Count > 0) ? EchoMode.MergeMenu : EchoMode.Main;
                     SetLastString(echoMode == EchoMode.MergeMenu ? "Opened Merge Menu" : "Closed Merge Menu");
                     break;
                 case "scan":
@@ -1189,6 +1167,8 @@ namespace IngameScript
             int index;
             string subSetting, key, data, typeID, subtypeID;
             string[] subSettingArray;
+            MyItemType itemType = default(MyItemType);
+            ItemDefinition definition = null;
             yield return stateContinue;
 
             while (true)
@@ -1197,9 +1177,8 @@ namespace IngameScript
                 typeID = subtypeID = "";
                 subSettingArray = subSetting.Split('~');
 
-                ItemDefinition definition = new ItemDefinition();
                 acquiredDefinition = false;
-                for (int i = 0; i < subSettingArray.Length; i++)
+                for (int i = 0; i < subSettingArray.Length && !TextHasLength(typeID) && !TextHasLength(subtypeID); i++)
                 {
                     if (PauseTickRun) yield return stateActive;
 
@@ -1211,11 +1190,12 @@ namespace IngameScript
                         else if (key == "subtype")
                             subtypeID = data;
                     }
-                    if (TextHasLength(typeID) && TextHasLength(subtypeID)) break;
                 }
 
                 if (TextHasLength(typeID) && TextHasLength(subtypeID))
                 {
+                    itemType = new MyItemType(typeID, subtypeID);
+                    itemRepo.AddItemToDictionary(itemType);
                     AddItemDef(subtypeID, subtypeID, typeID, "");
                     acquiredDefinition = GetDefinition(out definition, $"{typeID}/{subtypeID}");
                 }
@@ -1232,9 +1212,8 @@ namespace IngameScript
                             switch (RemoveSpaces(key, true).Trim())
                             {
                                 case "name":
-                                    if (!StringsMatch(definition.displayName, data))
+                                    if (itemRepo.RenameItem(itemType, data))
                                         itemAddedOrChanged = Now;
-                                    definition.displayName = data;
                                     break;
                                 case "quota":
                                     index = data.IndexOf("<");
@@ -1270,13 +1249,7 @@ namespace IngameScript
                                     AddCategory(data);
                                     break;
                                 case "blueprint":
-                                    if (IsBlueprint(definition.blueprintID))
-                                        blueprintList.Remove(definition.blueprintID);
-
-                                    definition.blueprintID = data;
-                                    if (TextHasLength(data))
-                                        modItemDictionary.Remove(definition.FullID);
-
+                                    itemRepo.AddItemBlueprint(itemType, data);
                                     break;
                                 case "assemblymultiplier":
                                     if (double.TryParse(data, out dataNumber))
@@ -1302,7 +1275,7 @@ namespace IngameScript
                                         definition.oreKeys.Clear();
                                         definition.oreKeys.AddRange(oreKeys);
                                     }
-                                    if (definition.oreKeys.Count == 0 && IsIngot(definition.typeID))
+                                    if (definition.oreKeys.Count == 0 && definition.IsIngot)
                                         definition.oreKeys.Add(subtypeID);
 
                                     break;
@@ -1316,12 +1289,7 @@ namespace IngameScript
                         }
                     }
 
-                    if (IsBlueprint(definition.blueprintID))
-                        blueprintList[definition.blueprintID] = ItemToBlueprint(definition);
-
-                    itemCategoryDictionary[definition.FullID] = definition.category;
-                    FinalizeKeys(definition);
-                    CheckModdedItem(definition);
+                    definition.FinalizeKeys();
                 }
 
                 yield return stateContinue;
@@ -1362,8 +1330,9 @@ namespace IngameScript
                 destinationInventory = alternateBlockDefinition.Input;
                 if (destinationInventory != tempTransferOriginInventory)
                 {
-                    bool isLimited, stopFunc = false;
-                    double itemLimit = alternateBlockDefinition.Settings.limits.ItemCount(out isLimited, tempTransferInventoryItem, alternateBlockDefinition.block), contained = 0, volumeLimit = GetCurrentVolumeLimit(tempTransferInventoryItem, alternateBlockDefinition.block), currentTransferAmount = tempTransferAmount;
+                    double itemLimit;
+                    bool isLimited = alternateBlockDefinition.Settings.limits.ItemCount(tempTransferInventoryItem, alternateBlockDefinition.block, out itemLimit), stopFunc = false;
+                    double contained = 0, volumeLimit = GetCurrentVolumeLimit(tempTransferInventoryItem, alternateBlockDefinition.block), currentTransferAmount = tempTransferAmount;
 
                     if (isLimited)
                     {
@@ -1632,7 +1601,7 @@ namespace IngameScript
                 if (TextHasLength(tempMatchingItemName))
                 {
                     itemList.Clear();
-                    itemList.AddRange(GetAllItems);
+                    itemList.AddRange(itemRepo.itemList.Values);
                     bool match, percentage;
                     double calcedAmount;
                     for (int i = 0; i < itemList.Count; i++)
@@ -1650,17 +1619,17 @@ namespace IngameScript
                                     calcedAmount /= 100.0;
                                 else if (!double.TryParse(tempMatchingItemAmount, out calcedAmount))
                                     calcedAmount = 0;
-                                tempMatchingItemsCollection.AddItem(definition.typeID, definition.subtypeID, new VariableItemCount(calcedAmount, percentage, true), tempMatchingItemAppend);
+                                tempMatchingItemsCollection.AddItem(definition.ItemType, new VariableItemCount(calcedAmount, percentage, true), tempMatchingItemAppend);
                             }
                         }
                     }
                     if (!tempMatchingItemAcceptZero)
-                        for (int i = 0; i < tempMatchingItemsCollection.itemList.Count; i += 0)
+                        for (int i = 0; i < tempMatchingItemsCollection.ItemList.Count; i += 0)
                         {
                             if (PauseTickRun) yield return stateActive;
 
-                            if (tempMatchingItemsCollection.itemList.Values[i].count <= 0)
-                                tempMatchingItemsCollection.itemList.RemoveAt(i);
+                            if (tempMatchingItemsCollection.ItemList.Values[i].Count <= 0)
+                                tempMatchingItemsCollection.ItemList.RemoveAt(i);
                             else
                                 i++;
                         }
@@ -1688,6 +1657,8 @@ namespace IngameScript
             string customData, typeID, subtypeID, comparison, substring;
             string[] logicSetArray;
             int tempIndex, collectionCount, comparisonCollectionCount;
+            ItemCollection itemCollectionA = new ItemCollection(false),
+                           itemCollectionB = new ItemCollection(false);
             yield return stateContinue;
 
             while (true)
@@ -1723,29 +1694,29 @@ namespace IngameScript
                             substring = substring.Substring(tempIndex + comparison.Length);
                         }
                         catch { }
-                        itemCollectionMain.Clear();
-                        while (!MatchItems(itemCollectionMain, typeID, subtypeID))
+                        itemCollectionA.Clear();
+                        while (!MatchItems(itemCollectionA, typeID, subtypeID))
                             yield return stateActive;
 
-                        collectionCount = itemCollectionMain.ItemTypeCount;
+                        collectionCount = itemCollectionA.Count;
                         tempIndex = substring.IndexOf(":");
                         if (tempIndex > 0)
                         {
-                            itemCollectionAlternate.Clear();
+                            itemCollectionB.Clear();
 
                             typeID = substring.Substring(0, tempIndex);
                             subtypeID = substring.Substring(tempIndex + 1);
 
-                            while (!MatchItems(itemCollectionAlternate, typeID, subtypeID))
+                            while (!MatchItems(itemCollectionB, typeID, subtypeID))
                                 yield return stateActive;
 
-                            comparisonCollectionCount = itemCollectionAlternate.ItemTypeCount;
+                            comparisonCollectionCount = itemCollectionB.Count;
                             for (int i = 0; i < collectionCount; i++)
                                 for (int y = 0; y < comparisonCollectionCount; y++)
                                 {
                                     if (PauseTickRun) yield return stateActive;
 
-                                    tempLogicComparisons.Add(new LogicComparison { typeID = itemCollectionMain.ItemIDByIndex(i), compareAgainst = itemCollectionAlternate.ItemIDByIndex(y), comparison = comparison });
+                                    tempLogicComparisons.Add(new LogicComparison { typeID = itemCollectionA.ItemList.Keys[i].ID, compareAgainst = itemCollectionB.ItemList.Keys[y].ID, comparison = comparison });
                                 }
                         }
                         else
@@ -1753,7 +1724,7 @@ namespace IngameScript
                             {
                                 if (PauseTickRun) yield return stateActive;
 
-                                tempLogicComparisons.Add(new LogicComparison { typeID = itemCollectionMain.ItemIDByIndex(i), compareAgainst = substring, comparison = comparison });
+                                tempLogicComparisons.Add(new LogicComparison { typeID = itemCollectionA.ItemList.Keys[i].ID, compareAgainst = substring, comparison = comparison });
 
                             }
                     }
@@ -1765,10 +1736,14 @@ namespace IngameScript
         IEnumerator<FunctionState> LoadoutState()
         {
             IMyInventory loadoutInventory, sourceInventory;
+            List<MyInventoryItem> inventoryItems = new List<MyInventoryItem>();
             int itemCount;
             ItemDefinition definition;
             double addAmount;
             bool excessFound;
+
+            ItemCollection itemCollectionTarget = new ItemCollection(true);
+
             yield return stateContinue;
 
             while (true)
@@ -1782,53 +1757,52 @@ namespace IngameScript
 
                     mainBlockDefinition = managedBlocks[index];
                     loadoutInventory = mainBlockDefinition.Input;
-                    itemCollectionMain.Clear();
-                    itemCollectionAlternate.Clear();
-                    itemCollectionAlternate.AddCollection(mainBlockDefinition.Settings.loadout, mainBlockDefinition.block);
-                    while (!CountItemsInList(itemCollectionMain, new List<long> { index }))
+
+                    itemCollectionTarget.Clear();
+
+                    // Get desired loadout
+                    itemCollectionTarget.AddCollection(mainBlockDefinition.Settings.loadout);
+
+                    // Remove existing items
+                    while (!CountItemsInList(itemCollectionTarget, new List<long> { index }, "", "", true))
                         yield return stateActive;
 
-                    itemCount = itemCollectionMain.ItemTypeCount;
-                    for (int x = 0; x < itemCount; x++)
-                    {
-                        if (PauseTickRun)
-                            yield return stateActive;
-
-                        definition = itemCollectionMain.ItemByIndex(x);
-                        if (TextHasLength(definition.subtypeID) && itemCollectionAlternate.itemList.ContainsKey(definition.FullID))
-                            itemCollectionAlternate.AddItem(definition.typeID, definition.subtypeID, new VariableItemCount(-definition.amount));
-                    }
+                    // Check for excess items
                     excessFound = false;
-                    itemCount = itemCollectionAlternate.ItemTypeCount;
-                    for (int x = 0; x < itemCount && !excessFound; x++)
-                    {
-                        if (PauseTickRun)
-                            yield return stateActive;
+                    foreach (VariableItemCount count in itemCollectionTarget.ItemList.Values)
+                        if (count.Count <= -0.01)
+                        {
+                            excessFound = true;
+                            break;
+                        }
 
-                        definition = itemCollectionAlternate.ItemByIndex(x);
-                        excessFound = definition.amount <= -0.01;
-                    }
+                    // Remove excess items
                     if (excessFound)
                     {
-                        mainFunctionItemList.Clear();
-                        loadoutInventory.GetItems(mainFunctionItemList);
-                        for (int x = 0; x < mainFunctionItemList.Count; x++)
+                        inventoryItems.Clear();
+                        loadoutInventory.GetItems(inventoryItems);
+                        for (int x = 0; x < inventoryItems.Count; x++)
                         {
-                            addAmount = itemCollectionAlternate.ItemCount(mainFunctionItemList[x]);
-                            if (addAmount <= 0 - 0.01)
+                            addAmount = itemCollectionTarget.ItemCount(inventoryItems[x]);
+                            if (addAmount <= -0.01)
                             {
                                 addAmount *= -1.0;
                                 addAmount = Math.Min(addAmount, (double)mainFunctionItemList[x].Amount);
                                 while (!PutInStorage(new List<MyInventoryItem> { mainFunctionItemList[x] }, index, 0, addAmount))
                                     yield return stateActive;
+                                itemCollectionTarget.AddItem(mainFunctionItemList[x], new VariableItemCount(addAmount));
                             }
                         }
+
+                        itemCollectionTarget.Clear(false, false, true);
                     }
+
+                    // Stock loadout from storages
                     foreach (long storageIndex in typedIndexes[setKeyIndexStorage])
                     {
                         if (PauseTickRun) yield return stateActive;
 
-                        if (itemCollectionAlternate.IsEmpty)
+                        if (itemCollectionTarget.IsEmpty)
                             break;
                         if (!IsBlockOk(storageIndex))
                             continue;
@@ -1838,19 +1812,22 @@ namespace IngameScript
                         sourceInventory = mainBlockDefinition.Input;
                         mainFunctionItemList.Clear();
                         sourceInventory.GetItems(mainFunctionItemList);
-                        for (int y = 0; y < mainFunctionItemList.Count && !itemCollectionAlternate.IsEmpty; y++)
+                        for (int y = 0; y < mainFunctionItemList.Count && !itemCollectionTarget.IsEmpty; y++)
                         {
                             if (PauseTickRun) yield return stateActive;
 
-                            if (itemCollectionAlternate.ItemCount(mainFunctionItemList[y]) > 0)
+                            if (itemCollectionTarget.ItemCount(mainFunctionItemList[y]) > 0)
                             {
-                                addAmount = Math.Min((double)mainFunctionItemList[y].Amount, itemCollectionAlternate.ItemCount(mainFunctionItemList[y], null));
+                                addAmount = Math.Min((double)mainFunctionItemList[y].Amount, itemCollectionTarget.ItemCount(mainFunctionItemList[y], null));
 
                                 if (!FractionalItem(mainFunctionItemList[y]))
                                     addAmount = Math.Floor(addAmount);
 
                                 if (addAmount > 0 && loadoutInventory.TransferItemFrom(sourceInventory, mainFunctionItemList[y], (MyFixedPoint)addAmount))
-                                    itemCollectionAlternate.AddItem(mainFunctionItemList[y].Type.TypeId, mainFunctionItemList[y].Type.SubtypeId, new VariableItemCount(-addAmount));
+                                {
+                                    itemCollectionTarget.AddItem(mainFunctionItemList[y], new VariableItemCount(-addAmount));
+                                    itemCollectionTarget.Clear(false, false, true);
+                                }
                             }
                         }
                     }
@@ -1871,7 +1848,7 @@ namespace IngameScript
                 foreach (ItemDefinition itemDef in itemListMain[oreType].Values)
                 {
                     if (PauseTickRun) yield return stateActive;
-                    if (itemDef.amount >= oreMinimum)
+                    if (itemDef.Amount >= oreMinimum)
                         orePriorities[itemDef.ItemType] = LeastKeyedOrePercentage(itemDef.subtypeID);
                 }
                 foreach (long index in typedIndexes[setKeyIndexRefinery])
@@ -1940,7 +1917,7 @@ namespace IngameScript
                             if (x < prioritizedOres)
                                 currentShares += 10;
 
-                            mainBlockDefinition.Settings.limits.AddItem(oreType, sortableListMain[x].text, new VariableItemCount(currentShares / maxShares, true));
+                            mainBlockDefinition.Settings.limits.AddItem(new ItemSearchObject(oreType, sortableListMain[x].text, new VariableItemCount(currentShares / maxShares, true), false));
                         }
                     }
 
@@ -2623,7 +2600,7 @@ namespace IngameScript
                 int queuedIngots = settingsInts[setKeySurvivalKitQueuedIngots];
                 if (queuedIngots > 0)
                 {
-                    Blueprint blueprint = new Blueprint { blueprintID = stoneOreToIngotBasicID };
+                    Blueprint blueprint = new Blueprint { BlueprintID = stoneOreToIngotBasicID };
                     while (!DistributeBlueprint(blueprint, queuedIngots, typedIndexes[setKeyIndexAssemblers], assemblyMode, false))
                         yield return stateActive;
                 }
@@ -2685,7 +2662,7 @@ namespace IngameScript
                 amount = tempDistributeBlueprintAmount;
                 if (tempDistributeBlueprintMode == disassemblyMode)
                 {
-                    multiplier = tempDistributeBlueprint.multiplier;
+                    multiplier = tempDistributeBlueprint.Multiplier;
                     amount = Math.Floor(tempDistributeBlueprintAmount / multiplier);
                 }
                 else multiplier = 1;
@@ -2738,7 +2715,7 @@ namespace IngameScript
                     {
                         int splitAmount, excessAmount, currentAmount;
                         splitAmount = Math.DivRem((int)amount, indexList.Count, out excessAmount);
-                        if (tempDistributeBlueprint.blueprintID == stoneOreToIngotBasicID)
+                        if (tempDistributeBlueprint.BlueprintID == stoneOreToIngotBasicID)
                         {
                             excessAmount = 0;
                             splitAmount = (int)amount;
@@ -2856,7 +2833,7 @@ namespace IngameScript
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    if (GetDefinition(out definition, $"{kvp.Value.typeID}/{kvp.Value.subtypeID}"))
+                    if (GetDefinition(out definition, $"{kvp.Value.TypeID}/{kvp.Value.SubtypeID}"))
                     {
                         excessQueued = Math.Floor(definition.currentExcessAssembly);
                         if (excessQueued > 0)
@@ -2908,14 +2885,14 @@ namespace IngameScript
                         {
                             if (PauseTickRun) yield return stateActive;
 
-                            if (BlueprintSubtype(blueprintListMain[x]) == tempRemoveBlueprint.blueprintID)
+                            if (BlueprintSubtype(blueprintListMain[x]) == tempRemoveBlueprint.BlueprintID)
                             {
                                 removalAmount = (double)blueprintListMain[x].Amount;
                                 if (removalAmount > toBeRemovedAmount)
                                     removalAmount = toBeRemovedAmount;
 
                                 assembler.RemoveQueueItem(x, (MyFixedPoint)removalAmount);
-                                AddBlueprintAmount(tempRemoveBlueprint.blueprintID, tempRemoveBlueprintMode == assemblyMode, -removalAmount, true);
+                                AddBlueprintAmount(tempRemoveBlueprint.BlueprintID, tempRemoveBlueprintMode == assemblyMode, -removalAmount, true);
                                 toBeRemovedAmount -= removalAmount;
                             }
                         }
@@ -2939,7 +2916,7 @@ namespace IngameScript
                     if (PauseTickRun)
                         yield return stateActive;
 
-                    if (GetDefinition(out definition, $"{kvp.Value.typeID}/{kvp.Value.subtypeID}"))
+                    if (GetDefinition(out definition, $"{kvp.Value.TypeID}/{kvp.Value.SubtypeID}"))
                     {
                         excessQueued = Math.Floor(definition.currentExcessDisassembly);
                         if (excessQueued > 0)
@@ -3217,7 +3194,7 @@ namespace IngameScript
                                     z++;
                             }
                             if (indexList.Count > 0)
-                                while (!DistributeBlueprint(new Blueprint { amount = moveAmount, blueprintID = BlueprintSubtype(currentProductionList[i]) }, moveAmount, indexList, currentMode, false)) yield return stateActive;
+                                while (!DistributeBlueprint(new Blueprint { Amount = moveAmount, BlueprintID = BlueprintSubtype(currentProductionList[i]) }, moveAmount, indexList, currentMode, false)) yield return stateActive;
                             indexList.Clear();
                         }
                     }
@@ -3369,12 +3346,13 @@ namespace IngameScript
             }
         }
 
-        bool CountItemsInList(ItemCollection count, List<long> indexes, string typeID = "", string subtypeID = "")
+        bool CountItemsInList(ItemCollection count, List<long> indexes, string typeID = "", string subtypeID = "", bool negativeCounting = false)
         {
             selfContainedIdentifier = FunctionIdentifier.Counting_Listed_Items;
 
             if (!IsStateRunning)
             {
+                tempCountItemsInListNegativeCounting = false;
                 tempCountItemsInListCollection = count;
                 tempCountItemsInListIndexes = indexes;
                 tempCountItemsInListTypeID = typeID;
@@ -3546,7 +3524,7 @@ namespace IngameScript
 
                     fractional = FractionalItem(tempDistributeItem);
 
-                    itemCollectionMain.AddItem(tempDistributeItem.Type.TypeId, tempDistributeItem.Type.SubtypeId, new VariableItemCount(totalAmount));
+                    itemCollectionMain.AddItem(tempDistributeItem, new VariableItemCount(totalAmount));
 
                     if (itemCollectionMain.ItemTypeCount > 0 && tempSortedIndexList.Count > 0)
                     {
@@ -3576,9 +3554,9 @@ namespace IngameScript
                         indexCount = 0;
                         foreach (KeyValuePair<long, double> kvp in tempSortedIndexList)
                         {
-                            maxAmount = DefaultMax(tempDistributeItem, managedBlocks[kvp.Key]);
-                            tempMax = managedBlocks[kvp.Key].Settings.limits.ItemCount(out foundLimit, tempDistributeItem, managedBlocks[kvp.Key].block);
-                            if (foundLimit) maxAmount = tempMax;
+                            maxAmount = DefaultMax(tempDistributeItem.Type, managedBlocks[kvp.Key]);
+                            if (foundLimit = managedBlocks[kvp.Key].Settings.limits.ItemCount(tempDistributeItem, managedBlocks[kvp.Key].block, out tempMax))
+                                maxAmount = tempMax;
 
                             foundLimit = maxAmount < double.MaxValue;
 
@@ -3900,8 +3878,8 @@ namespace IngameScript
                         kvpB.Value.SetDifferenceNeeded(allowedExcessPercent);
                         if (queueAssembly)
                         {
-                            blueprint = new Blueprint { blueprintID = kvpB.Value.blueprintID, amount = kvpB.Value.currentNeededAssembly };
-                            if (blueprint.amount >= 1)
+                            blueprint = new Blueprint { BlueprintID = kvpB.Value.blueprintID, Amount = kvpB.Value.currentNeededAssembly };
+                            if (blueprint.Amount >= 1)
                                 blueprints.Add(blueprint.Clone());
                         }
                     }
@@ -3998,7 +3976,7 @@ namespace IngameScript
                     foreach (KeyValuePair<string, ItemDefinition> kvpB in kvpA.Value)
                     {
                         kvpB.Value.SwitchCount(dynamicQuotaMaxMultiplier, useDynamicQuota && IsBlueprint(kvpB.Value.blueprintID), dynamicQuotaNegativeThreshold, dynamicQuotaPositiveThreshold, dynamicQuotaMultiplierIncrement, increaseDynamicQuotaWhenLow);
-                        if (IsOre(kvpB.Value.typeID) && kvpB.Value.subtypeID != "Ice" && kvpB.Value.amount >= 0.5 && kvpB.Value.refine)
+                        if (IsOre(kvpB.Value.typeID) && kvpB.Value.subtypeID != "Ice" && kvpB.Value.Amount >= 0.5 && kvpB.Value.refine)
                             activeOres++;
                     }
                 }
@@ -4317,11 +4295,11 @@ namespace IngameScript
                                 if (!isClone && emptyLoadout && gunAmmoDictionary.ContainsKey(blockDef))
                                 {
                                     SplitID(gunAmmoDictionary[blockDef], out typeID, out subtypeID);
-                                    currentDefinition.Settings.loadout.AddItem(typeID, subtypeID, new VariableItemCount(DefaultMax(typeID, subtypeID, currentDefinition)));
+                                    currentDefinition.Settings.loadout.AddItem(new ItemSearchObject(typeID, subtypeID, new VariableItemCount(DefaultMax(typeID, subtypeID, currentDefinition))));
                                 }
                             }
                             if (!isClone && currentBlock is IMyParachute && emptyLoadout)
-                                currentDefinition.Settings.loadout.AddItem(componentType, canvasType, new VariableItemCount(DefaultMax(componentType, canvasType, currentDefinition)));
+                                currentDefinition.Settings.loadout.AddItem(new ItemSearchObject(componentType, canvasType, new VariableItemCount(DefaultMax(componentType, canvasType, currentDefinition))));
 
                             if (currentDefinition.Settings.loadout.ItemTypeCount > 0)
                             {
@@ -4850,15 +4828,15 @@ namespace IngameScript
                 return false;
 
             string itemSubtype = AutoMatchNormalize(item.Type.SubtypeId), blueprintSubtype;
-            for (int i = 0; i < modBlueprintList.Count; i++)
+            for (int i = 0; i < itemRepo.modBlueprints.Count; i++)
             {
-                blueprintSubtype = AutoMatchNormalize(modBlueprintList[i]);
+                blueprintSubtype = AutoMatchNormalize(itemRepo.modBlueprints[i]);
                 if (Math.Abs(blueprintSubtype.Length - itemSubtype.Length) > mergeLengthTolerance)
                     continue;
 
                 if (LeadsString(itemSubtype, blueprintSubtype) || EndsString(itemSubtype, blueprintSubtype) || LeadsString(blueprintSubtype, itemSubtype) || EndsString(blueprintSubtype, itemSubtype))
                 {
-                    matchingKey = modBlueprintList[i];
+                    matchingKey = itemRepo.modBlueprints[i];
                     return true;
                 }
             }
@@ -4871,16 +4849,16 @@ namespace IngameScript
                 return false;
 
             string itemSubtype, blueprintSubtype = AutoMatchNormalize(BlueprintSubtype(blueprint)), subtypeID, typeID;
-            for (int i = 0; i < modItemDictionary.Count; i++)
+            for (int i = 0; i < itemRepo.modItems.Count; i++)
             {
-                SplitID(modItemDictionary.Keys[i], out typeID, out subtypeID);
+                SplitID(itemRepo.modItems.Keys[i], out typeID, out subtypeID);
                 itemSubtype = AutoMatchNormalize(subtypeID);
                 if (Math.Abs(blueprintSubtype.Length - itemSubtype.Length) > mergeLengthTolerance)
                     continue;
 
                 if (LeadsString(itemSubtype, blueprintSubtype) || EndsString(itemSubtype, blueprintSubtype) || LeadsString(blueprintSubtype, itemSubtype) || EndsString(blueprintSubtype, itemSubtype))
                 {
-                    matchingKey = modItemDictionary.Keys[i];
+                    matchingKey = itemRepo.modItems.Keys[i];
                     return true;
                 }
             }
@@ -5080,13 +5058,13 @@ namespace IngameScript
 
         Blueprint ItemToBlueprint(ItemDefinition definition)
         {
-            return new Blueprint { blueprintID = definition.blueprintID, subtypeID = definition.subtypeID, typeID = definition.typeID, multiplier = definition.assemblyMultiplier };
+            return new Blueprint { BlueprintID = definition.blueprintID, SubtypeID = definition.subtypeID, TypeID = definition.typeID, Multiplier = definition.assemblyMultiplier };
         }
 
         bool UnknownItem(MyInventoryItem item)
         {
             ItemDefinition definition;
-            return !modItemDictionary.ContainsKey(item.Type.ToString()) && !GetDefinition(out definition, item.Type.ToString());
+            return !itemRepo.modItems.ContainsKey(item.Type.ToString()) && !GetDefinition(out definition, item.Type.ToString());
         }
 
         bool UnknownBlueprint(MyProductionItem blueprint)
@@ -5094,7 +5072,7 @@ namespace IngameScript
             if (BlueprintSubtype(blueprint) == stoneOreToIngotBasicID)
                 return false;
 
-            return !modBlueprintList.Contains(BlueprintSubtype(blueprint)) && !blueprintList.ContainsKey(BlueprintSubtype(blueprint));
+            return !itemRepo.modBlueprints.Contains(BlueprintSubtype(blueprint)) && !blueprintList.ContainsKey(BlueprintSubtype(blueprint));
         }
 
         bool LogicPass(ItemDefinition definition, string comparison, string compare)
@@ -5117,17 +5095,17 @@ namespace IngameScript
             {
                 ItemDefinition comparisonDefinition;
                 if (GetDefinition(out comparisonDefinition, compare))
-                    comparisonNumber = comparisonDefinition.amount;
+                    comparisonNumber = comparisonDefinition.Amount;
             }
             else if (!double.TryParse(compareAgainst, out comparisonNumber))
                 return false;
 
             return
-                comparison == ">=" ? definition.amount >= comparisonNumber :
-                comparison == "<=" ? definition.amount <= comparisonNumber :
-                comparison == ">" ? definition.amount > comparisonNumber :
-                comparison == "<" ? definition.amount < comparisonNumber :
-                comparison == "=" && definition.amount == comparisonNumber;
+                comparison == ">=" ? definition.Amount >= comparisonNumber :
+                comparison == "<=" ? definition.Amount <= comparisonNumber :
+                comparison == ">" ? definition.Amount > comparisonNumber :
+                comparison == "<" ? definition.Amount < comparisonNumber :
+                comparison == "=" && definition.Amount == comparisonNumber;
         }
 
         bool PassPanel(IMyTerminalBlock block)
@@ -5180,10 +5158,10 @@ namespace IngameScript
 
         bool IsGas(MyInventoryItem item)
         {
-            return IsGas(item.Type.TypeId, item.Type.SubtypeId);
+            return IsGas(item.Type);
         }
 
-        bool IsGas(string typeID, string subtypeID)
+        bool IsGas(MyItemType itemType)
         {
             ItemDefinition definition;
             if (GetDefinition(out definition, $"{typeID}/{subtypeID}"))
@@ -5215,13 +5193,18 @@ namespace IngameScript
 
         string MakeBlueprint(Blueprint blueprint)
         {
-            return $"{blueprintPrefix}/{blueprint.blueprintID}";
+            return $"{blueprintPrefix}/{blueprint.BlueprintID}";
+        }
+
+        string MakeBlueprint(string blueprintID)
+        {
+            return $"{blueprintPrefix}/{blueprintID}";
         }
 
         double AssemblyAmount(Blueprint blueprint, bool disassembly = false)
         {
             ItemDefinition definition;
-            if (GetDefinition(out definition, $"{blueprint.typeID}/{blueprint.subtypeID}"))
+            if (GetDefinition(out definition, $"{blueprint.TypeID}/{blueprint.SubtypeID}"))
                 return disassembly && definition.differenceNeeded < 0 ? -definition.differenceNeeded : !disassembly && definition.differenceNeeded > 0 ? definition.differenceNeeded : 0;
             return 0;
         }
@@ -5297,18 +5280,13 @@ namespace IngameScript
             return true;
         }
 
-        double DefaultMax(MyInventoryItem item, BlockDefinition block)
-        {
-            return DefaultMax(item.Type.TypeId, item.Type.SubtypeId, block);
-        }
-
-        double DefaultMax(string typeID, string subtypeID, BlockDefinition blockDef)
+        double DefaultMax(MyItemType itemType, BlockDefinition blockDef)
         {
             IMyTerminalBlock block = blockDef.block;
             if (block is IMyGasGenerator)
             {
-                if (IsGas(typeID, subtypeID))
-                    return PercentageMax((float)GetKeyDouble(setKeyIcePerGenerator), typeID, subtypeID, block);
+                if (IsGas(itemType))
+                    return PercentageMax((float)GetKeyDouble(setKeyIcePerGenerator), itemType, block);
             }
             else if (block is IMyRefinery)
             {
@@ -5317,35 +5295,33 @@ namespace IngameScript
             }
             else
                 return
-                    IsGun(blockDef) ? Math.Ceiling(PercentageMax((float)GetKeyDouble(setKeyAmmoPerGun), typeID, subtypeID, block)) :
-                    block is IMyReactor ? PercentageMax((float)GetKeyDouble(setKeyFuelPerReactor), typeID, subtypeID, block) :
-                    block is IMyParachute ? Math.Ceiling(PercentageMax((float)GetKeyDouble(setKeyCanvasPerParachute), typeID, subtypeID, block)) : double.MaxValue;
+                    IsGun(blockDef) ? Math.Ceiling(PercentageMax((float)GetKeyDouble(setKeyAmmoPerGun), itemType, block)) :
+                    block is IMyReactor ? PercentageMax((float)GetKeyDouble(setKeyFuelPerReactor), itemType, block) :
+                    block is IMyParachute ? Math.Ceiling(PercentageMax((float)GetKeyDouble(setKeyCanvasPerParachute), itemType, block)) : double.MaxValue;
 
             return double.MaxValue;
         }
 
-        static double PercentageMax(float value, string typeID, string subtypeID, IMyTerminalBlock block)
+        static double PercentageMax(double value, MyItemType itemType, IMyTerminalBlock block)
         {
             float calcedValue = value;
             if (value <= 1f)
             {
-                calcedValue = ((float)block.GetInventory(0).MaxVolume / ItemVolume(typeID, subtypeID)) * value;
-                if (!FractionalItem(typeID, subtypeID))
+                calcedValue = ((float)block.GetInventory(0).MaxVolume / ItemVolume(itemType)) * (float)value;
+                if (!FractionalItem(itemType))
                     calcedValue = (float)Math.Floor(calcedValue);
             }
 
             return calcedValue;
         }
 
-        static float ItemVolume(string typeID, string subtypeID)
+        static float ItemVolume(MyItemType itemType)
         {
-            string key = $"{typeID}/{subtypeID}";
-
             try
             {
-                MyItemType type = MyItemType.Parse(key);
-                if (type.GetItemInfo().Volume > 0f)
-                    return type.GetItemInfo().Volume;
+                MyItemInfo info = itemType.GetItemInfo();
+                if (info.Volume > 0f)
+                    return info.Volume;
             }
             catch { }
 
@@ -5377,19 +5353,17 @@ namespace IngameScript
             return AvailableVolume(block) / ItemVolume(item);
         }
 
-        static bool FractionalItem(string typeID, string subtypeID)
+        static bool FractionalItem(MyItemType itemType)
         {
-            string key = $"{typeID}/{subtypeID}";
-
             try
             {
-                MyItemType type = MyItemType.Parse(key);
-                if (type.GetItemInfo().Volume > 0f)
-                    return type.GetItemInfo().UsesFractions;
+                MyItemInfo info = itemType.GetItemInfo();
+                if (info.Volume > 0f)
+                    return info.UsesFractions;
             }
             catch { }
 
-            return typeID == ingotType || typeID == oreType;
+            return IsIngot(itemType) || IsOre(itemType);
         }
 
         static bool FractionalItem(MyInventoryItem item)
@@ -5489,8 +5463,8 @@ namespace IngameScript
             typeID = subtypeID = "";
             if (blueprintList.TryGetValue(blueprintID, out blueprint))
             {
-                typeID = blueprint.typeID;
-                subtypeID = blueprint.subtypeID;
+                typeID = blueprint.TypeID;
+                subtypeID = blueprint.SubtypeID;
                 return true;
             }
             return false;
@@ -5665,6 +5639,15 @@ namespace IngameScript
         static bool IsWildCard(string text)
         {
             return StringsMatch(text, "all") || text == "*";
+        }
+
+        double TranslateItemCount(MyItemType itemType, VariableItemCount count, IMyTerminalBlock block)
+        {
+            if (block == null) return count.Count;
+
+
+            return count.Percentage && block != null ? PercentageMax(count.Count, itemType, block) : count.Count;
+
         }
 
 
@@ -5872,15 +5855,6 @@ namespace IngameScript
                 Echo(echoSpacer);
         }
 
-        void FinalizeKeys(ItemDefinition definition)
-        {
-            definition.FinalizeKeys();
-            if (definition.oreKeys.Count > 0)
-                oreKeyedItemDictionary[definition.FullID] = definition.subtypeID;
-            else
-                oreKeyedItemDictionary.Remove(definition.FullID);
-        }
-
         void AddCategory(string category)
         {
             if (!itemCategoryList.Contains(category))
@@ -5976,7 +5950,7 @@ namespace IngameScript
             if (IsIngot(item) || IsOre(item))
                 return;
 
-            if (modBlueprintList.Contains(blueprintMatchKey) || HasBlueprintMatch(item, ref blueprintMatchKey))
+            if (itemRepo.modBlueprints.Contains(blueprintMatchKey) || HasBlueprintMatch(item, ref blueprintMatchKey))
             {
                 if (UpdateItemDef(itemID, blueprintMatchKey))
                 {
@@ -5984,8 +5958,8 @@ namespace IngameScript
                     saving = true;
                 }
             }
-            else if (!modItemDictionary.ContainsKey(itemID))
-                modItemDictionary[itemID] = subtypeID;
+            else if (!itemRepo.modItems.ContainsKey(itemID))
+                itemRepo.modItems[itemID] = subtypeID;
         }
 
         void AddModBlueprint(MyProductionItem blueprint)
@@ -5999,8 +5973,8 @@ namespace IngameScript
                     saving = true;
                 }
             }
-            else if (!modBlueprintList.Contains(subtypeID))
-                modBlueprintList.Add(subtypeID);
+            else if (!itemRepo.modBlueprints.Contains(subtypeID))
+                itemRepo.modBlueprints.Add(subtypeID);
         }
 
         void ClearFunctions()
@@ -6059,7 +6033,7 @@ namespace IngameScript
         {
             Blueprint blueprint;
             if (blueprintList.TryGetValue(blueprintID, out blueprint))
-                AddBlueprintAmount(blueprint.typeID, blueprint.subtypeID, assembly, amount, current);
+                AddBlueprintAmount(blueprint.TypeID, blueprint.SubtypeID, assembly, amount, current);
         }
 
         void AddBlueprintAmount(MyProductionItem item, bool assembly, bool current = false)
@@ -6067,7 +6041,7 @@ namespace IngameScript
             if (blueprintList.ContainsKey(BlueprintSubtype(item)))
             {
                 Blueprint blueprint = blueprintList[BlueprintSubtype(item)];
-                AddBlueprintAmount(blueprint.typeID, blueprint.subtypeID, assembly, (double)item.Amount, current);
+                AddBlueprintAmount(blueprint.TypeID, blueprint.SubtypeID, assembly, (double)item.Amount, current);
             }
         }
 
@@ -6192,49 +6166,6 @@ namespace IngameScript
 
                 UpdateItemDef(itemID, blueprintID, oreKeys);
             }
-        }
-
-        bool UpdateItemDef(string itemID, string blueprintID = "", List<string> oreKeys = null)
-        {
-            ItemDefinition definition;
-            if (GetDefinition(out definition, itemID))
-            {
-                if (IsIngot(definition.typeID) && definition.oreKeys.Count == 0)
-                    definition.oreKeys.Add(definition.subtypeID);
-
-                if (oreKeys != null)
-                    definition.oreKeys.AddRange(oreKeys);
-
-                FinalizeKeys(definition);
-                if (IsBlueprint(definition.blueprintID))
-                    blueprintList.Remove(definition.blueprintID);
-
-                definition.blueprintID = blueprintID;
-                if (IsBlueprint(blueprintID))
-                    blueprintList[blueprintID] = ItemToBlueprint(definition);
-
-                string category = definition.category;
-                itemCategoryDictionary[definition.FullID] = category;
-                AddCategory(category);
-                CheckModdedItem(definition);
-                itemAddedOrChanged = Now;
-                return true;
-            }
-            return false;
-        }
-
-        void CheckModdedItem(ItemDefinition definition)
-        {
-            if (!IsIngot(definition.typeID) && !IsOre(definition.typeID) && !TextHasLength(definition.blueprintID))
-            {
-                if (!modItemDictionary.ContainsKey(definition.FullID))
-                    modItemDictionary[definition.FullID] = definition.subtypeID;
-            }
-            else
-                modItemDictionary.Remove(definition.FullID);
-
-            if (IsBlueprint(definition.blueprintID))
-                modBlueprintList.Remove(definition.blueprintID);
         }
 
         void StateDisposal(FunctionIdentifier identifier, bool dispose = true)
@@ -6407,40 +6338,56 @@ namespace IngameScript
             public long numberLong = 0;
         }
 
-        public class Blueprint
+        public struct Blueprint
         {
-            public string blueprintID = "", typeID = "", subtypeID = "";
-            public double amount = 0, multiplier = 1;
+            public string BlueprintID, TypeID, SubtypeID;
+            public double Amount, Multiplier;
 
-            public Blueprint Clone()
+            public Blueprint(string blueprintID, string typeID, string subtypeID, double amount = 0, double multiplier = 1)
             {
-                return new Blueprint { blueprintID = blueprintID, typeID = typeID, subtypeID = subtypeID, amount = amount, multiplier = multiplier };
+                BlueprintID = blueprintID;
+                TypeID = typeID;
+                SubtypeID = subtypeID;
+                Amount = amount;
+                Multiplier = multiplier;
             }
         }
 
-        public class VariableItemCount
+        public struct VariableItemCount
         {
-            public double count;
-            public bool percentage, manual;
+            public double Count;
+            public bool Percentage, Manual;
 
-            public VariableItemCount(double countA, bool percentageA = false, bool manualA = false)
+            public static VariableItemCount Zero => new VariableItemCount(0);
+
+            public VariableItemCount(double count, bool percentage = false, bool manual = false)
             {
-                count = countA;
-                percentage = percentageA;
-                manual = manualA;
+                Count = percentage ? Math.Min(1.0, count) : count;
+                Percentage = percentage;
+                Manual = manual;
             }
 
             public override string ToString()
             {
-                return $"{(percentage ? $"{count * 100.0}%" : $"{count}")}";
+                return $"{(Percentage ? $"{Count * 100.0}%" : $"{Count}")}";
+            }
+
+            public void Add(VariableItemCount count)
+            {
+                if (Percentage != count.Percentage) return;
+
+                if (Manual == count.Manual)
+                    Count += count.Count;
+                else if (!Manual) Count = count.Count;
             }
         }
 
+        /**
         public class ItemCollection
         {
             public static Program parent;
 
-            public SortedList<string, VariableItemCount> itemList = new SortedList<string, VariableItemCount>();
+            public SortedList<MyItemType, VariableItemCount> itemList = new SortedList<MyItemType, VariableItemCount>();
 
             public int ItemTypeCount { get { return itemList.Count; } }
 
@@ -6451,7 +6398,7 @@ namespace IngameScript
                 get
                 {
                     for (int i = 0; i < itemList.Count; i++)
-                        if (itemList.Values[i].count > 0)
+                        if (itemList.Values[i].Count > 0)
                             return false;
 
                     return true;
@@ -6464,7 +6411,7 @@ namespace IngameScript
                 else
                     for (int i = 0; i < itemList.Count; i += 0)
                     {
-                        if ((manual && itemList.Values[i].manual) || (automatic && !itemList.Values[i].manual))
+                        if ((manual && itemList.Values[i].Manual) || (automatic && !itemList.Values[i].Manual))
                             itemList.RemoveAt(i);
                         else
                             i++;
@@ -6477,7 +6424,7 @@ namespace IngameScript
                 foreach (KeyValuePair<string, VariableItemCount> kvp in collection.itemList)
                 {
                     SplitID(kvp.Key, out typeID, out subtypeID);
-                    AddItemInternal(kvp.Key, new VariableItemCount(kvp.Value.percentage ? PercentageMax((float)kvp.Value.count, typeID, subtypeID, block) : kvp.Value.count), true);
+                    AddItemInternal(kvp.Key, new VariableItemCount(kvp.Value.Percentage ? PercentageMax((float)kvp.Value.Count, typeID, subtypeID, block) : kvp.Value.Count), true);
                 }
             }
 
@@ -6489,12 +6436,14 @@ namespace IngameScript
                 return "0";
             }
 
-            public ItemDefinition ItemByIndex(int index)
+            public void ItemByIndex(int index, ItemObject itemObject)
             {
                 if (index < ItemTypeCount)
-                    return GetItem(index);
+                {
+                    //itemObject.;
+                }
 
-                return new ItemDefinition();
+                new MyItemType("", "");
             }
 
             ItemDefinition GetItem(int index)
@@ -6502,8 +6451,8 @@ namespace IngameScript
                 string typeID, subtypeID;
                 double amount;
                 SplitID(itemList.Keys[index], out typeID, out subtypeID);
-                amount = itemList.Values[index].count;
-                return new ItemDefinition { typeID = typeID, subtypeID = subtypeID, amount = amount };
+                amount = itemList.Values[index].Count;
+                return new ItemDefinition { typeID = typeID, subtypeID = subtypeID, Amount = amount };
             }
 
             public string ItemIDByIndex(int index)
@@ -6511,10 +6460,11 @@ namespace IngameScript
                 return itemList.Keys[index];
             }
 
-            public void AddItem(string typeID, string subtypeID, VariableItemCount amount, bool append = true)
+            public void AddItem(MyItemType itemType, VariableItemCount amount, bool append = true)
             {
-                string itemID = $"{typeID}/{subtypeID}";
-                AddItemInternal(itemID, amount, append);
+                //MyItemType itemType
+                if (!itemList.ContainsKey(itemType) || !append || amount.Manual && !itemList[itemType].Manual) itemList[itemType] = amount;
+                else if (itemList[itemType].Manual == amount.Manual && itemList[itemType].Percentage == amount.Percentage) itemList[itemType].Count += amount.Count;
             }
 
             public void AddItem(MyInventoryItem item)
@@ -6524,8 +6474,8 @@ namespace IngameScript
 
             void AddItemInternal(string itemID, VariableItemCount amount, bool append)
             {
-                if (!itemList.ContainsKey(itemID) || !append || amount.manual && !itemList[itemID].manual) itemList[itemID] = amount;
-                else if (itemList[itemID].manual == amount.manual && itemList[itemID].percentage == amount.percentage) itemList[itemID].count += amount.count;
+                if (!itemList.ContainsKey(itemID) || !append || amount.Manual && !itemList[itemID].Manual) itemList[itemID] = amount;
+                else if (itemList[itemID].Manual == amount.Manual && itemList[itemID].Percentage == amount.Percentage) itemList[itemID].Count += amount.Count;
             }
 
             public double ItemCount(MyInventoryItem item, IMyTerminalBlock block = null)
@@ -6551,7 +6501,7 @@ namespace IngameScript
                 if (itemList.ContainsKey(itemID))
                 {
                     found = true;
-                    return itemList[itemID].percentage && block != null ? PercentageMax((float)itemList[itemID].count, typeID, subtypeID, block) : itemList[itemID].count;
+                    return itemList[itemID].Percentage && block != null ? PercentageMax((float)itemList[itemID].Count, typeID, subtypeID, block) : itemList[itemID].Count;
                 }
 
                 found = false;
@@ -6587,6 +6537,7 @@ namespace IngameScript
                 return String.Join("|", itemGroups);
             }
         }
+        */
 
         public class LogicComparison
         {
@@ -6738,241 +6689,6 @@ namespace IngameScript
         {
             public double count = 0, disassembling = 0;
             public DateTime countTime = Now;
-        }
-
-        public class ItemDefinition
-        {
-            public string typeID = "", subtypeID = "", blueprintID = "", displayName = "", category = "";
-
-            public double amount = 0, queuedAssemblyAmount = 0, queuedDisassemblyAmount = 0,
-                          countAmount = 0, countAssemblyAmount = 0, countDisassemblyAmount = 0,
-                          quota = 0, amountDifference = 0, blockQuota = 0, quotaMultiplier = 1,
-                          assemblyMultiplier = 1, dynamicQuotaCounter = 0,
-                          quotaMax = 0, differenceNeeded = 0, currentQuota = 0,
-                          currentAssemblyAmount = 0, currentDisassemblyAmount = 0,
-                          currentExcessAssembly = 0, currentExcessDisassembly = 0,
-                          currentMax = 0, currentNeededAssembly = 0,
-                          postAssemblyAmount = 0;
-
-            public bool fuel = false, assemble = true,
-                disassemble = true, refine = true, display = true,
-                disassembleAll = false, gas = false;
-
-            public List<string> oreKeys = NewStringList;
-
-            public List<ItemCountRecord> countRecordList = new List<ItemCountRecord>();
-
-            public DateTime countRecordTime = Now, dynamicQuotaTime = Now;
-
-            public MyItemType ItemType { get { return new MyItemType(typeID, subtypeID); } }
-
-            public string FullID { get { return $"{typeID}/{subtypeID}"; } }
-
-            public double Percentage { get { return currentQuota == 0 ? double.MaxValue : (amount / currentQuota) * 100.0; } }
-
-            public void FinalizeKeys()
-            {
-                if (oreKeys.Count > 0)
-                    oreKeys = oreKeys.Distinct().ToList();
-            }
-
-            public void SwitchCount(double maxMultiplier, bool useMultiplier, double negativeThreshold, double positiveThreshold, double multiplierChange, bool increaseWhenLow)
-            {
-                amount = countAmount;
-                countAmount = 0;
-                if (Now >= countRecordTime)
-                {
-                    countRecordList.Add(new ItemCountRecord { count = amount, countTime = Now, disassembling = queuedDisassemblyAmount });
-                    countRecordTime = Now.AddSeconds(1.25);
-                    if (countRecordList.Count > 12)
-                        countRecordList.RemoveRange(0, countRecordList.Count - 12);
-                }
-                double averageSpanSeconds = Math.Min(20, (Now - countRecordList[0].countTime).TotalSeconds + 0.0001),
-                    lastSeconds = (Now - dynamicQuotaTime).TotalSeconds, tempDifference,
-                    tempQuota = 0, disassembleCount = Math.Max(countRecordList[0].disassembling, queuedDisassemblyAmount);
-                if (countRecordList.Count > 1 && averageSpanSeconds == 20)
-                    countRecordList.RemoveAt(0);
-
-                bool allOut = amount < 1.0;
-
-                amountDifference = averageSpanSeconds > 0 ? (amount - countRecordList[0].count) / averageSpanSeconds : 0;
-
-                tempDifference = amountDifference;
-
-                tempQuota += (quota > 0 ? quota : 0) + (blockQuota > 0 ? blockQuota : 0);
-
-                if (useMultiplier && tempQuota > 0)
-                {
-                    if (lastSeconds >= 1)
-                    {
-                        if (increaseWhenLow && allOut)
-                            tempDifference -= tempQuota * 0.001;
-
-                        if (!allOut && tempDifference == 0)
-                            tempDifference += tempQuota * 0.1;
-
-                        if (disassembleCount >= 1)
-                            tempDifference = tempQuota * 0.005;
-
-                        if (amount >= tempQuota)
-                            tempDifference = tempQuota * 0.15;
-
-                        dynamicQuotaCounter += ((tempDifference / tempQuota) * averageSpanSeconds) * Math.Min(2.5, lastSeconds);
-                        if (dynamicQuotaCounter <= -negativeThreshold)
-                        {
-                            quotaMultiplier += multiplierChange;
-                            if (quotaMultiplier > maxMultiplier)
-                                quotaMultiplier = maxMultiplier;
-
-                            dynamicQuotaCounter = 0;
-                        }
-                        else if (dynamicQuotaCounter >= positiveThreshold)
-                        {
-                            quotaMultiplier -= multiplierChange;
-                            if (quotaMultiplier < 1)
-                                quotaMultiplier = 1;
-
-                            dynamicQuotaCounter = 0;
-                        }
-                        dynamicQuotaTime = Now;
-                    }
-                }
-                else
-                {
-                    quotaMultiplier = 1;
-                    dynamicQuotaTime = Now;
-                    dynamicQuotaCounter = positiveThreshold * 0.95;
-                }
-                SetCurrentQuota();
-            }
-
-            public void SwitchAssemblyCount()
-            {
-                queuedAssemblyAmount = Math.Floor(countAssemblyAmount);
-                queuedDisassemblyAmount = Math.Floor(countDisassemblyAmount);
-                countAssemblyAmount = countDisassemblyAmount = 0;
-            }
-
-            public void AddAmount(MyFixedPoint amount)
-            {
-                countAmount += (double)amount;
-            }
-
-            public void AddAssemblyAmount(MyFixedPoint amount, bool current)
-            {
-                if (current)
-                    queuedAssemblyAmount += (double)amount;
-                else
-                    countAssemblyAmount += (double)amount;
-            }
-
-            public void AddDisassemblyAmount(MyFixedPoint amount, bool current)
-            {
-                if (current)
-                    queuedDisassemblyAmount += (double)amount;
-                else
-                    countDisassemblyAmount += (double)amount;
-            }
-
-            public void SetDifferenceNeeded(double excessAmount)
-            {
-                //Set Variables
-                currentNeededAssembly = differenceNeeded = currentExcessAssembly = currentExcessDisassembly = 0;
-                currentAssemblyAmount = queuedAssemblyAmount * assemblyMultiplier;
-                currentDisassemblyAmount = queuedDisassemblyAmount;
-                postAssemblyAmount = amount + (currentAssemblyAmount) - (currentDisassemblyAmount);
-                SetCurrentQuota();
-                if (TextHasLength(blueprintID) && blueprintID != nothingType)
-                {
-                    currentMax =
-                        currentQuota < 0 ? 0 :
-                        quotaMax > currentQuota ? quotaMax :
-                        currentQuota > 0 ? Math.Floor(currentQuota * (1.0 + excessAmount)) : double.MaxValue;
-
-                    if (!disassembleAll)
-                    {
-                        if (currentAssemblyAmount > 0 && amount + currentAssemblyAmount > currentMax)
-                            currentExcessAssembly = (amount + currentAssemblyAmount) - currentMax;
-
-                        if (currentDisassemblyAmount > 0 && amount - currentDisassemblyAmount < currentQuota)
-                            currentExcessDisassembly = currentQuota - (amount - currentDisassemblyAmount);
-                    }
-                    else
-                    {
-                        currentExcessAssembly = queuedAssemblyAmount;
-                        if (currentDisassemblyAmount > 0 && currentDisassemblyAmount > amount)
-                            currentExcessDisassembly = currentDisassemblyAmount - amount;
-                    }
-                    if (currentExcessAssembly > 0)
-                        currentExcessAssembly = Math.Floor(currentExcessAssembly / assemblyMultiplier);
-
-                    if (currentDisassemblyAmount > 0 && currentDisassemblyAmount < assemblyMultiplier)
-                        currentExcessDisassembly = currentDisassemblyAmount;
-
-                    if (!assemble)
-                        currentExcessAssembly = 0;
-
-                    if (!disassemble)
-                        currentExcessDisassembly = 0;
-                    //Logic
-                    if (disassembleAll)
-                    {
-                        if (postAssemblyAmount > 0)
-                            differenceNeeded = -postAssemblyAmount;
-                    }
-                    else
-                    {
-                        if (currentQuota == 0)
-                            differenceNeeded = 0;
-                        else
-                        {
-                            if (postAssemblyAmount < currentQuota)
-                                differenceNeeded = currentQuota - postAssemblyAmount;
-                            else if (postAssemblyAmount > currentMax)
-                                differenceNeeded = currentMax - postAssemblyAmount;
-                        }
-                    }
-
-                    if (differenceNeeded > 0)
-                        differenceNeeded = Math.Ceiling(differenceNeeded / assemblyMultiplier);
-                    else if (differenceNeeded < 0)
-                        differenceNeeded = Math.Abs(differenceNeeded) < assemblyMultiplier ? 0 : Math.Floor(Math.Abs(differenceNeeded) / assemblyMultiplier) * -assemblyMultiplier;
-
-
-                    if (differenceNeeded > 0)
-                        currentNeededAssembly = differenceNeeded;
-
-                    if (differenceNeeded > 0 && (currentDisassemblyAmount > 0 || !assemble))
-                        differenceNeeded = 0;
-
-                    if (differenceNeeded < 0 && (currentAssemblyAmount > 0 || !disassemble))
-                        differenceNeeded = 0;
-                }
-            }
-
-            public void SetCurrentQuota()
-            {
-                currentQuota =
-                    (quota > 0 ? quota : 0) +
-                    (blockQuota > 0 ? blockQuota : 0);
-
-                disassembleAll = currentQuota == 0 && quota < 0;
-                if (!disassembleAll && currentQuota > 0)
-                    currentQuota *= quotaMultiplier;
-
-                currentQuota = Math.Floor(currentQuota);
-            }
-
-            public override string ToString()
-            {
-                return $"Name={displayName}||Category={Formatted(category)}||Quota={quota}{(quota >= 0 && quotaMax > quota ? $"<{quotaMax}" : "")}{newLine}" +
-                       $"^Type={typeID}||Subtype={subtypeID}" +
-                       $"{(IsBlueprint(blueprintID) ? $"||Blueprint={blueprintID}||Assembly Multiplier={assemblyMultiplier}||Assemble={assemble}||Disassemble={disassemble}" : StringsMatch(blueprintID, "none") ? "||Blueprint=None" : "")}" +
-                       $"{(IsOre(typeID) ? $"||Refine={refine}" : "")}" +
-                       $"||Fuel={fuel}||Display={display}" +
-                       $"{(gas || IsIce(typeID, subtypeID) ? $"||Gas={gas}" : "")}" +
-                       $"{(IsIngot(typeID) || oreKeys.Count > 0 ? $"||Ore Keys=[{String.Join("|", oreKeys)}]" : "")}{newLine}";
-            }
         }
 
         public class SpanKey
