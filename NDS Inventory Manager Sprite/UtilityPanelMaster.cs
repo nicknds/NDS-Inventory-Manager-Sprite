@@ -92,7 +92,7 @@ namespace IngameScript
 
             void SetPanelDefinition(BlockDefinition managedBlock, int surfaceIndex)
             {
-                managedBlock.panelDefinitionList[surfaceIndex] = new PanelMasterClass.PanelDefinition { surfaceIndex = surfaceIndex, provider = !(managedBlock.block is IMyTextPanel), suffixes = settingsListsStrings[setKeyDefaultSuffixes], parent = managedBlock };
+                managedBlock.panelDefinitionList[surfaceIndex] = new PanelDefinition { surfaceIndex = surfaceIndex, provider = !(managedBlock.block is IMyTextPanel), suffixes = settingsListsStrings[setKeyDefaultSuffixes], parent = managedBlock };
                 managedBlock.panelDefinitionList[surfaceIndex].items.trackAmounts = false;
             }
 
@@ -123,7 +123,7 @@ namespace IngameScript
 
             public void CheckPanel(BlockDefinition blockDefinition, int surfaceIndex = 0)
             {
-                PanelMasterClass.PanelDefinition panelDefinition = blockDefinition.panelDefinitionList[surfaceIndex];
+                PanelDefinition panelDefinition = blockDefinition.panelDefinitionList[surfaceIndex];
                 string hashKey = panelDefinition.EntityFlickerID();
 
                 if (parent.antiflickerSet.Add(hashKey))
@@ -917,18 +917,21 @@ namespace IngameScript
             public IEnumerator<FunctionState> ItemPanelState()
             {
                 List<ItemDefinition> allItemList = new List<ItemDefinition>(), foundItemList = new List<ItemDefinition>();
+                bool allCategories;
                 yield return stateContinue;
 
                 while (true)
                 {
                     allItemList.Clear();
                     foundItemList.Clear();
+                    allCategories = tempPanelDefinition.itemCategories.Contains("all") ||
+                                    tempPanelDefinition.itemCategories.Contains("*");
                     allItemList.AddRange(parent.GetAllItems);
                     bool found;
                     foreach (ItemDefinition item in allItemList)
                     {
                         if (PauseTickRun) yield return stateActive;
-                        found = tempPanelDefinition.itemCategories.Contains(item.category);
+                        found = allCategories || tempPanelDefinition.itemCategories.Contains(item.category);
                         if (!found) tempPanelDefinition.items.ItemCount(out found, item.typeID, item.subtypeID, null);
                         if (found && item.display && item.amount >= tempPanelDefinition.minimumItemAmount && item.amount <= tempPanelDefinition.maximumItemAmount &&
                             (!tempPanelDefinition.belowQuota || item.amount < item.currentQuota))
@@ -1153,9 +1156,9 @@ namespace IngameScript
 
                 public List<MySprite> spriteList = new List<MySprite>();
 
-                public List<PanelMasterClass.PanelObject>
-                    panelObjects = PanelMasterClass.NewPanelObjectList,
-                    spannableObjects = PanelMasterClass.NewPanelObjectList;
+                public List<PanelObject>
+                    panelObjects = NewPanelObjectList,
+                    spannableObjects = NewPanelObjectList;
 
                 public List<string> itemCategories = NewStringList, suffixes;
 
@@ -1173,7 +1176,7 @@ namespace IngameScript
 
                 public DisplayType displayType = DisplayType.Standard;
 
-                public DateTime nextUpdateTime = Now, updateTime = Now;
+                public DateTime nextUpdateTime = Now;
 
                 public ItemCollection items = NewCollection;
 
@@ -1185,7 +1188,7 @@ namespace IngameScript
 
                 public IMyTextSurface Surface { get { return provider ? ((IMyTextSurfaceProvider)parent.block).GetSurface(surfaceIndex) : (IMyTextPanel)parent.block; } }
 
-                public void AddPanelDetails(List<PanelMasterClass.PanelDetail> list)
+                public void AddPanelDetails(List<PanelDetail> list)
                 {
                     panelObjects[panelObjects.Count - 1].panelDetails.AddRange(list);
                 }
@@ -1193,9 +1196,9 @@ namespace IngameScript
                 void AddPanelObject(bool spannable = false, bool item = false)
                 {
                     if (spannable)
-                        spannableObjects.Add(new PanelMasterClass.PanelObject { item = item });
+                        spannableObjects.Add(new PanelObject { item = item });
                     else
-                        panelObjects.Add(new PanelMasterClass.PanelObject());
+                        panelObjects.Add(new PanelObject());
                 }
 
                 public void AddPanelItem(string name, double amount, double quota, double assemblyAmount, double disassemblyAmount, double amountDifference)
@@ -1204,7 +1207,7 @@ namespace IngameScript
                     spannableObjects[spannableObjects.Count - 1].sortableText = name.Trim();
                     if (panelItemSorting == PanelItemSorting.AscendingPercent || panelItemSorting == PanelItemSorting.DescendingPercent)
                         spannableObjects[spannableObjects.Count - 1].sortableValue = quota > 0 ? amount / quota : 0;
-                    spannableObjects[spannableObjects.Count - 1].panelDetails.Add(new PanelMasterClass.PanelDetail { itemAmount = amount, itemName = name, itemQuota = quota, assemblyAmount = assemblyAmount, disassemblyAmount = disassemblyAmount, amountDifference = amountDifference });
+                    spannableObjects[spannableObjects.Count - 1].panelDetails.Add(new PanelDetail { itemAmount = amount, itemName = name, itemQuota = quota, assemblyAmount = assemblyAmount, disassemblyAmount = disassemblyAmount, amountDifference = amountDifference });
                 }
 
                 public void AddPanelDetail(string text, bool spannable = false, float ratio = 1f, bool nextObject = true, bool reservedArea = false, TextAlignment alignment = leftAlignment)
@@ -1212,9 +1215,9 @@ namespace IngameScript
                     if (nextObject)
                         AddPanelObject(spannable);
                     if (spannable)
-                        spannableObjects[spannableObjects.Count - 1].panelDetails.Add(new PanelMasterClass.PanelDetail { text = text, ratio = ratio, reservedArea = reservedArea, alignment = alignment });
+                        spannableObjects[spannableObjects.Count - 1].panelDetails.Add(new PanelDetail { text = text, ratio = ratio, reservedArea = reservedArea, alignment = alignment });
                     else
-                        panelObjects[panelObjects.Count - 1].panelDetails.Add(new PanelMasterClass.PanelDetail { text = text, ratio = ratio, reservedArea = reservedArea, alignment = alignment });
+                        panelObjects[panelObjects.Count - 1].panelDetails.Add(new PanelDetail { text = text, ratio = ratio, reservedArea = reservedArea, alignment = alignment });
                 }
 
                 public string DataSource
