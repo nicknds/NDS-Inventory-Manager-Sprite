@@ -4515,7 +4515,7 @@ namespace IngameScript
                     if (!(tempBlockOptionDefinition.block is IMyTextPanel) && GetKeyBool(setKeyAutoTagBlocks))
                         while (!GenerateBlockOptions(tempBlockOptionDefinition)) yield return stateActive;
                 }
-                else if (!StringsMatch(dataSource, tempBlockOptionDefinition.settingBackup))
+                if (!StringsMatch(dataSource, tempBlockOptionDefinition.settingBackup))
                 {
                     tempBlockOptionDefinition.Settings.Initialize();
                     tempBlockOptionDefinition.cloneGroup = "";
@@ -4742,7 +4742,6 @@ namespace IngameScript
                     BuilderAppendLine(builder, optionBlockFilter);
 
                 tempGenerateBlockOptionBlockDefinition.DataSource = builder.ToString().TrimEnd();
-                tempGenerateBlockOptionBlockDefinition.settingBackup = tempGenerateBlockOptionBlockDefinition.DataSource;
 
                 yield return stateContinue;
             }
