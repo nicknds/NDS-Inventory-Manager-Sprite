@@ -49,13 +49,13 @@ namespace IngameScript
 
             #region Short Links
 
-            bool PauseTickRun { get { return parent.PauseTickRun; } }
-            bool IsStateRunning { get { return parent.StateRunning(selfContainedIdentifier); } }
-            bool RunStateManager { get { return parent.StateManager(selfContainedIdentifier, true, true); } }
-            public static List<PanelObject> NewPanelObjectList { get { return new List<PanelObject>(); } }
-            Dictionary<long, BlockDefinition> managedBlocks { get { return parent.managedBlocks; } }
-            SortedList<string, List<long>> typedIndexes { get { return parent.typedIndexes; } }
-            SortedList<string, List<string>> settingsListsStrings { get { return parent.settingsListsStrings; } }
+            bool PauseTickRun => parent.PauseTickRun;
+            bool IsStateRunning => parent.StateRunning(selfContainedIdentifier);
+            bool RunStateManager => parent.StateManager(selfContainedIdentifier);
+            public static List<PanelObject> NewPanelObjectList => new List<PanelObject>();
+            Dictionary<long, BlockDefinition> managedBlocks => parent.managedBlocks;
+            SortedList<string, LongListPlus> typedIndexes => parent.typedIndexes;
+            SortedList<string, List<string>> settingsListsStrings => parent.settingsListsStrings;
 
             #endregion
 
@@ -92,7 +92,9 @@ namespace IngameScript
 
             void SetPanelDefinition(BlockDefinition managedBlock, int surfaceIndex)
             {
-                managedBlock.panelDefinitionList[surfaceIndex] = new PanelDefinition { surfaceIndex = surfaceIndex, provider = !(managedBlock.block is IMyTextPanel), suffixes = settingsListsStrings[setKeyDefaultSuffixes], parent = managedBlock };
+                if (!managedBlock.panelDefinitionList.ContainsKey(surfaceIndex))
+                    managedBlock.panelDefinitionList[surfaceIndex] = new PanelDefinition { surfaceIndex = surfaceIndex, provider = !(managedBlock.block is IMyTextPanel), parent = managedBlock };
+                managedBlock.panelDefinitionList[surfaceIndex].suffixes = settingsListsStrings[setKeyDefaultSuffixes];
                 managedBlock.panelDefinitionList[surfaceIndex].items.trackAmounts = false;
             }
 
@@ -124,7 +126,7 @@ namespace IngameScript
             public void CheckPanel(BlockDefinition blockDefinition, int surfaceIndex = 0)
             {
                 PanelDefinition panelDefinition = blockDefinition.panelDefinitionList[surfaceIndex];
-                string hashKey = panelDefinition.EntityFlickerID();
+                string hashKey = panelDefinition.EntityFlickerID;
 
                 if (parent.antiflickerSet.Add(hashKey))
                 {
@@ -844,7 +846,7 @@ namespace IngameScript
                         tempPanelDefinition.AddPanelDetail("Total:".PadRight(tempPanelDefinition.nameLength), false, 0.75f, true, true);
                         if (tempPanelDefinition.showProgressBar)
                             tempPanelDefinition.AddPanelDetails(GenerateProgressBarDetails((float)capacity));
-                        tempPanelDefinition.AddPanelDetail($"{ShortNumber2(capacity * 100.0, tempPanelDefinition.suffixes, 2, 5)}%", false, 0.25f, false);
+                        tempPanelDefinition.AddPanelDetail($"{ShortNumber2(capacity * 100.0, tempPanelDefinition.suffixes, 0, 5)}%", false, 0.25f, false);
                     }
                     foreach (string category in tempPanelDefinition.itemCategories)
                     {
@@ -855,7 +857,7 @@ namespace IngameScript
                             tempPanelDefinition.AddPanelDetail($"{Formatted(category)}:".PadRight(tempPanelDefinition.nameLength), false, 0.75f, true, true);
                             if (tempPanelDefinition.showProgressBar)
                                 tempPanelDefinition.AddPanelDetails(GenerateProgressBarDetails((float)capacity));
-                            tempPanelDefinition.AddPanelDetail($"{ShortNumber2(capacity * 100.0, tempPanelDefinition.suffixes, 2, 5)}%", false, 0.25f, false);
+                            tempPanelDefinition.AddPanelDetail($"{ShortNumber2(capacity * 100.0, tempPanelDefinition.suffixes, 0, 5)}%", false, 0.25f, false);
                         }
                     }
                     yield return stateContinue;
@@ -916,7 +918,7 @@ namespace IngameScript
 
             public IEnumerator<FunctionState> ItemPanelState()
             {
-                List<ItemDefinition> allItemList = new List<ItemDefinition>(), foundItemList = new List<ItemDefinition>();
+                List<ItemDefinition> allItemList = NewItemDefinitionList, foundItemList = NewItemDefinitionList;
                 bool allCategories;
                 yield return stateContinue;
 
@@ -978,16 +980,15 @@ namespace IngameScript
 
                 while (true)
                 {
-                    AddOutputItem(tempPanelDefinition, $"NDS Inventory Manager {scriptVersion}");
-                    AddOutputItem(tempPanelDefinition, currentMajorFunction.Replace("_", " "));
+                    AddOutputItem(tempPanelDefinition, $"NDS Inventory Manager v{buildVersion}");
+                    AddOutputItem(tempPanelDefinition, $"{parent.currentMajorFunction}".Replace("_", " "));
                     AddOutputItem(tempPanelDefinition, $"Runtime:    {parent.ShortMSTime(torchAverage)}");
                     AddOutputItem(tempPanelDefinition, $"Blocks:     {ShortNumber2(managedBlocks.Count, tempPanelDefinition.suffixes)}");
                     AddOutputItem(tempPanelDefinition, $"Storages:   {ShortNumber2(typedIndexes[setKeyIndexStorage].Count, tempPanelDefinition.suffixes)}");
                     AddOutputItem(tempPanelDefinition, $"Assemblers: {ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, tempPanelDefinition.suffixes)}");
                     AddOutputItem(tempPanelDefinition, $"H2/O2 Gens: {ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, tempPanelDefinition.suffixes)}");
                     AddOutputItem(tempPanelDefinition, $"Refineries: {ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, tempPanelDefinition.suffixes)}");
-                    AddOutputItem(tempPanelDefinition, $"H2 Tanks:   {ShortNumber2(typedIndexes[setKeyIndexHydrogenTank].Count, tempPanelDefinition.suffixes)}");
-                    AddOutputItem(tempPanelDefinition, $"O2 Tanks:   {ShortNumber2(typedIndexes[setKeyIndexOxygenTank].Count, tempPanelDefinition.suffixes)}");
+                    AddOutputItem(tempPanelDefinition, $"H/O Tanks:  {ShortNumber2(typedIndexes[setKeyIndexHydrogenTank].Count, tempPanelDefinition.suffixes)}/{ShortNumber2(typedIndexes[setKeyIndexOxygenTank].Count, tempPanelDefinition.suffixes)}");
                     AddOutputItem(tempPanelDefinition, $"Weapons:    {ShortNumber2(typedIndexes[setKeyIndexGun].Count, tempPanelDefinition.suffixes)}");
                     AddOutputItem(tempPanelDefinition, $"Reactors:   {ShortNumber2(typedIndexes[setKeyIndexReactor].Count, tempPanelDefinition.suffixes)}");
 
@@ -1096,12 +1097,22 @@ namespace IngameScript
 
             public class PanelDetail
             {
-                public string itemName = "", text = "", textureType = "";
-                public double itemAmount = 0, itemQuota = 0, value = 0, assemblyAmount = 0, disassemblyAmount = 0, amountDifference = 0;
-                public TextAlignment alignment = leftAlignment;
-                public float ratio = -1;
-                public bool reservedArea = false;
-                public Color textureColor = Color.White;
+                public string itemName, text, textureType;
+                public double itemAmount, itemQuota, value, assemblyAmount, disassemblyAmount, amountDifference;
+                public TextAlignment alignment;
+                public float ratio;
+                public bool reservedArea;
+                public Color textureColor;
+
+                public PanelDetail()
+                {
+                    itemName = text = textureType = "";
+                    itemAmount = itemQuota = value = assemblyAmount = disassemblyAmount = amountDifference = 0;
+                    alignment = leftAlignment;
+                    ratio = -1;
+                    reservedArea = false;
+                    textureColor = Color.White;
+                }
 
                 public PanelDetail Clone()
                 {
@@ -1186,7 +1197,7 @@ namespace IngameScript
 
                 public string font = "Monospace", settingKey = "", spanKey = "", childSpanKey = "", settingBackup = "", itemSearchString = "";
 
-                public IMyTextSurface Surface { get { return provider ? ((IMyTextSurfaceProvider)parent.block).GetSurface(surfaceIndex) : (IMyTextPanel)parent.block; } }
+                public IMyTextSurface Surface => provider ? ((IMyTextSurfaceProvider)parent.block).GetSurface(surfaceIndex) : (IMyTextPanel)parent.block;
 
                 public void AddPanelDetails(List<PanelDetail> list)
                 {
@@ -1246,13 +1257,7 @@ namespace IngameScript
                     }
                 }
 
-                public string EntityFlickerID()
-                {
-                    string id = parent.block.EntityId.ToString();
-                    if (provider)
-                        id += $":{surfaceIndex}";
-                    return id;
-                }
+                public string EntityFlickerID => $"{parent.block.EntityId}{(provider ? $":{surfaceIndex}" : "")}";
             }
         }
     }
