@@ -1,6 +1,7 @@
 ﻿using Sandbox.ModAPI.Ingame;
 using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -34,26 +35,28 @@ namespace IngameScript
         const FunctionState stateActive = FunctionState.Active, stateContinue = FunctionState.Continue, stateUninitialized = FunctionState.Uninitialized, stateError = FunctionState.Error;
 
         const TextAlignment leftAlignment = TextAlignment.LEFT, centerAlignment = TextAlignment.CENTER;
-        bool PauseTickRun { get { return UnavailableActions(); } }
-        bool IsStateRunning { get { return StateRunning(selfContainedIdentifier); } }
-        bool RunStateManager { get { return StateManager(selfContainedIdentifier); } }
+        bool PauseTickRun => UnavailableActions();
+        bool IsStateRunning => StateRunning(selfContainedIdentifier);
+        bool RunStateManager => StateManager(selfContainedIdentifier);
 
         double overheatAverage { get { return OverheatAverage; } set { OverheatAverage = value; } }
         double actionLimiterMultiplier { get { return ActionLimiterMultiplier; } set { ActionLimiterMultiplier = value; } }
         double runTimeLimiter { get { return RunTimeLimiter; } set { RunTimeLimiter = value; } }
 
-        int echoDelay { get { return EchoDelay; } }
+        int echoDelay => EchoDelay;
 
-        static List<long> NewLongList { get { return new List<long>(); } }
-        static List<MyInventoryItem> NewItemList { get { return new List<MyInventoryItem>(); } }
-        static List<string> NewStringList { get { return new List<string>(); } }
-        static List<MyProductionItem> NewProductionList { get { return new List<MyProductionItem>(); } }
-        static ItemCollection NewCollection { get { return new ItemCollection(); } }
-        static StringBuilder NewBuilder { get { return new StringBuilder(); } }
-        static SortedList<long, double> NewSortedListLongDouble { get { return new SortedList<long, double>(); } }
-        static HashSet<long> NewHashSetLong { get { return new HashSet<long>(); } }
-        static HashSet<string> NewHashSetString { get { return new HashSet<string>(); } }
-        static DateTime Now { get { return DateTime.Now; } }
+        static List<long> NewLongList => new List<long>();
+        static LongListPlus NewLongListPlus => new LongListPlus();
+        static List<MyInventoryItem> NewItemList => new List<MyInventoryItem>();
+        static List<ItemDefinition> NewItemDefinitionList => new List<ItemDefinition>();
+        static List<string> NewStringList => new List<string>();
+        static List<MyProductionItem> NewProductionList => new List<MyProductionItem>();
+        static ItemCollection NewCollection => new ItemCollection();
+        static StringBuilder NewBuilder => new StringBuilder();
+        static SortedList<long, double> NewSortedListLongDouble => new SortedList<long, double>();
+        static HashSet<long> NewHashSetLong => new HashSet<long>();
+        static HashSet<string> NewHashSetString => new HashSet<string>();
+        static DateTime Now => DateTime.Now;
         List<ItemDefinition> GetAllItems
         {
             get
@@ -185,7 +188,7 @@ namespace IngameScript
 
         #region Lists
 
-        SortedList<string, List<long>> indexesStorageLists = new SortedList<string, List<long>>();
+        SortedList<string, LongListPlus> indexesStorageLists = new SortedList<string, LongListPlus>();
 
         SortedList<string, List<PotentialAssembler>> potentialAssemblerList = new SortedList<string, List<PotentialAssembler>>();
 
@@ -193,26 +196,24 @@ namespace IngameScript
             modItemDictionary = new SortedList<string, string>(),
             oreKeyedItemDictionary = new SortedList<string, string>();
 
-        SortedList<FunctionIdentifier, string> stateErrorCodes = new SortedList<FunctionIdentifier, string>();
-
-        SortedList<string, List<long>> typedIndexes = new SortedList<string, List<long>>
+        SortedList<string, LongListPlus> typedIndexes = new SortedList<string, LongListPlus>
         {
-            { setKeyIndexAssemblers, NewLongList },
-            { setKeyIndexGasGenerators, NewLongList },
-            { setKeyIndexGravelSifters, NewLongList },
-            { setKeyIndexGun, NewLongList },
-            { setKeyIndexHydrogenTank, NewLongList },
-            { setKeyIndexOxygenTank, NewLongList },
-            { setKeyIndexParachute, NewLongList },
-            { setKeyIndexReactor, NewLongList },
-            { setKeyIndexRefinery, NewLongList },
-            { setKeyIndexStorage, NewLongList },
-            { setKeyIndexSortable, NewLongList },
-            { setKeyIndexLoadout, NewLongList },
-            { setKeyIndexLogic, NewLongList },
-            { setKeyIndexPanel, NewLongList},
-            { setKeyIndexInventory, NewLongList },
-            { setKeyIndexLimit, NewLongList }
+            { setKeyIndexAssemblers, NewLongListPlus },
+            { setKeyIndexGasGenerators, NewLongListPlus },
+            { setKeyIndexGravelSifters, NewLongListPlus },
+            { setKeyIndexGun, NewLongListPlus },
+            { setKeyIndexHydrogenTank, NewLongListPlus },
+            { setKeyIndexOxygenTank, NewLongListPlus },
+            { setKeyIndexParachute, NewLongListPlus },
+            { setKeyIndexReactor, NewLongListPlus },
+            { setKeyIndexRefinery, NewLongListPlus },
+            { setKeyIndexStorage, NewLongListPlus },
+            { setKeyIndexSortable, NewLongListPlus },
+            { setKeyIndexLoadout, NewLongListPlus },
+            { setKeyIndexLogic, NewLongListPlus },
+            { setKeyIndexPanel, NewLongListPlus},
+            { setKeyIndexInventory, NewLongListPlus },
+            { setKeyIndexLimit, NewLongListPlus }
         };
 
         SortedList<FunctionIdentifier, TimeSpan> delaySpans = new SortedList<FunctionIdentifier, TimeSpan>();
@@ -275,7 +276,7 @@ namespace IngameScript
 
         List<IMyTerminalBlock> groupBlocks = new List<IMyTerminalBlock>(), scannedBlocks = new List<IMyTerminalBlock>(1500);
 
-        List<ItemDefinition> itemListAllItems = new List<ItemDefinition>();
+        List<ItemDefinition> itemListAllItems = NewItemDefinitionList;
 
         List<MyInventoryItem> countByListA = NewItemList, amountContainedListA = NewItemList, mainFunctionItemList = NewItemList, tempStorageItemList;
 
@@ -505,9 +506,9 @@ namespace IngameScript
             ingotKeyword, oreKeyword,
             componentKeyword, ammoKeyword,
             toolKeyword, globalFilterKeyword,
-            panelTag, optionBlockFilter, currentMajorFunction = "Idle";
+            panelTag, optionBlockFilter;
 
-        static double scriptVersion = 5.28, torchAverage = 0, tickWeight = 0.005;
+        static double settingVersion = 5.28, buildVersion = 279, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
@@ -521,7 +522,7 @@ namespace IngameScript
             tempMatchingItemAppend, tempMatchingItemAcceptZero, tempOrderByPriority, tempDistributeBlueprintCount,
             tempInsertBlueprintCount, tempGetTagsAcceptZero, useAcceptanceFilter = true;
 
-        FunctionIdentifier selfContainedIdentifier, currentFunction = FunctionIdentifier.Idle;
+        FunctionIdentifier selfContainedIdentifier, currentFunction = FunctionIdentifier.Idle, currentMajorFunction = FunctionIdentifier.Idle;
 
         MyAssemblerMode tempDistributeBlueprintMode, tempInsertBlueprintMode, tempRemoveBlueprintMode;
 
@@ -554,7 +555,7 @@ namespace IngameScript
             tempAmountContainedTypeID, tempAmountContainedSubtypeID,
             tempGetTagsText;
 
-        string echoSpacer { get { return ColoredEcho("".PadRight(4, spacerChars[spacerIndex]), 3); } }
+        string echoSpacer => ColoredEcho("".PadRight(4, spacerChars[spacerIndex]), 3);
 
         static string newLine;
 
@@ -574,7 +575,7 @@ namespace IngameScript
                        tempCountItemsInListCollection,
                        tempGetTagsCollection;
 
-        BlockDefinition mainBlockDefinition, alternateBlockDefinition, storageDefinitionA, blockCheckDefinitionA, tempBlockOptionDefinition,
+        BlockDefinition mainBlockDefinition, alternateBlockDefinition, storageDefinitionA, tempBlockOptionDefinition,
                         tempDistributeItemBlockDefinition, tempInsertBlueprintBlockDefinition, tempGenerateBlockOptionBlockDefinition;
 
         Blueprint tempDistributeBlueprint, tempRemoveBlueprint;
@@ -749,10 +750,7 @@ namespace IngameScript
             updateFrequency = updateFrequency == 1 || updateFrequency == 10 || updateFrequency == 100 ? updateFrequency : 1;
 
             //Presets
-            StringBuilder builder = NewBuilder;
-            builder.Append("All");
-            itemCategoryList.ForEach(category => builder.Append($"|{Formatted(category)}"));
-            itemCategoryString = builder.ToString();
+            itemCategoryString = $"All|{String.Join("|", itemCategoryList.Select(b => Formatted(b)))}";
 
             panelMaster.presetPanelOptions = PanelMasterClass.PresetPanelOption(itemCategoryString);
 
@@ -922,13 +920,12 @@ namespace IngameScript
         void MainEcho()
         {
             spacerIndex = (spacerIndex + 1) % spacerChars.Count;
-            Echo($"Main: {ColoredEcho(currentMajorFunction.Replace("_", " "))}");
+            Echo($"Main: {ColoredEcho(currentMajorFunction.ToString().Replace("_", " "))}");
             Echo($"Current: {ColoredEcho(currentFunction.ToString().Replace("_", " "))}");
             Echo($"Last: {Round(Runtime.LastRunTimeMs, 4)}");
             Echo($"Avg: {Round(torchAverage, 4)}");
             Echo($"Blocks: {managedBlocks.Count}");
             Echo($"Panels: {typedIndexes[setKeyIndexPanel].Count}");
-            Echo($"Active Functions: {stateErrorCodes.Count}");
 
             OptionalEcho($"Mod Items: {modItemDictionary.Count}", modItemDictionary.Count > 0);
             OptionalEcho($"Mod Blueprints: {modBlueprintList.Count}", modBlueprintList.Count > 0);
@@ -1097,6 +1094,7 @@ namespace IngameScript
 
 
         #region State Functions
+
         IEnumerator<FunctionState> OrderCargoState()
         {
             IMyInventory inventory;
@@ -1443,7 +1441,7 @@ namespace IngameScript
                         }
                         else if (key == "version")
                         {
-                            if (doubleValue == scriptVersion)
+                            if (doubleValue == settingVersion)
                                 correctVersion = true;
                         }
                         else if (settingsInts.ContainsKey(key))
@@ -1512,6 +1510,7 @@ namespace IngameScript
                         }
                     }
                 }
+
                 yield return stateContinue;
             }
         }
@@ -1600,6 +1599,7 @@ namespace IngameScript
 
                     monitoredAssembler.SetNextCheck(delayResetIdleAssembler / 2.0);
                 }
+
                 yield return stateContinue;
             }
         }
@@ -1623,7 +1623,7 @@ namespace IngameScript
 
         IEnumerator<FunctionState> MatchingItemState()
         {
-            List<ItemDefinition> itemList = new List<ItemDefinition>();
+            List<ItemDefinition> itemList = NewItemDefinitionList;
             ItemDefinition definition;
             yield return stateContinue;
 
@@ -1631,8 +1631,7 @@ namespace IngameScript
             {
                 if (TextHasLength(tempMatchingItemName))
                 {
-                    itemList.Clear();
-                    itemList.AddRange(GetAllItems);
+                    PopulateItemList(itemList);
                     bool match, percentage;
                     double calcedAmount;
                     for (int i = 0; i < itemList.Count; i++)
@@ -1777,8 +1776,7 @@ namespace IngameScript
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    if (!IsBlockOk(index))
-                        continue;
+                    if (!IsBlockOk(index)) continue;
 
                     mainBlockDefinition = managedBlocks[index];
                     loadoutInventory = mainBlockDefinition.Input;
@@ -1791,8 +1789,7 @@ namespace IngameScript
                     itemCount = itemCollectionMain.ItemTypeCount;
                     for (int x = 0; x < itemCount; x++)
                     {
-                        if (PauseTickRun)
-                            yield return stateActive;
+                        if (PauseTickRun) yield return stateActive;
 
                         definition = itemCollectionMain.ItemByIndex(x);
                         if (TextHasLength(definition.subtypeID) && itemCollectionAlternate.itemList.ContainsKey(definition.FullID))
@@ -1802,8 +1799,7 @@ namespace IngameScript
                     itemCount = itemCollectionAlternate.ItemTypeCount;
                     for (int x = 0; x < itemCount && !excessFound; x++)
                     {
-                        if (PauseTickRun)
-                            yield return stateActive;
+                        if (PauseTickRun) yield return stateActive;
 
                         definition = itemCollectionAlternate.ItemByIndex(x);
                         excessFound = definition.amount <= -0.01;
@@ -1855,6 +1851,7 @@ namespace IngameScript
                         }
                     }
                 }
+
                 yield return stateContinue;
             }
         }
@@ -1878,8 +1875,7 @@ namespace IngameScript
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    if (!IsBlockOk(index))
-                        continue;
+                    if (!IsBlockOk(index)) continue;
 
                     minPercent = double.MaxValue;
                     maxPercent = double.MinValue;
@@ -1949,6 +1945,7 @@ namespace IngameScript
                     else
                         typedIndexes[setKeyIndexLimit].Remove(index);
                 }
+
                 while (!OrderListByPriority(typedIndexes[setKeyIndexLimit], priorityTypes.Contains(setKeyIndexLimit))) yield return stateActive;
                 orePriorities.Clear();
                 yield return stateContinue;
@@ -1991,6 +1988,7 @@ namespace IngameScript
                             ((IMyFunctionalBlock)alternateBlockDefinition.block).Enabled = pass;
                     }
                 }
+
                 yield return stateContinue;
             }
         }
@@ -2038,7 +2036,7 @@ namespace IngameScript
                 if (FunctionDelay(key))
                 {
                     scanning = true;
-                    currentMajorFunction = $"{key}";
+                    currentMajorFunction = key;
                     while (!StateManager(key)) yield return stateActive;
 
                     scanning = false;
@@ -2047,17 +2045,15 @@ namespace IngameScript
 
                 if (GetKeyBool(setKeyToggleCountItems))
                 {
-                    key = FunctionIdentifier.Counting_Items;
-                    currentMajorFunction = $"{key}";
-                    while (!StateManager(key)) yield return stateActive;
+                    currentMajorFunction = FunctionIdentifier.Counting_Items;
+                    while (!StateManager(currentMajorFunction)) yield return stateActive;
                     yield return stateActive;
                 }
 
                 if (GetKeyBool(setKeyToggleCountBlueprints))
                 {
-                    key = FunctionIdentifier.Counting_Blueprints;
-                    currentMajorFunction = $"{key}";
-                    while (!StateManager(key)) yield return stateActive;
+                    currentMajorFunction = FunctionIdentifier.Counting_Blueprints;
+                    while (!StateManager(currentMajorFunction)) yield return stateActive;
                 }
 
                 if (GetKeyBool(setKeyToggleSortBlueprints))
@@ -2065,7 +2061,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Sort_Blueprints;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
                         while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelaySortBlueprints));
@@ -2077,7 +2073,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Queue_Assembly;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
                         while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayQueueAssembly));
@@ -2089,7 +2085,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Queue_Disassembly;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
                         while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayQueueDisassembly));
@@ -2101,7 +2097,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Removing_Excess_Assembly;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
                         while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayRemoveExcessAssembly));
@@ -2113,7 +2109,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Removing_Excess_Disassembly;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
                         while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayRemoveExcessDisassembly));
@@ -2125,7 +2121,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Sort_Refineries;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
                         while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelaySortRefinery));
@@ -2137,7 +2133,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Processing_Limits;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
                         while (!StateManager(key)) yield return stateActive;
 
                         delaySpans[key] = SpanDelay(GetKeyDouble(setKeyDelayProcessLimits));
@@ -2149,7 +2145,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Sorting;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
                         bool useBottles = GetKeyDouble(setKeyDelayFillingBottles) > 0 && SpanElapsed(fillBottleSpan);
                         if (useBottles)
                             fillingBottles = !fillingBottles;
@@ -2167,7 +2163,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Distribution;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
 
                         while (!StateManager(key)) yield return stateActive;
 
@@ -2180,37 +2176,37 @@ namespace IngameScript
                 {
                     if (typedIndexes[setKeyIndexRefinery].Count > 1 && GetKeyBool(setKeyToggleSpreadRefieries))
                     {
-                        currentMajorFunction = "Spreading Refineries";
+                        currentMajorFunction = key;
                         while (!BalanceItems(typedIndexes[setKeyIndexRefinery]))
                             yield return stateActive;
                     }
                     if (typedIndexes[setKeyIndexReactor].Count > 1 && GetKeyBool(setKeyToggleSpreadReactors))
                     {
-                        currentMajorFunction = "Spreading Reactors";
+                        currentMajorFunction = key;
                         while (!BalanceItems(typedIndexes[setKeyIndexReactor]))
                             yield return stateActive;
                     }
                     if (typedIndexes[setKeyIndexGun].Count > 1 && GetKeyBool(setKeyToggleSpreadGuns))
                     {
-                        currentMajorFunction = "Spreading Weapons";
+                        currentMajorFunction = key;
                         while (!BalanceItems(typedIndexes[setKeyIndexGun]))
                             yield return stateActive;
                     }
                     if (typedIndexes[setKeyIndexGasGenerators].Count > 1 && GetKeyBool(setKeyToggleSpreadGasGenerators))
                     {
-                        currentMajorFunction = "Spreading O2/H2 Gens";
+                        currentMajorFunction = key;
                         while (!BalanceItems(typedIndexes[setKeyIndexGasGenerators]))
                             yield return stateActive;
                     }
                     if (typedIndexes[setKeyIndexGravelSifters].Count > 1 && GetKeyBool(setKeyToggleSpreadGravelSifters))
                     {
-                        currentMajorFunction = "Spreading Gravel Sifters";
+                        currentMajorFunction = key;
                         while (!BalanceItems(typedIndexes[setKeyIndexGravelSifters]))
                             yield return stateActive;
                     }
                     if (typedIndexes[setKeyIndexParachute].Count > 1 && GetKeyBool(setKeyToggleSpreadParachutes))
                     {
-                        currentMajorFunction = "Spreading Parachutes";
+                        currentMajorFunction = key;
                         while (!BalanceItems(typedIndexes[setKeyIndexParachute]))
                             yield return stateActive;
                     }
@@ -2222,7 +2218,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Cargo_Priority_Loop;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
 
                         while (!StateManager(key)) yield return stateActive;
 
@@ -2235,7 +2231,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Order_Storage;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
 
                         while (!StateManager(key)) yield return stateActive;
 
@@ -2248,7 +2244,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Spread_Blueprints;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
 
                         while (!StateManager(key)) yield return stateActive;
 
@@ -2261,7 +2257,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Loadouts;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
 
                         while (!StateManager(key)) yield return stateActive;
 
@@ -2274,7 +2270,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Custom_Logic;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
 
                         while (!StateManager(key)) yield return stateActive;
 
@@ -2287,7 +2283,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Checking_Idle_Assemblers;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
 
                         while (!StateManager(key)) yield return stateActive;
 
@@ -2300,7 +2296,7 @@ namespace IngameScript
                     key = FunctionIdentifier.Find_Mod_Items;
                     if (FunctionDelay(key))
                     {
-                        currentMajorFunction = $"{key}";
+                        currentMajorFunction = key;
                         while (!StateManager(key))
                             yield return stateActive;
 
@@ -2314,18 +2310,19 @@ namespace IngameScript
 
         IEnumerator<FunctionState> OutputState()
         {
-            List<long> indexes = NewLongList;
+            List<long> panelIndexes = NewLongList;
             yield return stateContinue;
 
             while (true)
             {
-                indexes.Clear();
-                indexes.AddRange(typedIndexes[setKeyIndexPanel]);
-                foreach (long index in indexes)
+                panelIndexes.Clear();
+                panelIndexes.AddRange(typedIndexes[setKeyIndexPanel]);
+                foreach (long index in panelIndexes)
                 {
+                    if (!IsBlockOk(index)) continue;
                     if (PauseTickRun) yield return stateActive;
-                    for (int p = 0; p < managedBlocks[index].panelDefinitionList.Count; p++)
-                        while (!panelMaster.TotalPanelV2(managedBlocks[index].panelDefinitionList.Values[p])) yield return stateActive;
+                    foreach (PanelMasterClass.PanelDefinition panel in managedBlocks[index].panelDefinitionList.Values)
+                        while (!panelMaster.TotalPanelV2(panel)) yield return stateActive;
                 }
 
                 yield return stateContinue;
@@ -2391,14 +2388,13 @@ namespace IngameScript
 
         IEnumerator<FunctionState> SetBlockQuotaState()
         {
-            List<ItemDefinition> itemList = new List<ItemDefinition>();
+            List<ItemDefinition> itemList = NewItemDefinitionList;
             bool append;
             yield return stateContinue;
 
             while (true)
             {
-                itemList.Clear();
-                itemList.AddRange(GetAllItems);
+                PopulateItemList(itemList);
                 append = tempSetBlockQuotaCollection.ItemTypeCount > 0;
 
                 foreach (ItemDefinition def in itemList)
@@ -2417,7 +2413,7 @@ namespace IngameScript
             if (!saving)
                 return true;
 
-            currentMajorFunction = $"{selfContainedIdentifier = FunctionIdentifier.Save}";
+            currentMajorFunction = selfContainedIdentifier = FunctionIdentifier.Save;
 
             if (!IsStateRunning)
                 SetLastString("Saving Data");
@@ -2429,37 +2425,31 @@ namespace IngameScript
         {
             StringBuilder builder = NewBuilder;
             string currentCategory;
-            int duplicates;
             SortedList<string, SortedList<string, ItemDefinition>> categoryAndNameSorter = new SortedList<string, SortedList<string, ItemDefinition>>();
+            Dictionary<string, int> duplicateDictionary = new Dictionary<string, int>();
+            List<ItemDefinition> itemList = NewItemDefinitionList;
             yield return stateContinue;
 
             while (true)
             {
                 builder.Clear();
                 categoryAndNameSorter.Clear();
-                foreach (KeyValuePair<string, SortedList<string, ItemDefinition>> kvpA in itemListMain)
+                duplicateDictionary.Clear();
+                PopulateItemList(itemList);
+                foreach (ItemDefinition definition in itemList)
                 {
-                    if (PauseTickRun)
-                        yield return stateActive;
+                    if (PauseTickRun) yield return stateActive;
 
-                    duplicates = 0;
-                    foreach (KeyValuePair<string, ItemDefinition> kvpB in kvpA.Value)
-                    {
-                        if (PauseTickRun)
-                            yield return stateActive;
+                    currentCategory = Formatted(definition.category);
+                    if (!categoryAndNameSorter.ContainsKey(currentCategory))
+                        categoryAndNameSorter[currentCategory] = new SortedList<string, ItemDefinition>();
 
-                        currentCategory = Formatted(kvpB.Value.category);
-                        if (!categoryAndNameSorter.ContainsKey(currentCategory))
-                            categoryAndNameSorter[currentCategory] = new SortedList<string, ItemDefinition>();
+                    categoryAndNameSorter[currentCategory][$"{definition.displayName}{(duplicateDictionary.ContainsKey(definition.displayName) ? $" {duplicateDictionary[definition.displayName]}" : "")}"] = definition;
 
-                        if (!categoryAndNameSorter[currentCategory].ContainsKey(kvpB.Value.displayName))
-                            categoryAndNameSorter[currentCategory][kvpB.Value.displayName] = kvpB.Value;
-                        else
-                        {
-                            duplicates++;
-                            categoryAndNameSorter[currentCategory][$"{kvpB.Value.displayName} {duplicates}"] = kvpB.Value;
-                        }
-                    }
+                    if (!duplicateDictionary.ContainsKey(definition.displayName))
+                        duplicateDictionary[definition.displayName] = 1;
+                    else
+                        duplicateDictionary[definition.displayName] = duplicateDictionary[definition.displayName] + 1;
                 }
 
                 SaveSettingDictionaryMulti<ItemDefinition>(categoryAndNameSorter, builder, "Items - ");
@@ -2493,7 +2483,7 @@ namespace IngameScript
                     BuilderAppendLine(builder);
                     BuilderAppendLine(builder, $"script={scriptName}");
 
-                    BuilderAppendLine(builder, update ? "version=-1" : $"version={scriptVersion}");
+                    BuilderAppendLine(builder, update ? "version=-1" : $"version={settingVersion}");
                 }
 
                 Me.CustomData = builder.ToString().Trim();
@@ -2529,7 +2519,7 @@ namespace IngameScript
             if (!loading)
                 return true;
 
-            currentMajorFunction = $"{selfContainedIdentifier = FunctionIdentifier.Load}";
+            currentMajorFunction = selfContainedIdentifier = FunctionIdentifier.Load;
 
             if (!IsStateRunning)
                 SetLastString("Loading Data");
@@ -2611,8 +2601,7 @@ namespace IngameScript
                 tempBlueprintList.AddRange(blueprintList.Values);
                 foreach (Blueprint blueprint in tempBlueprintList)
                 {
-                    if (PauseTickRun)
-                        yield return stateActive;
+                    if (PauseTickRun) yield return stateActive;
 
                     queueAmount = AssemblyAmount(blueprint);
                     if (queueAmount > 0)
@@ -2936,8 +2925,7 @@ namespace IngameScript
             {
                 foreach (KeyValuePair<string, Blueprint> kvp in blueprintList)
                 {
-                    if (PauseTickRun)
-                        yield return stateActive;
+                    if (PauseTickRun) yield return stateActive;
 
                     if (GetDefinition(out definition, $"{kvp.Value.typeID}/{kvp.Value.subtypeID}"))
                     {
@@ -2957,10 +2945,9 @@ namespace IngameScript
 
             while (true)
             {
-                foreach (KeyValuePair<string, List<long>> kvp in indexesStorageLists)
+                foreach (KeyValuePair<string, LongListPlus> kvp in indexesStorageLists)
                 {
-                    if (PauseTickRun)
-                        yield return stateActive;
+                    if (PauseTickRun) yield return stateActive;
 
                     if (kvp.Value.Count > 1 && priorityCategories.Contains(kvp.Key))
                         while (!SortCargoList(kvp.Value))
@@ -3018,7 +3005,7 @@ namespace IngameScript
                             if (PauseTickRun) yield return stateActive;
 
                             if (mainBlockDefinition.Settings.loadout.ItemCount(mainFunctionItemList[x], mainBlockDefinition.block) > 0)
-                                mainFunctionItemList.RemoveAt(x);
+                                mainFunctionItemList.RemoveAtFast(x);
                             else
                                 x++;
                         }
@@ -3103,6 +3090,7 @@ namespace IngameScript
                         }
                     }
                 }
+
                 yield return stateContinue;
             }
         }
@@ -3114,7 +3102,6 @@ namespace IngameScript
             IMyAssembler currentAssembler;
             string key;
             MyAssemblerMode currentMode;
-            bool moveAll;
             double moveAmount, averageAmount, minimalRange = balanceRange;
             List<long> indexList = NewLongList;
             long currentEntityID;
@@ -3153,6 +3140,7 @@ namespace IngameScript
                     currentProductionList.Clear();
                 }
 
+
                 //Determine which assemblers can use the blueprints known to be in queue
                 foreach (long originIndex in typedIndexes[setKeyIndexAssemblers])
                 {
@@ -3173,35 +3161,33 @@ namespace IngameScript
                         }
                 }
 
+
                 //Spread blueprints from each assembler
-                for (int x = 0; x < typedIndexes[setKeyIndexAssemblers].Count; x++)
+                foreach (long index in typedIndexes[setKeyIndexAssemblers])
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    if (!IsBlockOk(typedIndexes[setKeyIndexAssemblers][x]))
-                        continue;
+                    if (!IsBlockOk(index)) continue;
 
-                    currentAssembler = (IMyAssembler)managedBlocks[typedIndexes[setKeyIndexAssemblers][x]].block;
+                    currentAssembler = (IMyAssembler)managedBlocks[index].block;
 
-                    if (currentAssembler.IsQueueEmpty)
-                        continue;
+                    if (currentAssembler.IsQueueEmpty) continue;
 
                     currentAssembler.GetQueue(currentProductionList);
                     currentMode = currentAssembler.Mode;
-                    moveAll = currentAssembler.Mode == disassemblyMode && x < typedIndexes[setKeyIndexAssemblers].Count - 1;
 
                     for (int i = 0; i < currentProductionList.Count; i++)
                     {
                         if (PauseTickRun) yield return stateActive;
                         key = BlueprintSubtype(currentProductionList[i]);
-                        if (!blueprintInformation.ContainsKey(currentMode) || !blueprintInformation[currentMode].ContainsKey(key) || blueprintInformation[currentMode][key].acceptingIndexList.Count == 1 || (!moveAll && i == 0 && currentAssembler.CurrentProgress >= 0.025f))
+                        if (!blueprintInformation.ContainsKey(currentMode) || !blueprintInformation[currentMode].ContainsKey(key) || blueprintInformation[currentMode][key].acceptingIndexList.Count == 1)
                             continue;
 
                         averageAmount = Math.Floor(blueprintInformation[currentMode][key].totalCount / (double)blueprintInformation[currentMode][key].acceptingIndexList.Count);
                         if (averageAmount <= 0)
                             continue;
                         minimalRange = Math.Max(minimalRange, 1.0 / averageAmount);
-                        if (moveAll || OverRange((double)currentProductionList[i].Amount, averageAmount, minimalRange))
+                        if (OverRange((double)currentProductionList[i].Amount, averageAmount, minimalRange))
                         {
                             moveAmount = Math.Floor((double)currentProductionList[i].Amount - averageAmount);
                             if (moveAmount <= 0)
@@ -3477,6 +3463,7 @@ namespace IngameScript
                         }
                     }
                 }
+
                 acceptingIndexes.Clear();
                 yield return stateContinue;
             }
@@ -3502,7 +3489,7 @@ namespace IngameScript
             SortedList<long, double> tempSortedIndexList = NewSortedListLongDouble;
             List<long> tempIndexList = NewLongList;
             double contained, totalAmount, splitAmount, originalSplitAmount,
-                    maxAmount, balanceRange, balancedShare, tempMax, remainder;
+                    maxAmount, balanceRange, balancedShare, itemLimit, remainder;
             bool fractional, foundLimit;
             long key;
             int indexCount;
@@ -3577,8 +3564,8 @@ namespace IngameScript
                         foreach (KeyValuePair<long, double> kvp in tempSortedIndexList)
                         {
                             maxAmount = DefaultMax(tempDistributeItem, managedBlocks[kvp.Key]);
-                            tempMax = managedBlocks[kvp.Key].Settings.limits.ItemCount(out foundLimit, tempDistributeItem, managedBlocks[kvp.Key].block);
-                            if (foundLimit) maxAmount = tempMax;
+                            itemLimit = managedBlocks[kvp.Key].Settings.limits.ItemCount(out foundLimit, tempDistributeItem, managedBlocks[kvp.Key].block);
+                            if (foundLimit) maxAmount = itemLimit;
 
                             foundLimit = maxAmount < double.MaxValue;
 
@@ -3671,17 +3658,17 @@ namespace IngameScript
 
         IEnumerator<FunctionState> ProcessLimitsState()
         {
+            double limit, excess;
             yield return stateContinue;
 
             while (true)
             {
-                double limit = 0, excess;
+                limit = 0;
                 foreach (long index in typedIndexes[setKeyIndexLimit])
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    if (!IsBlockOk(index))
-                        continue;
+                    if (!IsBlockOk(index)) continue;
 
                     mainBlockDefinition = managedBlocks[index];
 
@@ -3701,6 +3688,7 @@ namespace IngameScript
                         }
                     }
                 }
+
                 yield return stateContinue;
             }
         }
@@ -3730,7 +3718,7 @@ namespace IngameScript
                                 if (PauseTickRun) yield return stateActive;
 
                                 if (!Sortable(mainFunctionItemList[x], mainBlockDefinition))
-                                    mainFunctionItemList.RemoveAt(x);
+                                    mainFunctionItemList.RemoveAtFast(x);
                                 else x++;
                             }
                         while (!PutInStorage(mainFunctionItemList, index, 0)) yield return stateActive;
@@ -3744,7 +3732,7 @@ namespace IngameScript
                             {
                                 if (PauseTickRun) yield return stateActive;
                                 if (!Sortable(mainFunctionItemList[x], mainBlockDefinition, 1))
-                                    mainFunctionItemList.RemoveAt(x);
+                                    mainFunctionItemList.RemoveAtFast(x);
                                 else x++;
                             }
 
@@ -3752,6 +3740,7 @@ namespace IngameScript
                             yield return stateActive;
                     }
                 }
+
                 yield return stateContinue;
             }
         }
@@ -3804,30 +3793,22 @@ namespace IngameScript
 
                     if (transferAmount > 0)
                     {
-                        if (!bottleException && itemCategoryDictionary.ContainsKey(itemID) && indexesStorageLists.ContainsKey(itemCategoryDictionary[itemID]))
-                            tempIndexList.AddRange(indexesStorageLists[itemCategoryDictionary[itemID]]);
-
-                        if (tempIndexList.Count == 0)
+                        if (bottleException)
                         {
-                            typeKey =
-                                bottleException ? "" :
-                                IsComponent(item) ? componentKeyword :
-                                IsTool(item) ? toolKeyword :
-                                IsAmmo(item) ? ammoKeyword :
-                                IsIngot(item) ? ingotKeyword :
-                                IsOre(item) ? oreKeyword : "";
+                            tempIndexList.AddRange(typedIndexes[item.Type.TypeId == oxyBottleType ? setKeyIndexOxygenTank : setKeyIndexHydrogenTank]);
 
-                            if (bottleException)
-                            {
-                                tempIndexList.AddRange(typedIndexes[item.Type.TypeId == oxyBottleType ? setKeyIndexOxygenTank : setKeyIndexHydrogenTank]);
-
-                                tempIndexList.AddRange(typedIndexes[setKeyIndexGasGenerators]);
-                            }
-                            if (TextHasLength(typeKey) && indexesStorageLists.ContainsKey(typeKey))
-                                tempIndexList.AddRange(indexesStorageLists[typeKey]);
+                            tempIndexList.AddRange(typedIndexes[setKeyIndexGasGenerators]);
                         }
-                        if (!bottleException && tempIndexList.Count == 0)
-                            tempIndexList.AddRange(typedIndexes[setKeyIndexStorage]);
+                        else
+                        {
+                            typeKey = GetItemCategory(itemID).ToLower();
+
+                            if (indexesStorageLists.ContainsKey(typeKey))
+                                tempIndexList.AddRange(indexesStorageLists[typeKey]);
+
+                            if (tempIndexList.Count == 0)
+                                tempIndexList.AddRange(typedIndexes[setKeyIndexStorage]);
+                        }
 
                         for (int i = tempStorageIndexStart; i < tempIndexList.Count && (tempStoragePriorityMax <= 0 || i < tempStoragePriorityMax); i++)
                         {
@@ -3860,6 +3841,7 @@ namespace IngameScript
             IMyAssembler assembler;
             bool assembly, queueAssembly = GetKeyBool(setKeyToggleQueueAssembly);
             List<Blueprint> blueprints = new List<Blueprint>();
+            List<ItemDefinition> itemList = NewItemDefinitionList;
             Blueprint blueprint;
             yield return stateContinue;
 
@@ -3888,22 +3870,19 @@ namespace IngameScript
                         AddBlueprintAmount(blueprintListMain[x], assembly);
                     }
                 }
-                foreach (KeyValuePair<string, SortedList<string, ItemDefinition>> kvpA in itemListMain)
+
+                PopulateItemList(itemList);
+                foreach (ItemDefinition item in itemList)
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    foreach (KeyValuePair<string, ItemDefinition> kvpB in kvpA.Value)
+                    item.SwitchAssemblyCount();
+                    item.SetDifferenceNeeded(allowedExcessPercent);
+                    if (queueAssembly)
                     {
-                        if (PauseTickRun) yield return stateActive;
-
-                        kvpB.Value.SwitchAssemblyCount();
-                        kvpB.Value.SetDifferenceNeeded(allowedExcessPercent);
-                        if (queueAssembly)
-                        {
-                            blueprint = new Blueprint { blueprintID = kvpB.Value.blueprintID, amount = kvpB.Value.currentNeededAssembly };
-                            if (blueprint.amount >= 1)
-                                blueprints.Add(blueprint.Clone());
-                        }
+                        blueprint = new Blueprint { blueprintID = item.blueprintID, amount = item.currentNeededAssembly };
+                        if (blueprint.amount >= 1)
+                            blueprints.Add(blueprint.Clone());
                     }
                 }
 
@@ -3941,6 +3920,7 @@ namespace IngameScript
                     if (!IsBlockOk(index)) continue;
 
                     assembler = (IMyAssembler)managedBlocks[index].block;
+                    if (assemblyNeededByMachine.Contains(BlockSubtype(assembler))) continue;
                     foreach (Blueprint blueprint in tempAddAssemblyNeededList)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -3962,6 +3942,7 @@ namespace IngameScript
         IEnumerator<FunctionState> CountState()
         {
             IMyTerminalBlock block;
+            List<ItemDefinition> itemList = NewItemDefinitionList;
             yield return stateContinue;
 
             while (true)
@@ -3989,18 +3970,17 @@ namespace IngameScript
                             AddAmount(mainFunctionItemList[x]);
                         }
                     }
-                }
-                foreach (KeyValuePair<string, SortedList<string, ItemDefinition>> kvpA in itemListMain)
-                {
-                    if (PauseTickRun)
-                        yield return stateActive;
 
-                    foreach (KeyValuePair<string, ItemDefinition> kvpB in kvpA.Value)
-                    {
-                        kvpB.Value.SwitchCount(dynamicQuotaMaxMultiplier, useDynamicQuota && IsBlueprint(kvpB.Value.blueprintID), dynamicQuotaNegativeThreshold, dynamicQuotaPositiveThreshold, dynamicQuotaMultiplierIncrement, increaseDynamicQuotaWhenLow);
-                        if (IsOre(kvpB.Value.typeID) && kvpB.Value.subtypeID != "Ice" && kvpB.Value.amount >= 0.5 && kvpB.Value.refine)
-                            activeOres++;
-                    }
+                }
+
+                PopulateItemList(itemList);
+                foreach (ItemDefinition item in itemList)
+                {
+                    if (PauseTickRun) yield return stateActive;
+
+                    item.SwitchCount(dynamicQuotaMaxMultiplier, useDynamicQuota && IsBlueprint(item.blueprintID), dynamicQuotaNegativeThreshold, dynamicQuotaPositiveThreshold, dynamicQuotaMultiplierIncrement, increaseDynamicQuotaWhenLow);
+                    if (IsOre(item.typeID) && item.subtypeID != "Ice" && item.amount >= 0.5 && item.refine)
+                        activeOres++;
                 }
 
                 yield return stateContinue;
@@ -4023,7 +4003,6 @@ namespace IngameScript
                 // ----------------------------------------------------
                 // ------------- Set Variables -------------
                 // ----------------------------------------------------
-
                 //Clear indexes
                 for (int i = 0; i < typedIndexes.Count; i++)
                 {
@@ -4076,7 +4055,7 @@ namespace IngameScript
                 {
                     if (PauseTickRun) yield return stateActive;
                     if (!ScanFilter(scannedBlocks[i], excludedIDs))
-                        scannedBlocks.RemoveAt(i);
+                        scannedBlocks.RemoveAtFast(i);
                     else
                         i++;
                 }
@@ -4095,13 +4074,14 @@ namespace IngameScript
                 {
                     if (PauseTickRun) yield return stateActive;
                     if (!managedBlocks.ContainsKey(block.EntityId))
-                    {
                         managedBlocks[block.EntityId] = new BlockDefinition(block);
-                        managedBlocks[block.EntityId].Settings.Initialize();
-                    }
                 }
                 scannedBlocks.Clear();
                 //excludedIDs, accessibleIDs, managedBlocks (all)
+
+                // ----------------------------------------------------
+                // ------------- Load Block Custom Data -------------
+                // ----------------------------------------------------
 
                 //Process block options
                 foreach (KeyValuePair<long, BlockDefinition> kvp in managedBlocks)
@@ -4119,16 +4099,17 @@ namespace IngameScript
 
                     if (kvp.Value.Settings.GetOption(includeGridKeyword))
                         gridList.Add(kvp.Value.block.CubeGrid);
+
                 }
                 //excludedIDs, excludedGridList, accessibleIDs, managedBlocks (all-processed), gridList
 
                 //Process clones separating from cloning
                 foreach (long index in setRemoveIDs)
+                {
+                    if (PauseTickRun) yield return stateActive;
                     if (!clonedEntityIDs.Contains(index) && managedBlocks.ContainsKey(index))
-                    {
                         managedBlocks[index].SetClone(null);
-                        managedBlocks[index].Settings.Initialize();
-                    }
+                }
 
                 setRemoveIDs.Clear();
                 clonedEntityIDs.Clear();
@@ -4155,6 +4136,10 @@ namespace IngameScript
                     groupList.Clear();
                 }
                 //excludedIDs, accessibleIDs, managedBlocks (all-processed), gridList, includedIDs
+
+                // ----------------------------------------------------
+                // ------------- Filter Blocks -------------
+                // ----------------------------------------------------
 
                 //Queue managed blocks for removal if not accessible or excluded in some way
                 foreach (KeyValuePair<long, BlockDefinition> kvp in managedBlocks)
@@ -4185,11 +4170,6 @@ namespace IngameScript
                 setRemoveIDs.Clear();
                 //managedBlocks (filtered-processed)
 
-
-                // ----------------------------------------------------
-                // ------------- Process Blocks -------------
-                // ----------------------------------------------------
-
                 //Clear unused item category indexes
                 for (int i = 0; i < indexesStorageLists.Count; i += 0)
                 {
@@ -4199,6 +4179,10 @@ namespace IngameScript
                         indexesStorageLists.RemoveAt(i);
                     else i++;
                 }
+
+                // ----------------------------------------------------
+                // ------------- Process Blocks -------------
+                // ----------------------------------------------------
 
                 //Process managed blocks
                 foreach (long index in managedBlocks.Keys)
@@ -4381,13 +4365,18 @@ namespace IngameScript
                             itemAcceptanceDictionary[BlockSubtype(currentBlock)].Add(itemType.ToString());
                         }
                     }
+
                 }
                 panelMaster.updateTime = Now;
 
+                // ----------------------------------------------------
+                // ------------- Final Organization -------------
+                // ----------------------------------------------------
+
                 //Order blocks by priority and remove duplicates
-                foreach (KeyValuePair<string, List<long>> kvp in typedIndexes)
+                foreach (KeyValuePair<string, LongListPlus> kvp in typedIndexes)
                     while (!OrderListByPriority(kvp.Value, priorityTypes.Contains(kvp.Key))) yield return stateActive;
-                foreach (KeyValuePair<string, List<long>> kvp in indexesStorageLists)
+                foreach (KeyValuePair<string, LongListPlus> kvp in indexesStorageLists)
                     while (!OrderListByPriority(kvp.Value, priorityCategories.Contains(kvp.Key))) yield return stateActive;
 
                 while (!SetBlockQuotas(itemCollectionProcessTotalLoadout)) yield return stateActive;
@@ -4405,12 +4394,14 @@ namespace IngameScript
                             {
                                 if (PauseTickRun) yield return stateActive;
                                 foreach (PanelMasterClass.PanelDefinition opposingPanel in managedBlocks[counterIndex].panelDefinitionList.Values)
+                                {
+                                    if (PauseTickRun) yield return stateActive;
                                     if (opposingPanel.panelType == PanelType.Span && StringsMatch(panelDefinition.childSpanKey, opposingPanel.spanKey) && index != counterIndex || panelDefinition.surfaceIndex != opposingPanel.surfaceIndex)
                                         panelDefinition.spannedPanelList.Add(new SpanKey { index = counterIndex, surfaceIndex = opposingPanel.surfaceIndex });
+                                }
                             }
                     }
                 }
-
                 yield return stateContinue;
             }
         }
@@ -4894,10 +4885,7 @@ namespace IngameScript
 
         static string Formatted(string text)
         {
-            if (text.Length > 1)
-                return $"{text.Substring(0, 1).ToUpper()}{text.Substring(1).ToLower()}";
-
-            return text.ToUpper();
+            return text.Length <= 1 ? text.ToUpper() : String.Join(" ", text.Split(' ').Select(x => x.Length <= 1 ? x.ToUpper() : $"{x.Substring(0, 1).ToUpper()}{x.Substring(1)}"));
         }
 
         bool ContainsString(string whole, string key)
@@ -4956,7 +4944,10 @@ namespace IngameScript
             IMyTerminalBlock block = managedBlock.block;
 
             if (useAcceptanceFilter && itemAcceptanceDictionary.ContainsKey(BlockSubtype(block)) && (itemAcceptanceDictionary[BlockSubtype(block)].Count == 0 || !itemAcceptanceDictionary[BlockSubtype(block)].Contains($"{typeID}/{subtypeID}")))
+            {
+                Output($"{ShortenName(block.CustomName)} does not accept {ItemName(typeID, subtypeID)}");
                 return false;
+            }
 
             bool limited;
 
@@ -5152,14 +5143,10 @@ namespace IngameScript
 
         bool IsBlockOk(long index)
         {
-            if (!managedBlocks.ContainsKey(index))
-                return false;
-
-            blockCheckDefinitionA = managedBlocks[index];
-            if (blockCheckDefinitionA.block == null)
-                return false;
-
-            return blockCheckDefinitionA.block.CubeGrid.CubeExists(blockCheckDefinitionA.block.Position) && blockCheckDefinitionA.block.IsFunctional && !blockCheckDefinitionA.block.Closed;
+            return managedBlocks.ContainsKey(index) &&
+                   managedBlocks[index].block != null &&
+                   gtSystem.CanAccess(managedBlocks[index].block) &&
+                   managedBlocks[index].block.IsFunctional;
         }
 
         bool GetDefinition(out ItemDefinition definition, string itemID)
@@ -5409,7 +5396,7 @@ namespace IngameScript
             if (block is IMyAssembler)
             {
                 IMyAssembler assembler = (IMyAssembler)block;
-                return (assembler.IsQueueEmpty || ((assembler.Mode == assemblyMode && inventoryIndex == 1) || (assembler.Mode == disassemblyMode && inventoryIndex == 0)));
+                return assembler.IsQueueEmpty || (assembler.Mode == assemblyMode && inventoryIndex == 1) || (assembler.Mode == disassemblyMode && inventoryIndex == 0);
             }
             if (block is IMyReactor || block is IMyParachute || IsGun(blockDef) || block is IMySafeZoneBlock)
                 return false;
@@ -5419,7 +5406,7 @@ namespace IngameScript
 
         bool IsGun(BlockDefinition block)
         {
-            return block is IMyUserControllableGun || block.Settings.GetOption(setKeyBlockGunOverrideKey);
+            return block.block is IMyUserControllableGun || block.Settings.GetOption(setKeyBlockGunOverrideKey);
         }
 
         bool Sortable(MyInventoryItem item, BlockDefinition blockDef, int inventoryIndex = 0)
@@ -5541,11 +5528,6 @@ namespace IngameScript
             return item.Type.GetItemInfo().IsComponent;
         }
 
-        bool IsTool(MyInventoryItem item)
-        {
-            return item.Type.GetItemInfo().IsTool || IsTool(item.Type.TypeId);
-        }
-
         bool IsAmmo(MyInventoryItem item)
         {
             return item.Type.GetItemInfo().IsAmmo;
@@ -5568,11 +5550,11 @@ namespace IngameScript
 
         bool StateManager(FunctionIdentifier identifier, bool updateStatus = true, bool reportErrors = true)
         {
+            if (identifier == FunctionIdentifier.Idle) return true;
+
             if (updateStatus) currentFunction = identifier; // Update echo status
 
             if (!StateInitialized(identifier)) InitializeStateV2(identifier); // Initialize enumerator
-
-            if (!stateErrorCodes.ContainsKey(identifier)) stateErrorCodes[identifier] = ""; // Set error code
 
 
             bool endReached;
@@ -5590,7 +5572,7 @@ namespace IngameScript
             }
             endTime = Now;
             if (currentState == stateError && reportErrors)
-                Output($"Error in function: {identifier}{(stateErrorCodes[identifier].Length > 0 ? $" : {stateErrorCodes[identifier]}" : "")}");
+                Output($"Error in function: {identifier}{(stateRecords[identifier].errorCode.Length > 0 ? $" : {stateRecords[identifier].errorCode}" : "")}");
 
             stateRecords[identifier].PostRun(Runtime.CurrentInstructionCount - currentActions, Now - startTime, currentState == stateError, reportErrors, currentState != stateActive);
 
@@ -5605,8 +5587,8 @@ namespace IngameScript
 
                 if (identifier == selfContainedIdentifier)
                     selfContainedIdentifier = FunctionIdentifier.Idle;
-                if ($"{identifier}" == currentMajorFunction)
-                    currentMajorFunction = $"{FunctionIdentifier.Idle}";
+                if (identifier == currentMajorFunction)
+                    currentMajorFunction = FunctionIdentifier.Idle;
             }
 
             return currentState != stateActive;
@@ -5672,6 +5654,12 @@ namespace IngameScript
 
 
         #region Methods
+
+        void PopulateItemList(List<ItemDefinition> list)
+        {
+            list.Clear();
+            list.AddRange(GetAllItems);
+        }
 
         void OptionalEcho(string text, bool condition)
         {
@@ -5886,7 +5874,7 @@ namespace IngameScript
             if (!itemCategoryList.Contains(category))
                 itemCategoryList.Add(category);
             if (!indexesStorageLists.ContainsKey(category))
-                indexesStorageLists[category] = NewLongList;
+                indexesStorageLists[category] = NewLongListPlus;
         }
 
         void AppendHeader(StringBuilder builder, string header)
@@ -6253,7 +6241,7 @@ namespace IngameScript
                 catch { }
                 stateRecords[identifier].lastStatus = stateUninitialized;
             }
-            stateErrorCodes.Remove(identifier);
+            stateRecords[identifier].errorCode = "";
         }
 
         static void AppendOption(StringBuilder builder, string option, bool optional = true)
@@ -6267,6 +6255,21 @@ namespace IngameScript
 
         #region Classes
 
+        public class LongListPlus : List<long>
+        {
+            private List<long> _list = NewLongList;
+
+            public new long this[int index]
+            {
+                get { return _list[index]; }
+                set { _list[index] = value; }
+            }
+
+            public new IEnumerator<long> GetEnumerator()
+            {
+                return new List<long>(_list).GetEnumerator();
+            }
+        }
 
         public class BlueprintSpreadInformation
         {
@@ -6297,6 +6300,8 @@ namespace IngameScript
                 minSpan = TimeSpan.Zero, maxSpan = TimeSpan.Zero, currentSpan = TimeSpan.Zero, lastSpan = TimeSpan.Zero;
             public double averageTime = 0, averageActions = 0;
             public decimal health = 100m;
+
+            public string errorCode = "";
 
             public void PostRun(int actions, TimeSpan span, bool errorCaught, bool reportError, bool complete)
             {
@@ -6366,7 +6371,7 @@ namespace IngameScript
             public IMyAssembler assembler;
             public bool stalling = false;
 
-            public bool CheckNow { get { return Now >= nextCheck; } }
+            public bool CheckNow => Now >= nextCheck;
 
             public bool HasChanged()
             {
@@ -6395,7 +6400,7 @@ namespace IngameScript
         {
             public string text = "";
             public int count = 1;
-            public string Output { get { return count > 1 ? $"{text} x{count}" : text; } }
+            public string Output => count > 1 ? $"{text} x{count}" : text;
 
         }
 
@@ -6442,7 +6447,7 @@ namespace IngameScript
 
             public SortedList<string, VariableItemCount> itemList = new SortedList<string, VariableItemCount>();
 
-            public int ItemTypeCount { get { return itemList.Count; } }
+            public int ItemTypeCount => itemList.Count;
 
             public bool trackAmounts = true;
 
@@ -6624,23 +6629,25 @@ namespace IngameScript
             private bool isClone = false;
             public bool isGravelSifter = false;
 
-            public BlockSettings Settings { get { return isClone && cloneSource != null ? cloneSource.Settings : innerSettings; } set { innerSettings = value; } }
+            public BlockSettings Settings => isClone && cloneSource != null ? cloneSource.Settings : innerSettings;
 
-            public bool HasInventory { get { return block.InventoryCount > 0; } }
+            public bool HasInventory => block.InventoryCount > 0;
 
-            public IMyInventory Input { get { return block.GetInventory(0); } }
+            public IMyInventory Input => block.GetInventory(0);
 
-            public bool IsClone { get { return isClone; } }
+            public bool IsClone => isClone;
 
             public BlockDefinition(IMyTerminalBlock block)
             {
                 this.block = block;
+                Settings.Initialize();
             }
 
             public void SetClone(BlockDefinition definition)
             {
                 isClone = definition != null;
                 cloneSource = definition;
+                if (!isClone) Settings.Initialize();
             }
 
             public string DataSource
@@ -6764,11 +6771,11 @@ namespace IngameScript
 
             public DateTime countRecordTime = Now, dynamicQuotaTime = Now;
 
-            public MyItemType ItemType { get { return new MyItemType(typeID, subtypeID); } }
+            public MyItemType ItemType => new MyItemType(typeID, subtypeID);
 
-            public string FullID { get { return $"{typeID}/{subtypeID}"; } }
+            public string FullID => $"{typeID}/{subtypeID}";
 
-            public double Percentage { get { return currentQuota == 0 ? double.MaxValue : (amount / currentQuota) * 100.0; } }
+            public double Percentage => currentQuota == 0 ? double.MaxValue : (amount / currentQuota) * 100.0;
 
             public void FinalizeKeys()
             {
