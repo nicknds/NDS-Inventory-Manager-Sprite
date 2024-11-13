@@ -1,7 +1,6 @@
 ﻿using Sandbox.ModAPI.Ingame;
 using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6259,13 +6258,9 @@ namespace IngameScript
         {
             private List<long> _list = NewLongList;
 
-            public new long this[int index]
-            {
-                get { return _list[index]; }
-                set { _list[index] = value; }
-            }
-
-            public new IEnumerator<long> GetEnumerator()
+            #pragma warning disable CS0108 // Member hides inherited member; missing new keyword
+            public IEnumerator<long> GetEnumerator()
+#pragma warning restore CS0108 // Member hides inherited member; missing new keyword
             {
                 return new List<long>(_list).GetEnumerator();
             }
