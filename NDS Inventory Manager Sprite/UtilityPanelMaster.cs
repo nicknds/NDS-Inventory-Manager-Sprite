@@ -1,216 +1,819 @@
-﻿using Sandbox.ModAPI.Ingame;
+﻿using System.Collections.Generic;
+using VRageMath;
+using VRage.Game.GUI.TextPanel;
 using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using VRage.Game.GUI.TextPanel;
+using Sandbox.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame;
-using VRageMath;
 
 namespace IngameScript
 {
     partial class Program
     {
-        public class PanelMasterClass
+        public class PanelMaster2
         {
-            #region Variables
+            #region Constants
 
             public static Program parent;
 
             Color defPanelForegroundColor = new Color(0.7019608f, 0.9294118f, 1f, 1f);
-
-            public string presetPanelOptions;
-
-            StringBuilder measurementBuilder = NewBuilder;
-
-            SortedList<string, PregeneratedPanels> generatedPanels = new SortedList<string, PregeneratedPanels>();
-
-            double tempCapacity = 0;
-
-            FunctionIdentifier selfContainedIdentifier;
-
-            // string selfContainedIdentifier;
-
-            SortedList<string, int> assemblyList = new SortedList<string, int>(),
-                                    disassemblyList = new SortedList<string, int>();
-
-            BlockDefinition tempBlockOptionDefinition;
-            PanelDefinition tempPanelDefinition;
-            int tempProcessPanelOptionSurfaceIndex;
-            List<PanelObject> tempPanelObjects;
-            List<long> tempIndexList = NewLongList;
-            public DateTime updateTime = Now;
-            float tempColumn;
-            bool tempSpan;
 
             #endregion
 
 
             #region Short Links
 
+            PanelFunctionIdentifier selfContainedIdentifier;
             bool PauseTickRun => parent.PauseTickRun;
-            bool IsStateRunning => parent.StateRunning(selfContainedIdentifier);
-            bool RunStateManager => parent.StateManager(selfContainedIdentifier);
-            public static List<PanelObject> NewPanelObjectList => new List<PanelObject>();
-            Dictionary<long, BlockDefinition> managedBlocks => parent.managedBlocks;
+            bool IsStateRunning => parent.stateRecords.IsActive($"{selfContainedIdentifier}");
+            bool RunStateManager => parent.StateManager($"{selfContainedIdentifier}");
+            bool IsInitialized => parent.stateRecords.IsInitialized($"{selfContainedIdentifier}");
             SortedList<string, LongListPlus> typedIndexes => parent.typedIndexes;
-            SortedList<string, List<string>> settingsListsStrings => parent.settingsListsStrings;
+            Dictionary<long, BlockDefinition> managedBlocks => parent.managedBlocks;
+
+            IEnumerator<FunctionState> SetEnumerator { set { parent.stateRecords[$"{selfContainedIdentifier}"].enumerator = value; } }
 
             #endregion
 
 
-            #region Methods
+            #region Variables
 
-            string GetFont(IMyTextSurface surface, string fontType)
+            Dictionary<string, GraphicDocument> cachedDocuments = new Dictionary<string, GraphicDocument>();
+
+            PanelClass tempManagerPanelDefinition, tempSettingsPanelDefinition;
+
+            List<string> fontList = NewStringList;
+
+            public DateTime LastSyncTime = DateTime.MinValue;
+
+            #endregion
+
+
+            public PanelMaster2()
             {
-                List<string> fontList = NewStringList;
-                surface.GetFonts(fontList);
-                for (int i = 0; i < fontList.Count; i++)
-                    if (StringsMatch(fontType, fontList[i]))
-                        return fontList[i];
-                return "Monospace";
+                PanelSettings.master = this;
             }
 
-            bool GetColor(out Color color, string colorSet)
+
+            #region State Functions
+
+            /// <summary>
+            /// Processes the given panel producing output
+            /// </summary>
+            /// <param name="panelDefinition">The panel class to process</param>
+            /// <returns>True when the current panel completes</returns>
+            public bool PanelManager(PanelClass panelDefinition)
             {
-                color = Color.White;
-                try
+                selfContainedIdentifier = PanelFunctionIdentifier.Panel_Manager;
+
+                if (!IsInitialized)
+                    SetEnumerator = PanelManagerState();
+
+                if (!IsStateRunning)
+                    tempManagerPanelDefinition = panelDefinition;
+
+                return RunStateManager;
+            }
+
+            /// <summary>
+            /// Processes the given panel producing output
+            /// </summary>
+            /// <returns></returns>
+            IEnumerator<FunctionState> PanelManagerState()
+            {
+                bool cacheSkip;
+                while (true)
                 {
-                    string[] colorArray = colorSet.Split(':');
-                    if (colorArray.Length == 4)
-                        color = new Color(int.Parse(colorArray[0]), int.Parse(colorArray[1]), int.Parse(colorArray[2]), int.Parse(colorArray[3]));
-                    else if (colorArray.Length == 3)
-                        color = new Color(int.Parse(colorArray[0]), int.Parse(colorArray[1]), int.Parse(colorArray[2]));
-                    else
-                        return false;
-                    return true;
-                }
-                catch { }
-                return false;
-            }
-
-            void SetPanelDefinition(BlockDefinition managedBlock, int surfaceIndex)
-            {
-                if (!managedBlock.panelDefinitionList.ContainsKey(surfaceIndex))
-                    managedBlock.panelDefinitionList[surfaceIndex] = new PanelDefinition { surfaceIndex = surfaceIndex, provider = !(managedBlock.block is IMyTextPanel), parent = managedBlock };
-                managedBlock.panelDefinitionList[surfaceIndex].suffixes = settingsListsStrings[setKeyDefaultSuffixes];
-                managedBlock.panelDefinitionList[surfaceIndex].items.trackAmounts = false;
-            }
-
-            public static string PresetPanelOption(string itemCategoryString)
-            {
-                StringBuilder builder = NewBuilder;
-                BuilderAppendLine(builder, $"Type=Item/Cargo/Output/Status/Span");
-                AppendOption(builder, "Font=Monospace");
-                AppendOption(builder, $"Categories={itemCategoryString}");
-                AppendOption(builder, "Items=ingot:Iron|ore:Iron");
-                AppendOption(builder, "Item Display=Standard|Detailed|CompactAmount|CompactPercent");
-                AppendOption(builder, "Sorting=Alphabetical|AscendingAmount|DescendingAmount|AscendingPercent|DescendingPercent");
-                AppendOption(builder, "Options=BelowQuota|HideProgressBar");
-                AppendOption(builder, "Minimum Value=1");
-                AppendOption(builder, "Maximum Value=150000");
-                AppendOption(builder, "Number Suffixes=K|M|B|T");
-                AppendOption(builder, "Text Color=0:0:0:255");
-                AppendOption(builder, "Number Color=120:0:0:255");
-                AppendOption(builder, "Back Color=255:255:255:0");
-                AppendOption(builder, "Rows=15");
-                AppendOption(builder, "Name Length=18");
-                AppendOption(builder, "Decimals=2");
-                AppendOption(builder, "Update Delay=1");
-                AppendOption(builder, "Span ID=Span A");
-                AppendOption(builder, "Span Child ID=Span B");
-                return builder.ToString().Trim();
-            }
-
-            public void CheckPanel(BlockDefinition blockDefinition, int surfaceIndex = 0)
-            {
-                PanelDefinition panelDefinition = blockDefinition.panelDefinitionList[surfaceIndex];
-                string hashKey = panelDefinition.EntityFlickerID;
-
-                if (parent.antiflickerSet.Add(hashKey))
-                {
-                    IMyTextSurface surface = panelDefinition.Surface;
-                    if (surface.ContentType != ContentType.SCRIPT)
-                        surface.ContentType = ContentType.SCRIPT;
-
-                    if (surface.Script != nothingType)
-                        surface.Script = nothingType;
-
-                    if (surface.ScriptForegroundColor == defPanelForegroundColor)
+                    // Check for previously generated documents
+                    cacheSkip = false;
+                    if (cachedDocuments.ContainsKey(tempManagerPanelDefinition.DocumentKey))
                     {
-                        surface.ScriptForegroundColor = Color.Black;
-                        surface.ScriptBackgroundColor = new Color(73, 141, 255, 255);
+                        if (Now >= cachedDocuments[tempManagerPanelDefinition.DocumentKey].expirationTime)
+                            cachedDocuments.Remove(tempManagerPanelDefinition.DocumentKey);
+                        else cacheSkip = true;
                     }
+
+                    // Generate document if needed
+                    // Span documents do not need generation
+                    if (!cacheSkip)
+                    {
+                        switch (tempManagerPanelDefinition.PanelSettings.Type)
+                        {
+                            case PanelType.Item:
+                                while (!ItemPanel()) yield return stateActive;
+                                break;
+                            case PanelType.Output:
+                                while (!OutputPanel()) yield return stateActive;
+                                break;
+                            case PanelType.Status:
+                                while (!StatusPanel()) yield return stateActive;
+                                break;
+                            case PanelType.Cargo:
+                                while (!CargoPanel()) yield return stateActive;
+                                break;
+                            default:
+                                break;
+                        }
+
+                        if (cachedDocuments.ContainsKey(tempManagerPanelDefinition.DocumentKey))
+                            cachedDocuments[tempManagerPanelDefinition.DocumentKey].Generated();
+                    }
+
+                    // Convert documents to sprite/text here
+                    if (cachedDocuments.ContainsKey(tempManagerPanelDefinition.DocumentKey))
+                        switch (tempManagerPanelDefinition.Surface.ContentType)
+                        {
+                            case ContentType.SCRIPT:
+                                while (!SpriteProcessor()) yield return stateActive;
+                                break;
+                            case ContentType.TEXT_AND_IMAGE:
+                                while (!TextProcessor()) yield return stateActive;
+                                break;
+                            default:
+                                break;
+                        }
+
+                    // Set update time
+                    tempManagerPanelDefinition.NextUpdateTime = Now.AddSeconds(tempManagerPanelDefinition.PanelSettings.UpdateDelay);
+
+                    yield return stateContinue;
                 }
             }
 
-            void ClonePanelObjects(List<PanelObject> panelObjects, List<PanelObject> list)
+            /// <summary>
+            /// Turns documents into sprite displays
+            /// </summary>
+            /// <returns>True when the display is complete</returns>
+            bool SpriteProcessor()
             {
-                panelObjects.Clear();
-                foreach (PanelObject panelObject in list)
-                    panelObjects.Add(panelObject.Clone());
+                selfContainedIdentifier = PanelFunctionIdentifier.Sprite_Processor;
+
+                if (!IsInitialized)
+                    SetEnumerator = SpriteProcessorState();
+
+                return RunStateManager;
             }
 
-            string BlockStatusTitle(string title, int disabled)
+            IEnumerator<FunctionState> SpriteProcessorState()
             {
-                string formTitle = title;
-                if (disabled > 0)
-                    formTitle += $" -({ShortNumber2(disabled, settingsListsStrings[setKeyDefaultSuffixes])})";
-                return formTitle;
-            }
-
-            Vector2 NewVector2(float x = 0f, float y = 0f)
-            {
-                return new Vector2(x, y);
-            }
-
-            MySprite GenerateTextureSprite(string textureType, Color detailColor, Vector2 position, Vector2 size)
-            {
-                return new MySprite(SpriteType.TEXTURE, textureType, position + (size / 2f), size, detailColor);
-            }
-
-            MySprite GenerateTextSprite(string text, Color detailColor, Vector2 position, Vector2 currentSize, TextAlignment alignment, string font, IMyTextSurface surface)
-            {
-                Vector2 textOffset, fontMeasurement, paddingOffset = currentSize * 0.035f, size;
-                size = currentSize * 0.93f;
-                measurementBuilder.Clear();
-                measurementBuilder.Append(text);
-                fontMeasurement = surface.MeasureStringInPixels(measurementBuilder, font, 1f);
-                float fontSize = Math.Min(size.X / fontMeasurement.X, size.Y / fontMeasurement.Y);
-                fontMeasurement = surface.MeasureStringInPixels(measurementBuilder, font, (float)fontSize);
-
-                textOffset = alignment == centerAlignment ? NewVector2(size.X * 0.5f) : NewVector2();
-                textOffset.Y = (size.Y * 0.5f) - (fontMeasurement.Y * 0.5f);
-                return new MySprite(SpriteType.TEXT, text, position + textOffset + paddingOffset, size, detailColor, font, alignment, fontSize);
-            }
-
-            List<PanelDetail> GenerateProgressBarDetails(float givenPercent)
-            {
-                float percent = Math.Max(Math.Min(1f, givenPercent), 0f);
-                List<PanelDetail> myDetails = new List<PanelDetail>
-            {
-                new PanelDetail { textureType = "SquareHollow", textureColor = new Color(0, 0, 0, 180), ratio = 0.25f },
-                new PanelDetail { textureType = "SquareSimple", textureColor = new Color((int)(230f * (float)percent), (int)(230f * (1f - (float)percent)), 0, 220), ratio = 0.25f * percent }
-            };
-                return myDetails;
-            }
-
-            List<MySprite> GenerateProgressBarSprites(float givenPercent, Vector2 offset, Vector2 size)
-            {
-                float percent = Math.Max(Math.Min(1f, givenPercent), 0f);
-                List<MySprite> mySprites = new List<MySprite>
+                GraphicDocument document, spannedDocument;
+                int maxRows, displayedRows;
+                Vector2 positionOffset, surfaceSize, objectSize, objectOffset;
+                IMyTextSurface surface;
+                bool span, multipleColumns;
+                List<MySprite> spriteList = new List<MySprite>();
+                while (true)
                 {
-                    GenerateTextureSprite("SquareHollow", new Color(0, 0, 0, 180), offset, size),
-                    GenerateTextureSprite("SquareSimple", new Color((int)(230f * (1f - (float)percent)), (int)(230f * (float)percent), 0, 220), offset, NewVector2(size.X * percent, size.Y))
-                };
-                return mySprites;
+                    surface = tempManagerPanelDefinition.Surface;
+                    document = cachedDocuments[tempManagerPanelDefinition.DocumentKey];
+                    surfaceSize = surface.SurfaceSize;
+                    positionOffset = (surface.TextureSize - surfaceSize) + (surfaceSize * (surface.TextPadding / 200f));
+                    positionOffset.Y *= (float)tempManagerPanelDefinition.PanelSettings.OffsetMultiplier;
+                    surfaceSize *= 1f - (surface.TextPadding / 100f);
+                    maxRows = tempManagerPanelDefinition.PanelSettings.Rows;
+                    span = TextHasLength(tempManagerPanelDefinition.PanelSettings.SpanChildID);
+                    spannedDocument = null;
+                    spriteList.Clear();
+                    multipleColumns = !document.GraphicObjects.ContainsKey(centerAlignment) &&
+                                      document.GraphicObjects.ContainsKey(leftAlignment) &&
+                                      document.GraphicObjects.ContainsKey(rightAlignment) &&
+                                      maxRows != 0;
+
+                    foreach (KeyValuePair<TextAlignment, List<GraphicObject>> pair in document.GraphicObjects)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+
+                        displayedRows = pair.Key == leftAlignment || maxRows < 0 ? pair.Value.Count : maxRows;
+
+                        for (int i = 0; i < pair.Value.Count; i++)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+
+                            // Copy excess elements to spanned document
+                            if (span && i >= displayedRows)
+                            {
+                                if (spannedDocument == null)
+                                    spannedDocument = new GraphicDocument();
+                                if (!spannedDocument.GraphicObjects.ContainsKey(pair.Key))
+                                    spannedDocument.GraphicObjects[centerAlignment] = new List<GraphicObject>();
+                                spannedDocument.GraphicObjects[centerAlignment].Add(pair.Value[i]);
+                            }
+                            else if (i < displayedRows)
+                            {
+                                objectSize = new Vector2(multipleColumns ? (surfaceSize.X / 2f) - 5f : surfaceSize.X, surfaceSize.Y / (float)displayedRows);
+                                objectOffset = new Vector2(pair.Key == TextAlignment.RIGHT ? (surfaceSize.X / 2f) + 5f : 0f, (float)i * objectSize.Y);
+                                foreach (GraphicElement graphicElement in pair.Value[i].Elements)
+                                {
+                                    if (PauseTickRun) yield return stateActive;
+                                    spriteList.Add(ProcessSprite(
+                                        graphicElement,
+                                        positionOffset + objectOffset + new Vector2(surfaceSize.X * graphicElement.StartPointHorizontal, surfaceSize.Y * graphicElement.StartPointVertical),
+                                        new Vector2(objectSize.X * graphicElement.WidthPercentage, objectSize.Y * graphicElement.HeightPercentage),
+                                        tempManagerPanelDefinition.PanelSettings.Font,
+                                        surface
+                                        ));
+                                }
+                            }
+                        }
+                    }
+
+                    MySpriteDrawFrame frame = surface.DrawFrame();
+                    frame.AddRange(spriteList);
+                    frame.Dispose();
+
+                    if (spannedDocument != null)
+                    {
+                        spannedDocument.Generated();
+                        cachedDocuments[tempManagerPanelDefinition.PanelSettings.SpanChildID] = spannedDocument;
+                    }
+
+                    yield return stateContinue;
+                }
             }
 
-            void AddOutputItem(PanelDefinition panelDefinition, string text)
+            /// <summary>
+            /// Turns documents into text displays
+            /// </summary>
+            /// <returns>True when the display is complete</returns>
+            bool TextProcessor()
             {
-                panelDefinition.AddPanelDetail(text.PadRight(panelDefinition.nameLength));
+                selfContainedIdentifier = PanelFunctionIdentifier.Text_Processor;
+
+                if (!IsInitialized)
+                    SetEnumerator = TextProcessorState();
+
+                return RunStateManager;
             }
+
+            IEnumerator<FunctionState> TextProcessorState()
+            {
+                GraphicDocument document, spannedDocument;
+                int maxRows, displayedRows, leftMax, rightMax, centerMax;
+                float currentStartPointVertical;
+                Vector2 surfaceSize, buildSize;
+                IMyTextSurface surface;
+                bool span;
+                List<string> leftColumn = NewStringList, rightColumn = NewStringList, centerColumn = NewStringList;
+                StringBuilder builder = NewBuilder;
+                while (true)
+                {
+                    surface = tempManagerPanelDefinition.Surface;
+                    document = cachedDocuments[tempManagerPanelDefinition.DocumentKey];
+                    surfaceSize = surface.SurfaceSize * (1f - (surface.TextPadding / 50f));
+                    maxRows = tempManagerPanelDefinition.PanelSettings.Rows;
+                    span = TextHasLength(tempManagerPanelDefinition.PanelSettings.SpanChildID);
+                    spannedDocument = null;
+                    leftColumn.Clear();
+                    rightColumn.Clear();
+                    centerColumn.Clear();
+                    leftMax = rightMax = centerMax = 0;
+
+                    foreach (KeyValuePair<TextAlignment, List<GraphicObject>> pair in document.GraphicObjects)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+
+                        displayedRows = pair.Key == leftAlignment || maxRows < 0 ? pair.Value.Count : maxRows;
+
+                        for (int i = 0; i < pair.Value.Count; i++)
+                        {
+                            currentStartPointVertical = 0f;
+
+                            // Copy excess elements to spanned document
+                            if (span && i >= displayedRows)
+                            {
+                                if (spannedDocument == null)
+                                    spannedDocument = new GraphicDocument();
+                                if (!spannedDocument.GraphicObjects.ContainsKey(pair.Key))
+                                    spannedDocument.GraphicObjects[centerAlignment] = new List<GraphicObject>();
+                                spannedDocument.GraphicObjects[centerAlignment].Add(pair.Value[i]);
+                            }
+                            else if (i < displayedRows)
+                            {
+                                foreach (GraphicElement graphicElement in pair.Value[i].Elements)
+                                {
+                                    if (graphicElement.Texture) continue;
+                                    if (PauseTickRun) yield return stateActive;
+                                    if (graphicElement.StartPointVertical > currentStartPointVertical && BuilderHasLength(builder))
+                                    {
+                                        switch (pair.Key)
+                                        {
+                                            case leftAlignment:
+                                                leftColumn.Add(builder.ToString());
+                                                break;
+                                            case centerAlignment:
+                                                centerColumn.Add(builder.ToString());
+                                                break;
+                                            default:
+                                                rightColumn.Add(builder.ToString());
+                                                break;
+                                        }
+                                        builder.Clear();
+                                        currentStartPointVertical = graphicElement.StartPointVertical;
+                                    }
+                                    builder.Append($"{(BuilderHasLength(builder) ? " " : "")}{graphicElement.Text}");
+                                }
+                                if (BuilderHasLength(builder))
+                                {
+                                    switch (pair.Key)
+                                    {
+                                        case leftAlignment:
+                                            leftColumn.Add(builder.ToString());
+                                            break;
+                                        case centerAlignment:
+                                            centerColumn.Add(builder.ToString());
+                                            break;
+                                        default:
+                                            rightColumn.Add(builder.ToString());
+                                            break;
+                                    }
+                                    builder.Clear();
+                                }
+                            }
+                        }
+                    }
+
+                    foreach (string line in rightColumn)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        rightMax = Math.Max(rightMax, line.Length);
+                    }
+                    foreach (string line in leftColumn)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        leftMax = Math.Max(leftMax, line.Length);
+                    }
+
+                    for (int i = 0; i < rightColumn.Count || i < leftColumn.Count; i++)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        centerColumn.Add($"{(i < leftColumn.Count ? leftColumn[i] : "").PadRight(leftMax)} {(i < rightColumn.Count ? rightColumn[i] : "").PadRight(rightMax)}");
+                    }
+                    for (int i = 0; i < centerColumn.Count; i++)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        centerMax = Math.Max(centerMax, centerColumn[i].Length);
+                    }
+                    for (int i = 0; i < centerColumn.Count; i++)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        if (i + 1 < centerColumn.Count)
+                            builder.AppendLine(centerColumn[i].PadRight(centerMax));
+                        else
+                            builder.Append(centerColumn[i].PadRight(centerMax));
+                    }
+
+                    surface.WriteText(builder);
+                    builder.Clear();
+
+                    if (centerColumn.Count > 0)
+                    {
+                        builder.Append(centerColumn[0].Replace(" ", "_"));
+                        buildSize = surface.MeasureStringInPixels(builder, surface.Font, 1f) / (float)tempManagerPanelDefinition.PanelSettings.TextMultiplier;
+                        buildSize = new Vector2(buildSize.X, buildSize.Y * (float)centerColumn.Count);
+                        surface.FontSize = Math.Max(0.1f, Math.Min(10f, Math.Min(surfaceSize.X / buildSize.X, surfaceSize.Y / buildSize.Y)));
+                        builder.Clear();
+                    }
+
+                    if (spannedDocument != null)
+                    {
+                        spannedDocument.Generated();
+                        cachedDocuments[tempManagerPanelDefinition.PanelSettings.SpanChildID] = spannedDocument;
+                    }
+
+                    yield return stateContinue;
+                }
+            }
+
+            /// <summary>
+            /// Processes an item panel to produce a document
+            /// </summary>
+            /// <returns>True when the document is complete</returns>
+            bool ItemPanel()
+            {
+                selfContainedIdentifier = PanelFunctionIdentifier.Item_Panel;
+
+                if (!IsInitialized)
+                    SetEnumerator = ItemPanelState();
+
+                return RunStateManager;
+            }
+
+            IEnumerator<FunctionState> ItemPanelState()
+            {
+                List<ItemDefinition> items = NewItemDefinitionList;
+                bool belowQuota;
+                double minValue, maxValue;
+                while (true)
+                {
+                    // Populate temporary list
+                    items.Clear();
+                    items.AddRange(tempManagerPanelDefinition.PanelSettings.Items.ItemList.Values.Select(b => b.ItemReference));
+
+                    // Filter by 'Below Quota'
+                    belowQuota = tempManagerPanelDefinition.PanelSettings.Options.Contains(PanelOptions.BelowQuota);
+                    minValue = tempManagerPanelDefinition.PanelSettings.MinimumItemValue;
+                    maxValue = tempManagerPanelDefinition.PanelSettings.MaximumItemValue;
+                    if (maxValue <= 0) maxValue = double.MaxValue;
+                    for (int i = 0; i < items.Count; i += 0)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        if ((belowQuota && items[i].amount >= items[i].currentQuota) ||
+                            items[i].amount < minValue ||
+                            items[i].amount > maxValue)
+                            items.RemoveAtFast(i);
+                        else
+                            i++;
+                    }
+
+                    // Order items by setting
+                    switch (tempManagerPanelDefinition.PanelSettings.SortType)
+                    {
+                        case PanelItemSorting.Alphabetical:
+                            items = items.OrderBy(b => b.displayName).ToList();
+                            break;
+                        case PanelItemSorting.AscendingAmount:
+                            items = items.OrderBy(b => b.amount).ToList();
+                            break;
+                        case PanelItemSorting.DescendingAmount:
+                            items = items.OrderByDescending(b => b.amount).ToList();
+                            break;
+                        case PanelItemSorting.AscendingPercent:
+                            items = items.OrderBy(b => b.Percentage).ToList();
+                            break;
+                        case PanelItemSorting.DescendingPercent:
+                            items = items.OrderByDescending(b => b.Percentage).ToList();
+                            break;
+                    }
+
+                    // Generate document
+                    GraphicDocument document = new GraphicDocument();
+                    document.GraphicObjects[centerAlignment] = new List<GraphicObject>();
+                    foreach (ItemDefinition item in items)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+
+                        switch (tempManagerPanelDefinition.PanelSettings.DisplayType)
+                        {
+                            case DisplayType.Standard:
+                                document.GraphicObjects[centerAlignment].Add(GenerateStandardItem(item));
+                                break;
+                            case DisplayType.CompactAmount:
+                                document.GraphicObjects[centerAlignment].Add(GenerateCompactAmountItem(item));
+                                break;
+                            case DisplayType.CompactPercent:
+                                document.GraphicObjects[centerAlignment].Add(GenerateCompactPercent(item));
+                                break;
+                            case DisplayType.Detailed:
+                                document.GraphicObjects[centerAlignment].Add(GenerateDetailedItem(item));
+                                break;
+                        }
+                    }
+
+                    // Cache document
+                    cachedDocuments[tempManagerPanelDefinition.DocumentKey] = document;
+
+                    yield return stateContinue;
+                }
+            }
+
+            /// <summary>
+            /// Processes an output panel to produce a document
+            /// </summary>
+            /// <returns>True when the document is complete</returns>
+            bool OutputPanel()
+            {
+                selfContainedIdentifier = PanelFunctionIdentifier.Output_Panel;
+
+                if (!IsInitialized)
+                    SetEnumerator = OutputPanelState();
+
+                return RunStateManager;
+            }
+
+            IEnumerator<FunctionState> OutputPanelState()
+            {
+                List<string> suffixes;
+                List<OutputObject> tempOutputList = new List<OutputObject>();
+                while (true)
+                {
+                    suffixes = tempManagerPanelDefinition.PanelSettings.Suffixes;
+                    GraphicDocument document = new GraphicDocument();
+                    document.GraphicObjects[leftAlignment] = new List<GraphicObject>();
+                    document.GraphicObjects[rightAlignment] = new List<GraphicObject>();
+
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"NDS Inventory Manager v{buildVersion}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"{parent.currentMajorFunction}".Replace("_", " ")));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Runtime:    {parent.ShortMSTime(torchAverage)}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Blocks:     {ShortNumber2(parent.managedBlocks.Count, suffixes)}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Storages:   {ShortNumber2(typedIndexes[setKeyIndexStorage].Count, suffixes)}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Assemblers: {ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, suffixes)}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"H2/O2 Gens: {ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, suffixes)}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Refineries: {ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, suffixes)}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"H/O Tanks:  {ShortNumber2(typedIndexes[setKeyIndexHydrogenTank].Count, suffixes)}/{ShortNumber2(typedIndexes[setKeyIndexOxygenTank].Count, suffixes)}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Weapons:    {ShortNumber2(typedIndexes[setKeyIndexGun].Count, suffixes)}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Reactors:   {ShortNumber2(typedIndexes[setKeyIndexReactor].Count, suffixes)}"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText(parent.errorFilter ? $"Errors:     {ShortNumber2(parent.currentErrorCount, suffixes, 0, 6)} of {ShortNumber2(parent.totalErrorCount, suffixes, 0, 6)}" : $"Status:  {ShortNumber2(parent.scriptHealth, null, 3, 6)}%"));
+
+                    tempOutputList.Clear();
+                    tempOutputList.AddRange(parent.errorFilter ? parent.outputErrorList : parent.outputList);
+                    foreach (OutputObject outputObject in tempOutputList)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        document.GraphicObjects[rightAlignment].Add(GenerateText(outputObject.Output));
+                    }
+
+                    // Cache document
+                    cachedDocuments[tempManagerPanelDefinition.DocumentKey] = document;
+
+                    yield return stateContinue;
+                }
+            }
+
+            /// <summary>
+            /// Processes a status panel to produce a document
+            /// </summary>
+            /// <returns>True when the document is complete</returns>
+            bool StatusPanel()
+            {
+                selfContainedIdentifier = PanelFunctionIdentifier.Status_Panel;
+
+                if (!IsInitialized)
+                    SetEnumerator = StatusPanelState();
+
+                return RunStateManager;
+            }
+
+            IEnumerator<FunctionState> StatusPanelState()
+            {
+                int assembling, disassembling, idle, disabled, nameLength, decimals;
+                List<long> tempIndices = NewLongList;
+                List<string> suffixes;
+                SortedList<string, int> assemblyList = new SortedList<string, int>(),
+                                        disassemblyList = new SortedList<string, int>();
+                while (true)
+                {
+                    // Set panel settings
+                    suffixes = tempManagerPanelDefinition.PanelSettings.Suffixes;
+                    nameLength = tempManagerPanelDefinition.PanelSettings.NameLength;
+                    decimals = tempManagerPanelDefinition.PanelSettings.Decimals;
+
+                    // Initialize document
+                    GraphicDocument document = new GraphicDocument();
+                    document.GraphicObjects[leftAlignment] = new List<GraphicObject>();
+                    document.GraphicObjects[rightAlignment] = new List<GraphicObject>();
+
+                    // Reset settings
+                    assembling = disassembling = idle = disabled = 0;
+                    assemblyList.Clear();
+                    disassemblyList.Clear();
+                    // Check assemblers
+                    tempIndices.Clear();
+                    tempIndices.AddRange(typedIndexes[setKeyIndexAssemblers]);
+                    foreach (long index in tempIndices)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
+                    }
+                    // Generate assembler output
+                    document.GraphicObjects[leftAlignment].Add(GenerateText(BlockStatusTitle($"Assemblers x{ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, suffixes, decimals, 4, false)}", disabled).PadRight(nameLength)));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Assembling:    {ShortNumber2(assembling, suffixes, decimals, 4)}".PadRight(nameLength)));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Disassembling: {ShortNumber2(disassembling, suffixes, decimals, 4)}".PadRight(nameLength)));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Idle:          {ShortNumber2(idle, suffixes, decimals, 4)}".PadRight(nameLength)));
+                    // Generate assembler details
+                    foreach (KeyValuePair<string, int> kvp in assemblyList)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        document.GraphicObjects[rightAlignment].Add(GenerateText($"Assembling x{ShortNumber2(kvp.Value, suffixes, decimals, 4, false)} {ShortenName(kvp.Key, nameLength, true)}"));
+                    }
+                    foreach (KeyValuePair<string, int> kvp in disassemblyList)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        document.GraphicObjects[rightAlignment].Add(GenerateText($"Disassembling x{ShortNumber2(kvp.Value, suffixes, decimals, 4, false)} {ShortenName(kvp.Key, nameLength, true)}"));
+                    }
+
+                    // Reset settings
+                    assembling = idle = disabled = 0;
+                    assemblyList.Clear();
+                    // Check refineries
+                    tempIndices.AddRange(typedIndexes[setKeyIndexRefinery]);
+                    foreach (long index in tempIndices)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
+                    }
+                    // Generate refinery output
+                    document.GraphicObjects[leftAlignment].Add(GenerateText(BlockStatusTitle($"Refineries x{ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, suffixes, decimals, 4, false)}", disabled).PadRight(nameLength)));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Refining:      {ShortNumber2(assembling, suffixes, decimals, 4)}".PadRight(nameLength)));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Idle:          {ShortNumber2(idle, suffixes, decimals, 4)}".PadRight(nameLength)));
+                    // Generate refinery details
+                    foreach (KeyValuePair<string, int> kvp in assemblyList)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        document.GraphicObjects[rightAlignment].Add(GenerateText($"Refining x{ShortNumber2(kvp.Value, suffixes, decimals, 4, false)} {ShortenName(kvp.Key, nameLength, true)}"));
+                    }
+
+                    // Reset settings
+                    assembling = idle = disabled = 0;
+                    assemblyList.Clear();
+                    // Check h2/o2 generators
+                    tempIndices.Clear();
+                    tempIndices.AddRange(typedIndexes[setKeyIndexGasGenerators]);
+                    foreach (long index in tempIndices)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
+                    }
+                    // Generate h2/o2 output
+                    document.GraphicObjects[leftAlignment].Add(GenerateText(BlockStatusTitle($"O2/H2 Gens x{ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, suffixes, decimals, 4, false)}", disabled).PadRight(nameLength)));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Active:        {ShortNumber2(assembling, suffixes, decimals, 4)}".PadRight(nameLength)));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Idle:          {ShortNumber2(idle, suffixes, decimals, 4)}".PadRight(nameLength)));
+                    // Generate h2/o2 details
+                    foreach (KeyValuePair<string, int> kvp in assemblyList)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        document.GraphicObjects[rightAlignment].Add(GenerateText($"Processing x{ShortNumber2(kvp.Value, suffixes, decimals, 4, false)} {ShortenName(kvp.Key, nameLength, true)}"));
+                    }
+
+                    // Cache document
+                    cachedDocuments[tempManagerPanelDefinition.DocumentKey] = document;
+
+                    yield return stateContinue;
+                }
+            }
+
+            /// <summary>
+            /// Processes a cargo panel to produce a document
+            /// </summary>
+            /// <returns>True when the document is complete</returns>
+            bool CargoPanel()
+            {
+                selfContainedIdentifier = PanelFunctionIdentifier.Cargo_Panel;
+
+                if (!IsInitialized)
+                    SetEnumerator = CargoPanelState();
+
+                return RunStateManager;
+            }
+
+            IEnumerator<FunctionState> CargoPanelState()
+            {
+                List<string> categories = NewStringList;
+                Dictionary<string, double> currentValues = new Dictionary<string, double>(),
+                                           maxValues = new Dictionary<string, double>();
+                double current, max;
+                while (true)
+                {
+                    GraphicDocument document = new GraphicDocument();
+                    document.GraphicObjects[leftAlignment] = new List<GraphicObject>();
+                    currentValues.Clear();
+                    maxValues.Clear();
+                    categories.Clear();
+                    categories.AddRange(tempManagerPanelDefinition.PanelSettings.Categories);
+
+                    if (categories.Where(x => IsWildCard(x)).Count() > 0)
+                    {
+                        foreach (KeyValuePair<string, LongListPlus> kvp in parent.indexesStorageLists)
+                        {
+                            current = max = 0;
+                            foreach (long index in kvp.Value)
+                            {
+                                if (PauseTickRun) yield return stateActive;
+                                if (!parent.IsBlockBad(index))
+                                {
+                                    current += (double)parent.managedBlocks[index].block.GetInventory(0).CurrentVolume;
+                                    max += (double)parent.managedBlocks[index].block.GetInventory(0).MaxVolume;
+                                }
+                            }
+                            currentValues[kvp.Key] = current;
+                            maxValues[kvp.Key] = max;
+                        }
+                        current = max = 0;
+                        foreach (string key in currentValues.Keys)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+                            current += currentValues[key];
+                            max += maxValues[key];
+                        }
+                        document.GraphicObjects[leftAlignment].Add(GenerateStorage("All", (float)(current / max)));
+                    }
+                    else
+                        foreach (string category in categories)
+                            if (parent.indexesStorageLists.ContainsKey(category))
+                            {
+                                current = max = 0;
+                                foreach (long index in parent.indexesStorageLists[category])
+                                {
+                                    if (PauseTickRun) yield return stateActive;
+                                    if (!parent.IsBlockBad(index))
+                                    {
+                                        current += (double)parent.managedBlocks[index].block.GetInventory(0).CurrentVolume;
+                                        max += (double)parent.managedBlocks[index].block.GetInventory(0).MaxVolume;
+                                    }
+                                }
+                                currentValues[category] = current;
+                                maxValues[category] = max;
+                            }
+                    foreach (string category in categories)
+                        if (currentValues.ContainsKey(category))
+                            document.GraphicObjects[leftAlignment].Add(GenerateStorage(Formatted(category), (float)(currentValues[category] / maxValues[category])));
+
+                    // Cache document
+                    cachedDocuments[tempManagerPanelDefinition.DocumentKey] = document;
+
+                    yield return stateContinue;
+                }
+            }
+
+            /// <summary>
+            /// Processes the panel class, loading/saving settings
+            /// </summary>
+            /// <param name="panelClass"></param>
+            /// <returns>True when the panel is done processing</returns>
+            public bool ProcessPanelOptions(PanelClass panelClass)
+            {
+                selfContainedIdentifier = PanelFunctionIdentifier.Panel_Settings;
+
+                if (!IsInitialized)
+                    SetEnumerator = ProcessPanelOptionState();
+
+                if (!IsStateRunning)
+                    tempSettingsPanelDefinition = panelClass;
+
+                return RunStateManager;
+            }
+
+            IEnumerator<FunctionState> ProcessPanelOptionState()
+            {
+                string dataSource, surfaceHeader, dataPrevious, dataAfter;
+                List<string> dataLines = NewStringList;
+                int processedSettings;
+                while (true)
+                {
+                    dataSource = tempSettingsPanelDefinition.DataSource;
+                    processedSettings = -1;
+                    dataPrevious = dataAfter = "";
+
+                    surfaceHeader = tempSettingsPanelDefinition.Provider ? $"{panelTag}:{tempSettingsPanelDefinition.SurfaceIndex}" : "";
+
+                    if (!TextHasLength(dataSource) && (parent.GetKeyBool(setKeyAutoTagBlocks)))
+                    {
+                        tempSettingsPanelDefinition.DataSource = $"{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}{tempSettingsPanelDefinition.PanelSettings}{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}";
+                        tempSettingsPanelDefinition.Parent.block.CustomName = tempSettingsPanelDefinition.Parent.block.CustomName.Replace(panelTag, panelTag.ToUpper());
+                    }
+
+                    if (TextHasLength(dataSource) && !StringsMatch(dataSource, tempSettingsPanelDefinition.PanelSettings.SettingBackup))
+                    {
+                        tempSettingsPanelDefinition.PanelSettings.SettingBackup = dataSource;
+
+                        tempSettingsPanelDefinition.PanelSettings.Initialize();
+
+                        if (tempSettingsPanelDefinition.Provider)
+                            ParseHeaderedSettings(dataSource, surfaceHeader, dataLines, out dataPrevious, out dataAfter, true);
+                        else dataLines.AddRange(SplitLines(dataSource));
+
+                        processedSettings = 0;
+                        foreach (string setting in dataLines)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+
+                            if (tempSettingsPanelDefinition.PanelSettings.LoadSetting(setting))
+                                processedSettings++;
+                        }
+                        dataLines.Clear();
+                    }
+
+                    if (tempSettingsPanelDefinition.PanelSettings.LastUpdateTime < parent.itemAddedOrChanged ||
+                        (tempSettingsPanelDefinition.PanelSettings.Items.Count == 0 && (TextHasLength(tempSettingsPanelDefinition.PanelSettings.ItemSearchString) || tempSettingsPanelDefinition.PanelSettings.Categories.Count > 0)))
+                    {
+                        tempSettingsPanelDefinition.PanelSettings.Items.Clear();
+                        string searchString = $"{tempSettingsPanelDefinition.PanelSettings.ItemSearchString}{(TextHasLength(tempSettingsPanelDefinition.PanelSettings.ItemSearchString) ? "|" : "")}{String.Join("|", tempSettingsPanelDefinition.PanelSettings.Categories.Select(c => $"{c}:*"))}";
+                        while (!parent.MatchItems2(searchString, tempSettingsPanelDefinition.PanelSettings.Items)) yield return stateActive;
+                        tempSettingsPanelDefinition.PanelSettings.LastUpdateTime = Now;
+                    }
+
+                    if (!TextHasLength(dataSource) || processedSettings == 0)
+                    {
+                        if (processedSettings == 0 && TextHasLength(dataSource) && !tempSettingsPanelDefinition.Provider)
+                            dataPrevious = dataSource;
+
+                        if (parent.GetKeyBool(setKeyAutoTagBlocks))
+                        {
+                            tempSettingsPanelDefinition.DataSource = $"{dataPrevious}{(TextHasLength(dataPrevious) ? newLine : "")}{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}{tempSettingsPanelDefinition.PanelSettings}{newLine}{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}{(TextHasLength(dataAfter) ? newLine : "")}{dataAfter}";
+
+                            tempSettingsPanelDefinition.Parent.block.CustomName = tempSettingsPanelDefinition.Parent.block.CustomName.Replace(panelTag, panelTag.ToUpper());
+                        }
+                    }
+
+                    yield return stateContinue;
+                }
+            }
+
+            #endregion
+
+
+            #region Return Methods
+
 
             void BlockStatus(long index, ref int assembling, ref int disassembling, ref int idle, ref int disabled, SortedList<string, int> assemblyList, SortedList<string, int> disassemblyList)
             {
@@ -218,7 +821,7 @@ namespace IngameScript
                 MyInventoryItem item;
                 MyProductionItem productionItem;
                 string key;
-                if (!parent.IsBlockOk(index) || !((IMyFunctionalBlock)block).Enabled)
+                if (parent.IsBlockBad(index) || !((IMyFunctionalBlock)block).Enabled)
                 {
                     disabled++;
                     return;
@@ -292,973 +895,495 @@ namespace IngameScript
                 }
             }
 
+            string BlockStatusTitle(string title, int disabled)
+            {
+                string formTitle = title;
+                if (disabled > 0)
+                    formTitle += $" -({ShortNumber2(disabled, tempManagerPanelDefinition.PanelSettings.Suffixes)})";
+                return formTitle;
+            }
+
+            GraphicObject GenerateStorage(string text, float percent) =>
+                new GraphicObject(new List<GraphicElement>
+                {
+                    new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true),
+                    new GraphicElement(text, tempManagerPanelDefinition.PanelSettings.TextColor, 0.75f),
+                    ProgressBarBack(0.25f, 1, 0.75f, 0), // Progress bar back @ 75%,0% x 25%*100%
+                    ProgressBarFront(percent, 0.25f, 1, 0.75f, 0), // Progress bar front @ 75%,0% x 25%*100%
+                    new GraphicElement($"{TruncateNumber(percent * 100f, 2)}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.25f, 1, 0.75f)
+                });
+
+            GraphicObject GenerateText(string text) =>
+                new GraphicObject(new List<GraphicElement>
+                {
+                    new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true),
+                    new GraphicElement(text, tempManagerPanelDefinition.PanelSettings.TextColor)
+                });
+
+            GraphicObject GenerateDetailedItem(ItemDefinition item)
+            {
+                //Background
+                //(Name) (Count/Quota) (Progress Bar Background & Progress Bar Foreground & Percentage)
+                //(Assembly status) (rate)
+                float percent = (float)item.Percentage / 100f;
+                double displayedPercent = Math.Min(100.0, item.Percentage);
+                return new GraphicObject(new List<GraphicElement>
+                {
+                    new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true), // Background @ 0%,0% x 100%*100%
+                    new GraphicElement(ShortenName(item.displayName, tempManagerPanelDefinition.PanelSettings.NameLength, true), tempManagerPanelDefinition.PanelSettings.TextColor, 0.5f, 0.5f), // Name @ 50%,0% x 50%*50%
+                    new GraphicElement($"{ShortNumber2(item.amount, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}/{ShortNumber2(item.currentQuota, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.35f, 0.5f, 0.5f), // Number @ 50%,0% x 35%*50%
+                    ProgressBarBack(0.2f, 0.5f, 0.8f, 0), // Progress bar back @ 80%,0% x 20%*50%
+                    ProgressBarFront(percent, 0.2f, 0.5f, 0.8f, 0), // Progress bar front @ 80%,0% x 20%*50%
+                    new GraphicElement($"{TruncateNumber(displayedPercent, 2):N2}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.2f, 0.5f, 0.8f), // Progress bar number @ 80%,0% x 20%*50%
+                    new GraphicElement($"{item.AssemblyStatus}", tempManagerPanelDefinition.PanelSettings.TextColor, 0.75f, 0.5f, 0, 0.5f), // Status @ 0%,50% x 75%*50%
+                    new GraphicElement($"{ShortNumber2(item.amountDifference, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.25f, 0.5f, 0.75f, 0.5f) // Rate @ 75%,50% x 25%*50%
+                });
+            }
+
+            GraphicObject GenerateCompactPercent(ItemDefinition item)
+            {
+                //Background
+                //Name
+                //Progress Bar Background
+                //Progress Bar Foreground
+                //Percentage
+                float percent = (float)item.Percentage / 100f;
+                double displayedPercent = Math.Min(100.0, item.Percentage);
+                return new GraphicObject(new List<GraphicElement>
+                {
+                    new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true), // Background @ 0%,0% x 100%*100%
+                    new GraphicElement(ShortenName(item.displayName, tempManagerPanelDefinition.PanelSettings.NameLength, true), tempManagerPanelDefinition.PanelSettings.TextColor, 0.75f), // Name @ 0%,0% x 75%*100%
+                    ProgressBarBack(0.25f, 1, 0.75f, 0), // Progress bar back @ 75%,0% x 25%*100%
+                    ProgressBarFront(percent, 0.25f, 1, 0.75f, 0), // Progress bar front @ 75%,0% x 25%*100%
+                    new GraphicElement($"{TruncateNumber(displayedPercent, 2):N2}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.25f, 1, 0.75f) // Progress bar number @ 75%,0% x 25%*100%
+                });
+            }
+
+            GraphicObject GenerateCompactAmountItem(ItemDefinition item) =>
+                new GraphicObject(new List<GraphicElement>
+                {
+                    new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true), // Background @ 0%,0% x 100%*100%
+                    new GraphicElement(ShortenName(item.displayName, tempManagerPanelDefinition.PanelSettings.NameLength, true), tempManagerPanelDefinition.PanelSettings.TextColor, 0.6f), // Name @ 0%,0% x 60%*100%
+                    new GraphicElement($"{ShortNumber2(item.amount, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}/{ShortNumber2(item.currentQuota, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.4f, 1, 0.6f) // Number @ 60%,0% x 40%*100%
+                });
+
+            GraphicObject GenerateStandardItem(ItemDefinition item)
+            {
+                //Background
+                //Name
+                //Count/Quota
+                //Progress Bar Background
+                //Progress Bar Foreground
+                //Percentage
+                float percent = (float)item.Percentage / 100f;
+                double displayedPercent = Math.Min(100.0, item.Percentage);
+                return new GraphicObject(new List<GraphicElement>
+                {
+                    new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true), // Background @ 0%,0% x 100%*100%
+                    new GraphicElement(ShortenName(item.displayName, tempManagerPanelDefinition.PanelSettings.NameLength, true), tempManagerPanelDefinition.PanelSettings.TextColor, 0.5f), // Name @ 0%,0% x 50%*100%
+                    new GraphicElement($"{ShortNumber2(item.amount, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}/{ShortNumber2(item.currentQuota, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.35f, 1, 0.5f), // Number @ 50%,0% x 35%*100%
+                    ProgressBarBack(0.15f, 1, 0.85f, 0), // Progress bar back @ 85%,0% x 15%*100%
+                    ProgressBarFront(percent, 0.15f, 1, 0.85f, 0), // Progress bar front @ 85%,0% x 15%*100%
+                    new GraphicElement($"{TruncateNumber(displayedPercent, 2):N2}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.15f, 1, 0.85f) // Progress bar number @ 85%,0% x 15%*100%
+                });
+            }
+
+            GraphicElement ProgressBarBack(float width, float height, float x, float y) =>
+                new GraphicElement(
+                    "SquareHollow",
+                    new Color(0, 0, 0, 180),
+                    width,
+                    height,
+                    x,
+                    y,
+                    true);
+
+            GraphicElement ProgressBarFront(float percent, float width, float height, float x, float y) =>
+                new GraphicElement(
+                    "SquareSimple",
+                    new Color((int)(230.0 * (1f - Math.Min(1f, percent))), (int)(230.0 * Math.Min(1f, percent)), 0, 220),
+                    width * Math.Min(1f, percent),
+                    height,
+                    x,
+                    y,
+                    true);
+
+            public string GetFont(string fontType)
+            {
+                for (int i = 0; i < fontList.Count; i++)
+                    if (StringsMatch(fontType, fontList[i]))
+                        return fontList[i];
+                return "Monospace";
+            }
+
+            MySprite ProcessSprite(GraphicElement graphicElement, Vector2 objectPosition, Vector2 objectSize, string font, IMyTextSurface surface)
+            {
+                float size = 0f;
+                Vector2 objectOffset;
+                if (!graphicElement.Texture)
+                {
+                    StringBuilder builder = new StringBuilder(graphicElement.Text);
+                    Vector2 textMeasurement = surface.MeasureStringInPixels(builder, font, 1f);
+                    size = Math.Min(objectSize.X / textMeasurement.X, objectSize.Y / textMeasurement.Y);
+                    textMeasurement = surface.MeasureStringInPixels(builder, font, size);
+                    objectOffset = new Vector2(0f, (objectSize.Y * 0.5f) - (textMeasurement.Y * 0.5f));
+                }
+                else objectOffset = Vector2.Zero;
+
+                return new MySprite(
+                        graphicElement.Texture ? SpriteType.TEXTURE : SpriteType.TEXT,
+                        graphicElement.Text,
+                        objectPosition + objectOffset + (graphicElement.Texture ? objectSize / 2f : Vector2.Zero),
+                        objectSize,
+                        graphicElement.ElementColor,
+                        graphicElement.Texture ? null : font,
+                        graphicElement.Texture ? centerAlignment : leftAlignment,
+                        size
+                        );
+            }
 
             #endregion
 
 
-            #region State Functions
+            #region Methods
 
-
-            public bool ProcessPanelOptions(BlockDefinition managedBlock, int surfaceIndex = 0)
+            public void CheckPanel(PanelClass panelClass)
             {
-                selfContainedIdentifier = FunctionIdentifier.Process_Panel_Options;
+                string hashKey = panelClass.EntityFlickerID;
 
-                if (!IsStateRunning)
+                if (parent.antiflickerSet.Add(hashKey))
                 {
-                    tempBlockOptionDefinition = managedBlock;
-                    tempProcessPanelOptionSurfaceIndex = surfaceIndex;
-                }
+                    IMyTextSurface surface = panelClass.Surface;
 
-                return RunStateManager;
+                    if (surface.ContentType == ContentType.NONE)
+                        surface.ContentType = ContentType.SCRIPT;
+
+                    if (surface.Script != nothingType)
+                        surface.Script = nothingType;
+
+                    if (surface.ContentType == ContentType.SCRIPT)
+                        surface.WriteText("");
+                    else
+                        surface.DrawFrame().Dispose();
+
+                    if (surface.ScriptForegroundColor == defPanelForegroundColor)
+                    {
+                        surface.ScriptForegroundColor = Color.Black;
+                        surface.ScriptBackgroundColor = new Color(73, 141, 255, 255);
+                    }
+                }
             }
 
-            public IEnumerator<FunctionState> ProcessPanelOptionState()
+            #endregion
+
+
+            #region Classes
+
+            public class GraphicDocument
             {
-                PanelDefinition panelDefinition;
-                string dataSource, key, data, blockDefinition;
-                StringBuilder keyBuilder = NewBuilder;
-                string[] dataLines, dataOptions;
-                yield return stateContinue;
+                public SortedList<TextAlignment, List<GraphicObject>> GraphicObjects = new SortedList<TextAlignment, List<GraphicObject>>();
 
-                while (true)
+                public DateTime expirationTime = Now;
+
+                public void Generated()
                 {
-                    if (!tempBlockOptionDefinition.panelDefinitionList.ContainsKey(tempProcessPanelOptionSurfaceIndex))
-                        SetPanelDefinition(tempBlockOptionDefinition, tempProcessPanelOptionSurfaceIndex);
-                    panelDefinition = tempBlockOptionDefinition.panelDefinitionList[tempProcessPanelOptionSurfaceIndex];
-                    dataSource = panelDefinition.DataSource;
-                    blockDefinition = BlockSubtype(tempBlockOptionDefinition.block);
+                    expirationTime = Now.AddSeconds(1);
+                }
+            }
 
-                    if (!TextHasLength(dataSource))
-                    {
-                        if (TextHasLength(panelDefinition.settingBackup))
-                            SetPanelDefinition(tempBlockOptionDefinition, tempProcessPanelOptionSurfaceIndex);
-                        if (parent.GetKeyBool(setKeyAutoTagBlocks))
-                        {
-                            panelDefinition.DataSource = presetPanelOptions;
-                            tempBlockOptionDefinition.block.CustomName = tempBlockOptionDefinition.block.CustomName.Replace(panelTag, panelTag.ToUpper());
-                        }
-                    }
-                    else if (!StringsMatch(dataSource, panelDefinition.settingBackup))
-                    {
-                        panelDefinition.itemSearchString = "";
-                        panelDefinition.items.Clear();
-                        keyBuilder.Clear();
-                        dataLines = SplitLines(dataSource);
-                        bool dataBool, rowSet = false;
-                        double dataDouble;
-                        int startIndex;
-                        OptionHeaderIndex(out startIndex, dataLines, optionBlockFilter);
-                        for (int i = startIndex; i < dataLines.Length; i++)
-                        {
-                            if (PauseTickRun) yield return stateActive;
-                            if (startIndex > 0 && StringsMatch(dataLines[i], optionBlockFilter)) break;
-                            if (!dataLines[i].StartsWith("//") && SplitData(dataLines[i], out key, out data))
+            public struct GraphicObject
+            {
+                public List<GraphicElement> Elements;
+
+                public GraphicObject Clone => new GraphicObject(new List<GraphicElement>(Elements));
+
+                public GraphicObject(List<GraphicElement> elements)
+                {
+                    Elements = elements;
+                }
+            }
+
+            public struct GraphicElement
+            {
+                public string Text;
+                public Color ElementColor;
+                public float WidthPercentage, HeightPercentage, StartPointHorizontal, StartPointVertical;
+                public bool Texture;
+
+                public GraphicElement(string text, Color color, float widthPercentage = 1f, float heightPercentage = 1f, float startPointHorizontal = 0f, float startPointVertical = 0f, bool texture = false)
+                {
+                    Text = text;
+                    ElementColor = color;
+                    WidthPercentage = widthPercentage;
+                    HeightPercentage = heightPercentage;
+                    StartPointHorizontal = startPointHorizontal;
+                    StartPointVertical = startPointVertical;
+                    Texture = texture;
+                }
+            }
+
+            #endregion
+        }
+
+        public class PanelClass
+        {
+            public BlockDefinition Parent;
+
+            public PanelSettings PanelSettings = new PanelSettings();
+
+            public int SurfaceIndex = 0;
+
+            public DateTime NextUpdateTime = Now;
+
+            public IMyTextSurface Surface => Provider ? ((IMyTextSurfaceProvider)Parent.block).GetSurface(SurfaceIndex) : (IMyTextPanel)Parent.block;
+
+            public string DocumentKey => PanelSettings.DocumentKey;
+
+            public string EntityFlickerID => $"{Parent.block.EntityId}{(Provider ? $":{SurfaceIndex}" : "")}";
+
+            public bool Provider => !(Parent.block is IMyTextPanel);
+
+            public string DataSource
+            {
+                get
+                {
+                    return Parent.DataSource;
+                }
+                set
+                {
+                    Parent.DataSource = value;
+                }
+            }
+
+            public PanelClass(BlockDefinition parent, int surfaceIndex)
+            {
+                Parent = parent;
+                SurfaceIndex = surfaceIndex;
+                PanelSettings.Initialize(this);
+            }
+        }
+
+        public class PanelSettings
+        {
+            public static PanelMaster2 master;
+
+            PanelClass Parent;
+
+            public PanelType Type = PanelType.None;
+
+            public string Font = "Monospace", SpanID, SpanChildID, ItemSearchString,
+                          SettingBackup = "";
+
+            public List<string> Categories = NewStringList,
+                                Suffixes = suffixesTemplate.Split('|').ToList();
+
+            public ItemCollection2 Items = new ItemCollection2(false);
+
+            public DisplayType DisplayType = DisplayType.Standard;
+
+            public PanelItemSorting SortType = PanelItemSorting.Alphabetical;
+
+            public List<PanelOptions> Options = new List<PanelOptions>();
+
+            public double MinimumItemValue = 0, MaximumItemValue = 0, UpdateDelay = 1, OffsetMultiplier = 1, TextMultiplier = 1;
+
+            public int Rows = -1, NameLength = 18, Decimals = 2;
+
+            public Color TextColor = Color.Red, NumberColor = Color.Yellow, BackColor = Color.Black;
+
+            public DateTime LastUpdateTime = DateTime.MinValue;
+
+            private string documentKey = "";
+
+            public string DocumentKey
+            {
+                get
+                {
+                    if (!TextHasLength(documentKey))
+                        documentKey = Type == PanelType.Span && TextHasLength(SpanID) ? SpanID : $"{Type}:{Font}:{String.Join("|", Categories)}:{String.Join("|", Suffixes)}:{Items}:{DisplayType}:{SortType}:{String.Join("|", Options)}:{MinimumItemValue}:{MaximumItemValue}:{NameLength}:{Decimals}:{TextColor}:{NumberColor}:{BackColor}";
+                    return documentKey;
+                }
+            }
+
+            public void Initialize(PanelClass parent = null)
+            {
+                if (parent != null)
+                    Parent = parent;
+                ItemSearchString = SpanID = SpanChildID = documentKey = "";
+                Items.Clear();
+                Options.Clear();
+            }
+
+            public bool LoadSetting(string text)
+            {
+                string key, data;
+
+                SplitData(text, out key, out data);
+
+                key = key.ToLower();
+
+                if (!TextHasLength(data)) return false;
+
+                bool changed = true;
+
+                switch (key)
+                {
+                    case "type":
+                        Enum.TryParse<PanelType>(data, true, out Type);
+                        break;
+                    case "font":
+                        Font = master.GetFont(data);
+                        if (Parent.Surface.ContentType == ContentType.TEXT_AND_IMAGE)
+                            Parent.Surface.Font = Font;
+                        break;
+                    case "categories":
+                        Categories.Clear();
+                        Categories.AddRange(data.ToLower().Split('|').OrderBy(b => b));
+                        break;
+                    case "items":
+                        ItemSearchString += $"{(TextHasLength(ItemSearchString) ? "┤" : "")}{data}";
+                        break;
+                    case "item display":
+                        Enum.TryParse<DisplayType>(data, true, out DisplayType);
+                        break;
+                    case "sorting":
+                        Enum.TryParse<PanelItemSorting>(data, true, out SortType);
+                        break;
+                    case "options":
+                        changed = false;
+                        Options.Clear();
+                        string[] options = data.Split('|');
+                        PanelOptions panelOption;
+                        foreach (string option in options)
+                            if (Enum.TryParse<PanelOptions>(option, true, out panelOption))
                             {
-                                dataBool = StringsMatch(data, trueString);
-                                double.TryParse(data, out dataDouble);
-                                switch (key.ToLower())
-                                {
-                                    case "type":
-                                        switch (data.ToLower())
-                                        {
-                                            case "item":
-                                                panelDefinition.panelType = PanelType.Item;
-                                                break;
-                                            case "cargo":
-                                                panelDefinition.panelType = PanelType.Cargo;
-                                                break;
-                                            case "output":
-                                                panelDefinition.panelType = PanelType.Output;
-                                                break;
-                                            case "status":
-                                                panelDefinition.panelType = PanelType.Status;
-                                                break;
-                                            case "span":
-                                                panelDefinition.panelType = PanelType.Span;
-                                                break;
-                                        }
-                                        keyBuilder.Append($"{panelDefinition.panelType}");
-                                        break;
-                                    case "categories":
-                                        dataOptions = data.ToLower().Split('|');
-                                        panelDefinition.itemCategories.Clear();
-                                        for (int x = 0; x < dataOptions.Length; x++)
-                                        {
-                                            if (PauseTickRun) yield return stateActive;
-                                            if (parent.IsCategory(dataOptions[x]))
-                                            {
-                                                panelDefinition.itemCategories.Add(dataOptions[x]);
-                                                keyBuilder.Append(dataOptions[x]);
-                                            }
-                                        }
-                                        break;
-                                    case "items":
-                                        panelDefinition.itemSearchString = $"{(panelDefinition.itemSearchString.Length > 0 ? $"{panelDefinition.itemSearchString}|" : "")}{data}";
-                                        break;
-                                    case "sorting":
-                                        switch (data.ToLower())
-                                        {
-                                            case "alphabetical":
-                                                panelDefinition.panelItemSorting = PanelItemSorting.Alphabetical;
-                                                break;
-                                            case "ascendingamount":
-                                                panelDefinition.panelItemSorting = PanelItemSorting.AscendingAmount;
-                                                break;
-                                            case "descendingamount":
-                                                panelDefinition.panelItemSorting = PanelItemSorting.DescendingAmount;
-                                                break;
-                                            case "ascendingpercent":
-                                                panelDefinition.panelItemSorting = PanelItemSorting.AscendingPercent;
-                                                break;
-                                            case "descendingpercent":
-                                                panelDefinition.panelItemSorting = PanelItemSorting.DescendingPercent;
-                                                break;
-                                        }
-                                        keyBuilder.Append(panelDefinition.panelItemSorting.ToString());
-                                        break;
-                                    case "text color":
-                                        GetColor(out panelDefinition.textColor, data);
-                                        keyBuilder.Append(panelDefinition.textColor.ToVector4());
-                                        break;
-                                    case "number color":
-                                        GetColor(out panelDefinition.numberColor, data);
-                                        keyBuilder.Append(panelDefinition.numberColor);
-                                        break;
-                                    case "back color":
-                                        GetColor(out panelDefinition.backdropColor, data);
-                                        keyBuilder.Append(panelDefinition.backdropColor);
-                                        break;
-                                    case "rows":
-                                        panelDefinition.rows = (int)dataDouble;
-                                        rowSet = true;
-                                        break;
-                                    case "name length":
-                                        panelDefinition.nameLength = (int)dataDouble;
-                                        keyBuilder.Append(panelDefinition.nameLength);
-                                        break;
-                                    case "decimals":
-                                        panelDefinition.decimals = (int)dataDouble;
-                                        keyBuilder.Append(panelDefinition.decimals);
-                                        break;
-                                    case "update delay":
-                                        panelDefinition.updateDelay = dataDouble;
-                                        break;
-                                    case "span id":
-                                        panelDefinition.spanKey = data;
-                                        break;
-                                    case "span child id":
-                                        panelDefinition.childSpanKey = data;
-                                        panelDefinition.span = TextHasLength(data);
-                                        break;
-                                    case "number suffixes":
-                                        dataOptions = data.Split('|');
-                                        panelDefinition.suffixes.Clear();
-                                        panelDefinition.suffixes.AddRange(dataOptions);
-                                        break;
-                                    case "options":
-                                        dataOptions = data.ToLower().Split('|');
-                                        panelDefinition.belowQuota = dataOptions.Contains("belowquota");
-                                        panelDefinition.showProgressBar = !dataOptions.Contains("hideprogressbar");
-                                        break;
-                                    case "minimum value":
-                                        panelDefinition.minimumItemAmount = dataDouble;
-                                        keyBuilder.Append(panelDefinition.minimumItemAmount);
-                                        break;
-                                    case "maximum value":
-                                        panelDefinition.maximumItemAmount = dataDouble;
-                                        keyBuilder.Append(panelDefinition.maximumItemAmount);
-                                        break;
-                                    case "font":
-                                        panelDefinition.font = GetFont(((IMyTextSurfaceProvider)tempBlockOptionDefinition.block).GetSurface(0), data);
-                                        break;
-                                    case "item display":
-                                        switch (data.ToLower())
-                                        {
-                                            case "detailed":
-                                                panelDefinition.displayType = DisplayType.Detailed;
-                                                break;
-                                            case "compactamount":
-                                                panelDefinition.displayType = DisplayType.CompactAmount;
-                                                break;
-                                            case "standard":
-                                                panelDefinition.displayType = DisplayType.Standard;
-                                                break;
-                                            case "compactpercent":
-                                                panelDefinition.displayType = DisplayType.CompactPercent;
-                                                break;
-                                        }
-                                        break;
-                                }
+                                Options.Add(panelOption);
+                                changed = true;
                             }
-                            keyBuilder.Append(panelDefinition.itemSearchString);
-                        }
-                        if (panelDefinition.panelType != PanelType.None)
-                        {
-                            IMyTextSurface surface = panelDefinition.Surface;
-                            panelDefinition.size = surface.SurfaceSize;
-                            panelDefinition.positionOffset = surface.TextureSize - surface.SurfaceSize;
-                            if (panelDefinition.provider || panelDefinition.cornerPanel || blockDefinition == "LargeTextPanel" || blockDefinition == "LargeLCDPanel5x3")
-                                panelDefinition.positionOffset /= 2f;
-                            panelDefinition.settingKey = keyBuilder.ToString();
-                            if (!rowSet)
-                                panelDefinition.rows = 15;
-                            switch (panelDefinition.panelType)
-                            {
-                                case PanelType.Cargo:
-                                    panelDefinition.columns = 1;
-                                    if (!rowSet)
-                                        panelDefinition.rows = panelDefinition.itemCategories.Count;
-                                    break;
-                                case PanelType.Output:
-                                    if (!rowSet)
-                                        panelDefinition.rows = 13;
-                                    panelDefinition.columns = 2;
-                                    if (rowSet && panelDefinition.rows == 0)
-                                        panelDefinition.columns = 1;
-                                    break;
-                                case PanelType.Status:
-                                    panelDefinition.columns = 2;
-                                    if (!rowSet)
-                                        panelDefinition.rows = 8;
-                                    if (rowSet && panelDefinition.rows == 0)
-                                        panelDefinition.columns = 1;
-                                    break;
-                                case PanelType.Span:
-                                    panelDefinition.columns = 1;
-                                    break;
-                            }
-                        }
-                        else
-                            tempBlockOptionDefinition.panelDefinitionList.Remove(tempProcessPanelOptionSurfaceIndex);
-                    }
-                    if (updateTime < parent.itemAddedOrChanged ||
-                        (panelDefinition.items.ItemTypeCount == 0 && panelDefinition.itemSearchString.Length > 0))
-                    {
-                        panelDefinition.items.Clear();
-                        while (!parent.GetTags(panelDefinition.items, panelDefinition.itemSearchString))
-                            yield return stateActive;
-                    }
-                    if (panelDefinition.items.ItemTypeCount > 0)
-                        keyBuilder.Append(panelDefinition.items.ToString());
-
-                    panelDefinition.settingBackup = dataSource;
-
-                    yield return stateContinue;
+                        break;
+                    case "minimum value":
+                        if (!double.TryParse(data, out MinimumItemValue))
+                            MinimumItemValue = 0;
+                        MinimumItemValue = Math.Max(0, Math.Min(MinimumItemValue, MaximumItemValue));
+                        break;
+                    case "maximum value":
+                        if (!double.TryParse(data, out MaximumItemValue))
+                            MaximumItemValue = 0;
+                        MaximumItemValue = Math.Max(0, Math.Max(MaximumItemValue, MinimumItemValue));
+                        break;
+                    case "number suffixes":
+                        Suffixes.Clear();
+                        Suffixes.AddRange(data.Split('|'));
+                        if (Suffixes.Count == 0) Suffixes = suffixesTemplate.Split('|').ToList();
+                        break;
+                    case "text color":
+                        if (!GetColor(ref TextColor, data))
+                            TextColor = Color.Red;
+                        break;
+                    case "number color":
+                        if (!GetColor(ref NumberColor, data))
+                            NumberColor = Color.Yellow;
+                        break;
+                    case "back color":
+                        if (!GetColor(ref BackColor, data))
+                            BackColor = Color.Black;
+                        break;
+                    case "rows":
+                        if (!int.TryParse(data, out Rows))
+                            Rows = -1;
+                        break;
+                    case "name length":
+                        if (!int.TryParse(data, out NameLength))
+                            NameLength = 18;
+                        NameLength = Math.Max(NameLength, 3);
+                        break;
+                    case "decimals":
+                        if (!int.TryParse(data, out Decimals))
+                            Decimals = 2;
+                        Decimals = Math.Max(0, Decimals);
+                        break;
+                    case "update delay":
+                        if (!double.TryParse(data, out UpdateDelay))
+                            UpdateDelay = 1;
+                        UpdateDelay = Math.Max(0, UpdateDelay);
+                        break;
+                    case "span id":
+                        SpanID = data;
+                        break;
+                    case "span child id":
+                        SpanChildID = data;
+                        break;
+                    case "offset multiplier":
+                        if (!double.TryParse(data, out OffsetMultiplier))
+                            OffsetMultiplier = 1;
+                        break;
+                    case "text multiplier":
+                        if (!double.TryParse(data, out TextMultiplier))
+                            TextMultiplier = 1;
+                        break;
+                    default:
+                        changed = false;
+                        break;
                 }
-            }
-
-            bool PopulateSprites()
-            {
-                selfContainedIdentifier = FunctionIdentifier.Main_Sprites;
-
-                return RunStateManager;
-            }
-
-            public IEnumerator<FunctionState> PopulateSpriteState()
-            {
-                int column;
-                yield return stateContinue;
-
-                while (true)
+                if (changed)
                 {
-                    column = 0;
-                    tempPanelDefinition.spriteList.Clear();
-
-                    if (tempPanelDefinition.panelObjects.Count > 0)
-                    {
-                        while (!PopulateSpriteList(tempPanelDefinition.panelObjects, column, false)) yield return stateActive;
-                        column = 1;
-                    }
-                    if (tempPanelDefinition.spannableObjects.Count > 0)
-                        while (!PopulateSpriteList(tempPanelDefinition.spannableObjects, column, true)) yield return stateActive;
-
-                    yield return stateContinue;
-                }
-            }
-
-            bool PopulateSpriteList(List<PanelObject> panelObjects, float column, bool span)
-            {
-                selfContainedIdentifier = FunctionIdentifier.Generating_Sprites;
-
-                if (!IsStateRunning)
-                {
-                    tempPanelObjects = panelObjects;
-                    tempColumn = column;
-                    tempSpan = span;
-                }
-
-                return RunStateManager;
-            }
-
-            public IEnumerator<FunctionState> PopulateSpriteListState()
-            {
-                List<PanelObject> leftoverObjects = NewPanelObjectList;
-                IMyTextSurface surface;
-                int numberPadding;
-                float percent;
-                Vector2 maxLocation, currentLocation,
-                        objectSize, currentOffset,
-                        detailSize, subOffset;
-                yield return stateContinue;
-
-                while (true)
-                {
-                    leftoverObjects.Clear();
-                    surface = tempPanelDefinition.Surface;
-                    numberPadding = tempPanelDefinition.decimals + 4;
-                    if (tempPanelDefinition.decimals > 0)
-                        numberPadding++;
-                    maxLocation = NewVector2(tempPanelDefinition.columns, tempPanelDefinition.rows >= 0 ? tempPanelDefinition.rows : Math.Max(1, tempPanelObjects.Count));
-
-                    if (!tempSpan)
-                        maxLocation.Y = tempPanelObjects.Count;
-
-                    objectSize = NewVector2(tempPanelDefinition.size.X / maxLocation.X, tempPanelDefinition.size.Y / maxLocation.Y);
-                    currentLocation = NewVector2(tempColumn);
-
-                    //Cycle objects
-                    foreach (PanelObject panelObject in tempPanelObjects)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        if (!tempSpan || currentLocation.Y < maxLocation.Y) // If objects are fixed (not spannable) and the row is within bounds
-                        {
-                            // Set current position
-                            currentOffset = NewVector2(currentLocation.X * objectSize.X, currentLocation.Y * objectSize.Y) + tempPanelDefinition.positionOffset;
-
-                            //Generate single backdrop, if any
-                            if (TextHasLength(panelObject.backdropType) && tempPanelDefinition.backdropColor.A > 0)
-                                tempPanelDefinition.spriteList.Add(GenerateTextureSprite(panelObject.backdropType, tempPanelDefinition.backdropColor, currentOffset, objectSize));
-
-                            //Cycle details
-                            foreach (PanelDetail panelDetail in panelObject.panelDetails)
-                            {
-                                if (PauseTickRun) yield return stateActive;
-                                if (panelObject.item) // Process item
-                                {
-                                    percent = (float)(panelDetail.itemAmount / panelDetail.itemQuota);
-                                    if (panelDetail.itemQuota <= 0f)
-                                        percent = 1f;
-                                    switch (tempPanelDefinition.displayType)
-                                    {
-                                        case DisplayType.CompactAmount:
-                                            //Name @ 75%
-                                            detailSize = NewVector2(objectSize.X * 0.75f, objectSize.Y);
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite(panelDetail.itemName, tempPanelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            subOffset = NewVector2(detailSize.X);
-                                            //Number @ 25%
-                                            detailSize = NewVector2(objectSize.X * 0.25f, objectSize.Y);
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite(ShortNumber2(panelDetail.itemAmount, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, numberPadding), tempPanelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            break;
-                                        case DisplayType.CompactPercent:
-                                            //Name @ 75%
-                                            detailSize = NewVector2(objectSize.X * 0.75f, objectSize.Y);
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite(panelDetail.itemName, tempPanelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            subOffset = NewVector2(detailSize.X);
-                                            //Percentage @ 25%
-                                            if (tempPanelDefinition.showProgressBar)
-                                            {
-                                                detailSize = NewVector2(objectSize.X * 0.25f, objectSize.Y);
-                                                tempPanelDefinition.spriteList.AddRange(GenerateProgressBarSprites(percent, currentOffset + subOffset, detailSize));
-                                            }
-                                            break;
-                                        case DisplayType.Detailed:
-                                            //Name @ 60% x 50%
-                                            detailSize = NewVector2(objectSize.X * 0.6f, objectSize.Y / 2f);
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite(panelDetail.itemName, tempPanelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            subOffset = NewVector2(detailSize.X);
-                                            //Count @ 20% x 50%
-                                            detailSize.X = objectSize.X * 0.2f;
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite($"{ShortNumber2(panelDetail.itemAmount, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, numberPadding)}/", tempPanelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            subOffset += NewVector2(detailSize.X);
-                                            //Percent @ 20% x 50%
-                                            if (tempPanelDefinition.showProgressBar)
-                                                tempPanelDefinition.spriteList.AddRange(GenerateProgressBarSprites(percent, currentOffset + subOffset, detailSize));
-                                            //Quota @ 20% x 50%
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite(ShortNumber2(panelDetail.itemQuota, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, numberPadding), tempPanelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            subOffset = NewVector2(0, detailSize.Y);
-                                            measurementBuilder.Clear();
-                                            if (panelDetail.assemblyAmount > 0)
-                                                measurementBuilder.Append($"Assembling: {ShortNumber2(panelDetail.assemblyAmount, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, numberPadding)}");
-                                            if (panelDetail.disassemblyAmount > 0)
-                                            {
-                                                if (BuilderHasLength(measurementBuilder))
-                                                    measurementBuilder.Append(", ");
-                                                measurementBuilder.Append($"Disassembling: {ShortNumber2(panelDetail.disassemblyAmount, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, numberPadding)}");
-                                            }
-                                            //Assembly status @ 75% x 50%
-                                            detailSize.X = objectSize.X * 0.75f;
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite(measurementBuilder.ToString(), tempPanelDefinition.textColor, currentOffset + subOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            subOffset += NewVector2(detailSize.X);
-                                            //Rate @ 25% x 50%
-                                            detailSize.X = objectSize.X * 0.25f;
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite($"Rate: {ShortNumber2(panelDetail.amountDifference, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, numberPadding)}", tempPanelDefinition.textColor, currentOffset + subOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            break;
-                                        case DisplayType.Standard:
-                                            //Name @ 60%
-                                            detailSize = NewVector2(objectSize.X * 0.6f, objectSize.Y);
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite(panelDetail.itemName, tempPanelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            subOffset = NewVector2(detailSize.X);
-                                            //Count @ 20%
-                                            detailSize = NewVector2(objectSize.X * 0.2f, objectSize.Y);
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite($"{ShortNumber2(panelDetail.itemAmount, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, numberPadding)}/", tempPanelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            subOffset += NewVector2(detailSize.X);
-                                            //Percent @ 20%
-                                            tempPanelDefinition.spriteList.AddRange(GenerateProgressBarSprites(percent, currentOffset + subOffset, detailSize));
-                                            //Quota @ 20%
-                                            tempPanelDefinition.spriteList.Add(GenerateTextSprite(ShortNumber2(panelDetail.itemQuota, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, numberPadding), tempPanelDefinition.numberColor, currentOffset + subOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface));
-                                            break;
-                                    }
-                                }
-                                else // Process everything else
-                                {
-                                    detailSize = NewVector2(objectSize.X * panelDetail.ratio, objectSize.Y);
-
-                                    tempPanelDefinition.spriteList.Add
-                                        (
-                                            TextHasLength(panelDetail.textureType) ? GenerateTextureSprite(panelDetail.textureType, panelDetail.textureColor, currentOffset, detailSize) :
-                                            TextHasLength(panelDetail.text) ? GenerateTextSprite(panelDetail.text, tempPanelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface) :
-                                            GenerateTextSprite(ShortNumber2(panelDetail.value, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, numberPadding), tempPanelDefinition.textColor, currentOffset, detailSize, panelDetail.alignment, tempPanelDefinition.font, surface)
-                                        );
-
-                                    if (panelDetail.reservedArea)
-                                        currentOffset += NewVector2(detailSize.X);
-                                }
-                            }
-                            currentLocation.Y += 1f;
-                        }
-                        else if (tempPanelDefinition.span)
-                            leftoverObjects.Add(panelObject.Clone());
-                        else
-                            break;
-                    }
-
-                    foreach (SpanKey spanKey in tempPanelDefinition.spannedPanelList)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        managedBlocks[spanKey.index].panelDefinitionList[spanKey.surfaceIndex].spannableObjects.Clear();
-                        if (leftoverObjects.Count > 0)
-                            ClonePanelObjects(managedBlocks[spanKey.index].panelDefinitionList[spanKey.surfaceIndex].spannableObjects, leftoverObjects);
-                    }
-
-                    yield return stateContinue;
-                }
-            }
-
-            public bool TotalPanelV2(PanelDefinition panelDefinition)
-            {
-                selfContainedIdentifier = FunctionIdentifier.Main_Panel;
-
-                if (!IsStateRunning)
-                    tempPanelDefinition = panelDefinition;
-
-                return RunStateManager;
-            }
-
-            public IEnumerator<FunctionState> TotalPanelStateV2()
-            {
-                yield return stateContinue;
-
-                while (true)
-                {
-                    if (Now >= tempPanelDefinition.nextUpdateTime)
-                    {
-                        string panelOptionString = tempPanelDefinition.settingKey;
-                        tempPanelDefinition.panelObjects.Clear();
-                        if (tempPanelDefinition.panelType != PanelType.Span)
-                        {
-                            bool cachePanel = TextHasLength(panelOptionString);
-                            tempPanelDefinition.spannableObjects.Clear();
-                            if (cachePanel && generatedPanels.ContainsKey(panelOptionString) && generatedPanels[panelOptionString].nextUpdateTime > Now)
-                            {
-                                ClonePanelObjects(tempPanelDefinition.panelObjects, generatedPanels[panelOptionString].panelObjects);
-                                ClonePanelObjects(tempPanelDefinition.spannableObjects, generatedPanels[panelOptionString].spannableObjects);
-                            }
-                            else
-                            {
-                                switch (tempPanelDefinition.panelType)
-                                {
-                                    case PanelType.Cargo:
-                                        while (!CargoPanel()) yield return stateActive;
-                                        break;
-                                    case PanelType.Item:
-                                        while (!ItemPanel()) yield return stateActive;
-                                        break;
-                                    case PanelType.Output:
-                                        while (!OutputPanel()) yield return stateActive;
-                                        break;
-                                    case PanelType.Status:
-                                        while (!StatusPanel()) yield return stateActive;
-                                        break;
-                                }
-                                if (cachePanel)
-                                {
-                                    if (!generatedPanels.ContainsKey(panelOptionString))
-                                        generatedPanels[panelOptionString] = new PregeneratedPanels();
-                                    else
-                                    {
-                                        generatedPanels[panelOptionString].panelObjects.Clear();
-                                        generatedPanels[panelOptionString].spannableObjects.Clear();
-                                    }
-                                    ClonePanelObjects(generatedPanels[panelOptionString].panelObjects, tempPanelDefinition.panelObjects);
-                                    ClonePanelObjects(generatedPanels[panelOptionString].spannableObjects, tempPanelDefinition.spannableObjects);
-                                    generatedPanels[panelOptionString].nextUpdateTime = Now.AddSeconds(tempPanelDefinition.updateDelay);
-                                }
-                            }
-                        }
-                        tempPanelDefinition.nextUpdateTime = Now.AddSeconds(tempPanelDefinition.updateDelay);
-
-                        while (!PopulateSprites()) yield return stateActive;
-                        if (PauseTickRun) yield return stateActive;
-                        MySpriteDrawFrame frame = tempPanelDefinition.Surface.DrawFrame();
-                        frame.AddRange(tempPanelDefinition.spriteList);
-                        frame.Dispose();
-                        for (int i = 0; i < generatedPanels.Count; i += 0)
-                        {
-                            if (PauseTickRun) yield return stateActive;
-                            if ((Now - generatedPanels.Values[i].nextUpdateTime).TotalSeconds >= 60)
-                                generatedPanels.RemoveAt(i);
-                            else
-                                i++;
-                        }
-                    }
-                    yield return stateContinue;
-                }
-            }
-
-            bool CargoPanel()
-            {
-                selfContainedIdentifier = FunctionIdentifier.Cargo_Panel;
-
-                return RunStateManager;
-            }
-
-            public IEnumerator<FunctionState> CargoPanelState()
-            {
-                double capacity;
-                yield return stateContinue;
-
-                while (true)
-                {
-                    capacity = 0;
-                    if (tempPanelDefinition.itemCategories.Contains("all"))
-                    {
-                        while (!CargoCapacity(ref capacity, typedIndexes[setKeyIndexStorage])) yield return stateActive;
-                        tempPanelDefinition.AddPanelDetail("Total:".PadRight(tempPanelDefinition.nameLength), false, 0.75f, true, true);
-                        if (tempPanelDefinition.showProgressBar)
-                            tempPanelDefinition.AddPanelDetails(GenerateProgressBarDetails((float)capacity));
-                        tempPanelDefinition.AddPanelDetail($"{ShortNumber2(capacity * 100.0, tempPanelDefinition.suffixes, 0, 5)}%", false, 0.25f, false);
-                    }
-                    foreach (string category in tempPanelDefinition.itemCategories)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        if (category != "all" && parent.indexesStorageLists.ContainsKey(category))
-                        {
-                            while (!CargoCapacity(ref capacity, parent.indexesStorageLists[category])) yield return stateActive;
-                            tempPanelDefinition.AddPanelDetail($"{Formatted(category)}:".PadRight(tempPanelDefinition.nameLength), false, 0.75f, true, true);
-                            if (tempPanelDefinition.showProgressBar)
-                                tempPanelDefinition.AddPanelDetails(GenerateProgressBarDetails((float)capacity));
-                            tempPanelDefinition.AddPanelDetail($"{ShortNumber2(capacity * 100.0, tempPanelDefinition.suffixes, 0, 5)}%", false, 0.25f, false);
-                        }
-                    }
-                    yield return stateContinue;
-                }
-            }
-
-            bool CargoCapacity(ref double percentage, List<long> indexList)
-            {
-                selfContainedIdentifier = FunctionIdentifier.Measuring_Capacities;
-
-                if (!IsStateRunning)
-                {
-                    tempIndexList.Clear();
-                    tempIndexList.AddRange(indexList);
-                }
-
-                if (RunStateManager)
-                {
-                    percentage = tempCapacity;
+                    documentKey = "";
                     return true;
                 }
                 return false;
             }
 
-            public IEnumerator<FunctionState> CargoCapacityState()
+            string ColorToString(Color color)
             {
-                double max, current;
-                IMyInventory inventory;
-                yield return stateContinue;
+                return $"{color.R}:{color.G}:{color.B}:{color.A}";
+            }
 
-                while (true)
+            bool GetColor(ref Color color, string colorString)
+            {
+                try
                 {
-                    max = current = 0;
-
-                    foreach (long index in tempIndexList)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-
-                        if (!parent.IsBlockOk(index))
-                            continue;
-
-                        inventory = managedBlocks[index].Input;
-                        max += (double)inventory.MaxVolume;
-                        current += (double)inventory.CurrentVolume;
-                    }
-                    tempCapacity = current / max;
-
-                    yield return stateContinue;
-                }
-            }
-
-            bool ItemPanel()
-            {
-                selfContainedIdentifier = FunctionIdentifier.Item_Panel;
-
-                return RunStateManager;
-            }
-
-            public IEnumerator<FunctionState> ItemPanelState()
-            {
-                List<ItemDefinition> allItemList = NewItemDefinitionList, foundItemList = NewItemDefinitionList;
-                bool allCategories;
-                yield return stateContinue;
-
-                while (true)
-                {
-                    allItemList.Clear();
-                    foundItemList.Clear();
-                    allCategories = tempPanelDefinition.itemCategories.Contains("all") ||
-                                    tempPanelDefinition.itemCategories.Contains("*");
-                    allItemList.AddRange(parent.GetAllItems);
-                    bool found;
-                    foreach (ItemDefinition item in allItemList)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        found = allCategories || tempPanelDefinition.itemCategories.Contains(item.category);
-                        if (!found) tempPanelDefinition.items.ItemCount(out found, item.typeID, item.subtypeID, null);
-                        if (found && item.display && item.amount >= tempPanelDefinition.minimumItemAmount && item.amount <= tempPanelDefinition.maximumItemAmount &&
-                            (!tempPanelDefinition.belowQuota || item.amount < item.currentQuota))
-                            foundItemList.Add(item);
-                    }
-                    switch (tempPanelDefinition.panelItemSorting)
-                    {
-                        case PanelItemSorting.Alphabetical:
-                            foundItemList = foundItemList.OrderBy(x => x.displayName).ToList();
-                            break;
-                        case PanelItemSorting.AscendingAmount:
-                            foundItemList = foundItemList.OrderBy(x => x.amount).ToList();
-                            break;
-                        case PanelItemSorting.DescendingAmount:
-                            foundItemList = foundItemList.OrderByDescending(x => x.amount).ToList();
-                            break;
-                        case PanelItemSorting.AscendingPercent:
-                            foundItemList = foundItemList.OrderBy(x => x.Percentage).ToList();
-                            break;
-                        case PanelItemSorting.DescendingPercent:
-                            foundItemList = foundItemList.OrderByDescending(x => x.Percentage).ToList();
-                            break;
-                    }
-                    foreach (ItemDefinition item in foundItemList)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        tempPanelDefinition.AddPanelItem(item.displayName.PadRight(tempPanelDefinition.nameLength), item.amount, item.currentQuota, item.queuedAssemblyAmount, item.queuedDisassemblyAmount, item.amountDifference);
-                    }
-                    yield return stateContinue;
-                }
-            }
-
-            bool OutputPanel()
-            {
-                selfContainedIdentifier = FunctionIdentifier.Output_Panel;
-
-                return RunStateManager;
-            }
-
-            public IEnumerator<FunctionState> OutputPanelState()
-            {
-                List<OutputObject> tempOutputList = new List<OutputObject>();
-                yield return stateContinue;
-
-                while (true)
-                {
-                    AddOutputItem(tempPanelDefinition, $"NDS Inventory Manager v{buildVersion}");
-                    AddOutputItem(tempPanelDefinition, $"{parent.currentMajorFunction}".Replace("_", " "));
-                    AddOutputItem(tempPanelDefinition, $"Runtime:    {parent.ShortMSTime(torchAverage)}");
-                    AddOutputItem(tempPanelDefinition, $"Blocks:     {ShortNumber2(managedBlocks.Count, tempPanelDefinition.suffixes)}");
-                    AddOutputItem(tempPanelDefinition, $"Storages:   {ShortNumber2(typedIndexes[setKeyIndexStorage].Count, tempPanelDefinition.suffixes)}");
-                    AddOutputItem(tempPanelDefinition, $"Assemblers: {ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, tempPanelDefinition.suffixes)}");
-                    AddOutputItem(tempPanelDefinition, $"H2/O2 Gens: {ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, tempPanelDefinition.suffixes)}");
-                    AddOutputItem(tempPanelDefinition, $"Refineries: {ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, tempPanelDefinition.suffixes)}");
-                    AddOutputItem(tempPanelDefinition, $"H/O Tanks:  {ShortNumber2(typedIndexes[setKeyIndexHydrogenTank].Count, tempPanelDefinition.suffixes)}/{ShortNumber2(typedIndexes[setKeyIndexOxygenTank].Count, tempPanelDefinition.suffixes)}");
-                    AddOutputItem(tempPanelDefinition, $"Weapons:    {ShortNumber2(typedIndexes[setKeyIndexGun].Count, tempPanelDefinition.suffixes)}");
-                    AddOutputItem(tempPanelDefinition, $"Reactors:   {ShortNumber2(typedIndexes[setKeyIndexReactor].Count, tempPanelDefinition.suffixes)}");
-
-                    tempOutputList.Clear();
-                    tempOutputList.AddRange(parent.errorFilter ? parent.outputErrorList : parent.outputList);
-
-                    AddOutputItem(tempPanelDefinition, parent.errorFilter ? $"Errors:     {ShortNumber2(parent.currentErrorCount, tempPanelDefinition.suffixes, 0, 6)} of {ShortNumber2(parent.totalErrorCount, tempPanelDefinition.suffixes, 0, 6)}" : $"Status:  {ShortNumber2(parent.scriptHealth, null, 3, 6)}%");
-
-                    foreach (OutputObject outputObject in tempOutputList)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        tempPanelDefinition.AddPanelDetail(outputObject.Output, true);
-                    }
-
-                    yield return stateContinue;
-                }
-            }
-
-            bool StatusPanel()
-            {
-                selfContainedIdentifier = FunctionIdentifier.Status_Panel;
-
-                return RunStateManager;
-            }
-
-            public IEnumerator<FunctionState> StatusPanelState()
-            {
-                int assembling, disassembling, idle, disabled;
-                List<long> tempIndices = new List<long>();
-                yield return stateContinue;
-
-                while (true)
-                {
-                    assembling = disassembling = idle = disabled = 0;
-                    assemblyList.Clear();
-                    disassemblyList.Clear();
-                    tempIndices.AddRange(typedIndexes[setKeyIndexAssemblers]);
-                    foreach (long index in tempIndices)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
-                    }
-                    tempIndices.Clear();
-                    foreach (KeyValuePair<string, int> kvp in assemblyList)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        tempPanelDefinition.AddPanelDetail($"Assembling x{ShortNumber2(kvp.Value, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4, false)} {ShortenName(kvp.Key, tempPanelDefinition.nameLength, true)}", true);
-                    }
-                    foreach (KeyValuePair<string, int> kvp in disassemblyList)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        tempPanelDefinition.AddPanelDetail($"Disassembling x{ShortNumber2(kvp.Value, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4, false)} {ShortenName(kvp.Key, tempPanelDefinition.nameLength, true)}", true);
-                    }
-                    AddOutputItem(tempPanelDefinition, BlockStatusTitle($"Assemblers x{ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4, false)}", disabled).PadRight(tempPanelDefinition.nameLength));
-                    AddOutputItem(tempPanelDefinition, $" Assembling:    {ShortNumber2(assembling, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
-                    AddOutputItem(tempPanelDefinition, $" Disassembling: {ShortNumber2(disassembling, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
-                    AddOutputItem(tempPanelDefinition, $" Idle:          {ShortNumber2(idle, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
-                    assembling = idle = disabled = 0;
-                    assemblyList.Clear();
-                    tempIndices.AddRange(typedIndexes[setKeyIndexRefinery]);
-                    foreach (long index in tempIndices)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
-                    }
-                    tempIndices.Clear();
-                    foreach (KeyValuePair<string, int> kvp in assemblyList)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        tempPanelDefinition.AddPanelDetail($"Refining x{ShortNumber2(kvp.Value, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4, false)} {ShortenName(kvp.Key, tempPanelDefinition.nameLength, true)}", true);
-                    }
-                    AddOutputItem(tempPanelDefinition, BlockStatusTitle($"Refineries x{ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4, false)}", disabled).PadRight(tempPanelDefinition.nameLength));
-                    AddOutputItem(tempPanelDefinition, $" Refining:      {ShortNumber2(assembling, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
-                    AddOutputItem(tempPanelDefinition, $" Idle:          {ShortNumber2(idle, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
-                    assembling = idle = disabled = 0;
-                    assemblyList.Clear();
-                    tempIndices.AddRange(typedIndexes[setKeyIndexGasGenerators]);
-                    foreach (long index in tempIndices)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
-                    }
-                    tempIndices.Clear();
-                    AddOutputItem(tempPanelDefinition, BlockStatusTitle($"O2/H2 Gens x{ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4, false)}", disabled).PadRight(tempPanelDefinition.nameLength));
-                    AddOutputItem(tempPanelDefinition, $" Active:        {ShortNumber2(assembling, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
-                    AddOutputItem(tempPanelDefinition, $" Idle:          {ShortNumber2(idle, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4)}".PadRight(tempPanelDefinition.nameLength));
-                    foreach (KeyValuePair<string, int> kvp in assemblyList)
-                    {
-                        if (PauseTickRun) yield return stateActive;
-                        tempPanelDefinition.AddPanelDetail($"Processing x{ShortNumber2(kvp.Value, tempPanelDefinition.suffixes, tempPanelDefinition.decimals, 4, false)} {ShortenName(kvp.Key, tempPanelDefinition.nameLength, true)}", true);
-                    }
-
-                    yield return stateContinue;
-                }
-            }
-
-
-            #endregion
-
-            public class PregeneratedPanels
-            {
-                public DateTime nextUpdateTime = Now.AddSeconds(1);
-
-                public List<PanelObject> panelObjects = NewPanelObjectList, spannableObjects = NewPanelObjectList;
-            }
-
-            public class PanelDetail
-            {
-                public string itemName, text, textureType;
-                public double itemAmount, itemQuota, value, assemblyAmount, disassemblyAmount, amountDifference;
-                public TextAlignment alignment;
-                public float ratio;
-                public bool reservedArea;
-                public Color textureColor;
-
-                public PanelDetail()
-                {
-                    itemName = text = textureType = "";
-                    itemAmount = itemQuota = value = assemblyAmount = disassemblyAmount = amountDifference = 0;
-                    alignment = leftAlignment;
-                    ratio = -1;
-                    reservedArea = false;
-                    textureColor = Color.White;
-                }
-
-                public PanelDetail Clone()
-                {
-                    PanelDetail panelDetail = new PanelDetail()
-                    {
-                        itemName = itemName,
-                        text = text,
-                        textureType = textureType,
-                        itemAmount = itemAmount,
-                        itemQuota = itemQuota,
-                        value = value,
-                        assemblyAmount = assemblyAmount,
-                        disassemblyAmount = disassemblyAmount,
-                        amountDifference = amountDifference,
-                        alignment = alignment,
-                        ratio = ratio,
-                        reservedArea = reservedArea,
-                        textureColor = new Color(textureColor, textureColor.A)
-                    };
-
-                    return panelDetail;
-                }
-            }
-
-            public class PanelObject
-            {
-                public double sortableValue = 0;
-                public string backdropType = "SquareSimple", sortableText = "";
-                public bool item = false;
-                public List<PanelDetail> panelDetails = new List<PanelDetail>();
-
-                public PanelObject Clone()
-                {
-                    PanelObject panelObject = new PanelObject
-                    {
-                        sortableValue = sortableValue,
-                        backdropType = backdropType,
-                        sortableText = sortableText,
-                        item = item
-                    };
-
-                    foreach (PanelDetail panelDetail in panelDetails)
-                        panelObject.panelDetails.Add(panelDetail.Clone());
-
-                    return panelObject;
-                }
-            }
-
-            public class PanelDefinition
-            {
-                public BlockDefinition parent;
-
-                public List<MySprite> spriteList = new List<MySprite>();
-
-                public List<PanelObject>
-                    panelObjects = NewPanelObjectList,
-                    spannableObjects = NewPanelObjectList;
-
-                public List<string> itemCategories = NewStringList, suffixes;
-
-                public List<SpanKey> spannedPanelList = new List<SpanKey>();
-
-                public int decimals = 2, rows = -1, columns = 1, nameLength = 18, surfaceIndex = 0;
-
-                public double updateDelay = 1, minimumItemAmount = 0, maximumItemAmount = double.MaxValue;
-
-                public bool span = false, cornerPanel = false, belowQuota = false, showProgressBar = true, provider = false;
-
-                public PanelItemSorting panelItemSorting = PanelItemSorting.Alphabetical;
-
-                public PanelType panelType = PanelType.None;
-
-                public DisplayType displayType = DisplayType.Standard;
-
-                public DateTime nextUpdateTime = Now;
-
-                public ItemCollection items = NewCollection;
-
-                public Color textColor = Color.Black, numberColor = Color.Black, backdropColor = Color.GhostWhite;
-
-                public Vector2 size = new Vector2(1, 1), positionOffset = new Vector2(0, 0);
-
-                public string font = "Monospace", settingKey = "", spanKey = "", childSpanKey = "", settingBackup = "", itemSearchString = "";
-
-                public IMyTextSurface Surface => provider ? ((IMyTextSurfaceProvider)parent.block).GetSurface(surfaceIndex) : (IMyTextPanel)parent.block;
-
-                public void AddPanelDetails(List<PanelDetail> list)
-                {
-                    panelObjects[panelObjects.Count - 1].panelDetails.AddRange(list);
-                }
-
-                void AddPanelObject(bool spannable = false, bool item = false)
-                {
-                    if (spannable)
-                        spannableObjects.Add(new PanelObject { item = item });
+                    string[] colorArray = colorString.Split(':');
+                    if (colorArray.Length == 4)
+                        color = new Color(int.Parse(colorArray[0]), int.Parse(colorArray[1]), int.Parse(colorArray[2]), int.Parse(colorArray[3]));
+                    else if (colorArray.Length == 3)
+                        color = new Color(int.Parse(colorArray[0]), int.Parse(colorArray[1]), int.Parse(colorArray[2]));
                     else
-                        panelObjects.Add(new PanelObject());
+                        return false;
+                    return true;
                 }
+                catch { }
+                return false;
+            }
 
-                public void AddPanelItem(string name, double amount, double quota, double assemblyAmount, double disassemblyAmount, double amountDifference)
-                {
-                    AddPanelObject(true, true);
-                    spannableObjects[spannableObjects.Count - 1].sortableText = name.Trim();
-                    if (panelItemSorting == PanelItemSorting.AscendingPercent || panelItemSorting == PanelItemSorting.DescendingPercent)
-                        spannableObjects[spannableObjects.Count - 1].sortableValue = quota > 0 ? amount / quota : 0;
-                    spannableObjects[spannableObjects.Count - 1].panelDetails.Add(new PanelDetail { itemAmount = amount, itemName = name, itemQuota = quota, assemblyAmount = assemblyAmount, disassemblyAmount = disassemblyAmount, amountDifference = amountDifference });
-                }
+            public override string ToString()
+            {
+                StringBuilder builder = NewBuilder;
+                BuilderAppendLine(builder, $"Type={(Type == PanelType.None ? String.Join("/", GetEnumList<PanelType>()) : $"{Type}")}");
+                AppendOption(builder, $"Font={Font}", Font == "Monospace");
+                AppendOption(builder, $"Categories={(Categories.Count > 0 ? String.Join("|", Categories.Select(c => Formatted(c))) : itemCategoryString)}", Categories.Count == 0);
+                if (!AppendSearchString(builder, ItemSearchString, "Items"))
+                    AppendOption(builder, "Items=ingot:Iron:Cobalt|ore:Iron");
+                AppendOption(builder, $"Item Display={(DisplayType == DisplayType.Standard ? String.Join("/", GetEnumList<DisplayType>()) : $"{DisplayType}")}", DisplayType == DisplayType.Standard);
+                AppendOption(builder, $"Sorting={(SortType == PanelItemSorting.Alphabetical ? String.Join("/", GetEnumList<PanelItemSorting>()) : $"{SortType}")}", SortType == PanelItemSorting.Alphabetical);
+                AppendOption(builder, $"Options={(Options.Count == 0 ? String.Join("|", GetEnumList<PanelOptions>()) : String.Join("|", Options))}", Options.Count == 0);
+                AppendOption(builder, $"Minimum Value={MinimumItemValue}", MinimumItemValue <= 0);
+                AppendOption(builder, $"Maximum Value={MaximumItemValue}", MaximumItemValue <= 0);
+                BuilderAppendLine(builder, $"Number Suffixes={String.Join("|", Suffixes)}");
+                BuilderAppendLine(builder, $"Text Color={ColorToString(TextColor)}");
+                BuilderAppendLine(builder, $"Number Color={ColorToString(NumberColor)}");
+                BuilderAppendLine(builder, $"Back Color={ColorToString(BackColor)}");
+                AppendOption(builder, $"Rows={Rows}", Rows < 0);
+                AppendOption(builder, $"Name Length={NameLength}", NameLength != 18);
+                AppendOption(builder, $"Decimals={Decimals}", Decimals != 2);
+                BuilderAppendLine(builder, $"Update Delay={UpdateDelay}");
+                AppendOption(builder, $"Offset Multiplier={OffsetMultiplier}");
+                AppendOption(builder, $"Text Multiplier={TextMultiplier}");
+                AppendOption(builder, $"Span ID={SpanID}", !TextHasLength(SpanID));
+                AppendOption(builder, $"Span Child ID={SpanChildID}", !TextHasLength(SpanChildID));
 
-                public void AddPanelDetail(string text, bool spannable = false, float ratio = 1f, bool nextObject = true, bool reservedArea = false, TextAlignment alignment = leftAlignment)
-                {
-                    if (nextObject)
-                        AddPanelObject(spannable);
-                    if (spannable)
-                        spannableObjects[spannableObjects.Count - 1].panelDetails.Add(new PanelDetail { text = text, ratio = ratio, reservedArea = reservedArea, alignment = alignment });
-                    else
-                        panelObjects[panelObjects.Count - 1].panelDetails.Add(new PanelDetail { text = text, ratio = ratio, reservedArea = reservedArea, alignment = alignment });
-                }
-
-                public string DataSource
-                {
-                    get
-                    {
-                        if (provider)
-                        {
-                            IMyTextSurface surface = Surface;
-                            StringBuilder builder = NewBuilder;
-                            surface.ReadText(builder);
-                            return builder.ToString();
-                        }
-                        return parent.DataSource;
-                    }
-                    set
-                    {
-                        if (provider)
-                        {
-                            IMyTextSurface surface = Surface;
-                            StringBuilder builder = new StringBuilder(value);
-                            surface.WriteText(builder);
-                        }
-                        else
-                            parent.DataSource = value;
-                    }
-                }
-
-                public string EntityFlickerID => $"{parent.block.EntityId}{(provider ? $":{surfaceIndex}" : "")}";
+                return builder.ToString().Trim();
             }
         }
+
     }
 }
