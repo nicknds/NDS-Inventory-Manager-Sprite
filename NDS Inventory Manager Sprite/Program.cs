@@ -316,7 +316,7 @@ namespace IngameScript
         {
             #region mdk preserve
             BelowQuota,
-            HideProgressBar
+            HasActivity
             #endregion
         }
 
@@ -531,7 +531,7 @@ namespace IngameScript
             toolKeyword, globalFilterKeyword,
             panelTag, optionBlockFilter, itemCategoryString;
 
-        static double settingVersion = 5.29, buildVersion = 280, torchAverage = 0, tickWeight = 0.005;
+        static double settingVersion = 5.29, buildVersion = 283, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
@@ -543,7 +543,7 @@ namespace IngameScript
             allowEcho = true,
             prioritySystemActivated = false, errorFilter = false, useDynamicQuota, increaseDynamicQuotaWhenLow, update = false,
             tempOrderByPriority, tempDistributeBlueprintCount,
-            tempInsertBlueprintCount;
+            tempInsertBlueprintCount, scanning = false;
 
         FunctionIdentifier selfContainedIdentifier, currentFunction = FunctionIdentifier.Idle, currentMajorFunction = FunctionIdentifier.Idle;
 
@@ -985,7 +985,7 @@ namespace IngameScript
                     typedIndexes[setKeyIndexAssemblers].ForEach(index =>
                     {
                         if (!IsBlockBad(index))
-                            ((IMyAssembler)managedBlocks[index].block).ClearQueue();
+                            ((IMyAssembler)managedBlocks[index].Block).ClearQueue();
                     });
                     SetLastString("Assembler queues cleared");
                     break;
@@ -1141,12 +1141,12 @@ namespace IngameScript
                 blocks = tempSearchString.Split('|');
 
                 // Populate item list
-                itemList.Clear();
-                itemList.AddRange(GetAllItems);
+                PopulateItemList(itemList);
 
                 // Iterate over sections
                 foreach (string block in blocks)
                 {
+                    if (!TextHasLength(block)) continue;
                     if (PauseTickRun) yield return stateActive;
                     // Reset section data
                     category = "";
@@ -1479,7 +1479,7 @@ namespace IngameScript
                 if (destinationInventory != tempTransferOriginInventory)
                 {
                     bool isLimited = alternateBlockDefinition.Settings.limits.ContainsKey($"{tempTransferInventoryItem.Type}"), stopFunc = false;
-                    double itemLimit = isLimited ? alternateBlockDefinition.Settings.limits.ItemCount(tempTransferInventoryItem, alternateBlockDefinition.block) : 0, contained = 0, volumeLimit = GetCurrentVolumeLimit(tempTransferInventoryItem, alternateBlockDefinition.block), currentTransferAmount = tempTransferAmount;
+                    double itemLimit = isLimited ? alternateBlockDefinition.Settings.limits.ItemCount(tempTransferInventoryItem, alternateBlockDefinition.Block) : 0, contained = 0, volumeLimit = GetCurrentVolumeLimit(tempTransferInventoryItem, alternateBlockDefinition.Block), currentTransferAmount = tempTransferAmount;
 
                     if (isLimited)
                     {
@@ -1507,7 +1507,7 @@ namespace IngameScript
                         if (currentTransferAmount > 0.0 && destinationInventory.TransferItemFrom(tempTransferOriginInventory, tempTransferInventoryItem, (MyFixedPoint)currentTransferAmount))
                         {
                             if (currentTransferAmount >= 0.01)
-                                Output($"Moved {ShortNumber2(currentTransferAmount),-6} {ShortenName(ItemName(tempTransferInventoryItem), 12),-12} to {ShortenName(alternateBlockDefinition.block.CustomName, 12),-12}");
+                                Output($"Moved {ShortNumber2(currentTransferAmount),-6} {ShortenName(ItemName(tempTransferInventoryItem), 12),-12} to {ShortenName(alternateBlockDefinition.Block.CustomName, 12),-12}");
 
                             transferredAmount = currentTransferAmount;
                         }
@@ -1597,7 +1597,7 @@ namespace IngameScript
 
 
                     blueprintListMain.Clear();
-                    ((IMyAssembler)managedBlocks[index].block).GetQueue(blueprintListMain);
+                    ((IMyAssembler)managedBlocks[index].Block).GetQueue(blueprintListMain);
                     for (int y = 0; y < blueprintListMain.Count; y++)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -1612,7 +1612,7 @@ namespace IngameScript
                     if (IsBlockBad(index)) continue;
 
 
-                    for (int inv = 0; inv < managedBlocks[index].block.InventoryCount; inv++)
+                    for (int inv = 0; inv < managedBlocks[index].Block.InventoryCount; inv++)
                     {
                         mainFunctionItemList.Clear();
                         managedBlocks[index].Input.GetItems(mainFunctionItemList);
@@ -1622,7 +1622,7 @@ namespace IngameScript
 
                             if (UnknownItem(mainFunctionItemList[y]))
                             {
-                                Output($"Unknown Item: {ShortenName(mainFunctionItemList[y].Type.SubtypeId, 14)}, found in: {ShortenName(managedBlocks[index].block.CustomName, 14)}");
+                                Output($"Unknown Item: {ShortenName(mainFunctionItemList[y].Type.SubtypeId, 14)}, found in: {ShortenName(managedBlocks[index].Block.CustomName, 14)}");
                                 AddModItem(mainFunctionItemList[y]);
                             }
                         }
@@ -1651,7 +1651,7 @@ namespace IngameScript
                         continue;
 
                     monitoredAssembler = managedBlocks[index].monitoredAssembler;
-                    assembler = (IMyAssembler)managedBlocks[index].block;
+                    assembler = (IMyAssembler)managedBlocks[index].Block;
 
                     if (!monitoredAssembler.CheckNow) continue;
 
@@ -1739,77 +1739,98 @@ namespace IngameScript
 
         IEnumerator<FunctionState> ProcessTimerState()
         {
-            string customData, typeID, subtypeID, comparison, substring;
+            string customData, itemAType, itemASubtype, itemBType, itemBSubtype, comparison, substring,
+                   itemAData, itemBData;
             string[] logicSetArray;
-            int tempIndex, collectionCount, comparisonCollectionCount;
+            int tempIndex, mathIndex;
             yield return stateContinue;
 
             while (true)
             {
                 customData = RemoveSpaces(tempProcessLogicData);
                 comparison = ">";
-                typeID = subtypeID = substring = "";
+                itemAType = itemASubtype = itemBType = itemBSubtype = itemAData = itemBData = "";
 
                 if (PauseTickRun) yield return stateActive;
 
                 logicSetArray = customData.Split('|');
 
-                if (logicSetArray.Length > 0)
-                    for (int x = 0; x < logicSetArray.Length; x++)
+                for (int x = 0; x < logicSetArray.Length; x++)
+                {
+                    if (PauseTickRun) yield return stateActive;
+
+                    try
                     {
-                        if (PauseTickRun) yield return stateActive;
+                        //(Type):(Subtype)[Math](Comparison)[(Type):(Subtype)][Math]
+                        //Get line
+                        substring = logicSetArray[x];
 
-                        try
+                        //Comparison
+                        comparison =
+                            substring.Contains(">=") ? ">=" :
+                            substring.Contains("<=") ? "<=" :
+                            substring.Contains("<") ? "<" :
+                            substring.Contains("=") ? "=" : ">";
+
+                        //Type
+                        tempIndex = substring.IndexOf(':');
+                        itemAType = substring.Substring(0, tempIndex);
+                        //Splice
+                        substring = substring.Substring(tempIndex + 1);
+
+                        //Subtype
+                        mathIndex = NextMathIndex(substring);
+                        tempIndex = substring.IndexOf(comparison);
+                        itemASubtype = substring.Substring(0, Math.Min(mathIndex, tempIndex));
+                        //Math?
+                        if (mathIndex < tempIndex)
                         {
-                            substring = logicSetArray[x];
-                            tempIndex = substring.IndexOf(":");
-                            typeID = substring.Substring(0, tempIndex);
-                            substring = substring.Substring(tempIndex + 1);
-
-                            comparison =
-                                substring.Contains(">=") ? ">=" :
-                                substring.Contains("<=") ? "<=" :
-                                substring.Contains("<") ? "<" :
-                                substring.Contains("=") ? "=" : ">";
-
-                            tempIndex = substring.IndexOf(comparison);
-                            subtypeID = substring.Substring(0, tempIndex);
-                            substring = substring.Substring(tempIndex + comparison.Length);
+                            substring = substring.Substring(mathIndex);
+                            tempIndex -= mathIndex;
+                            itemAData = substring.Substring(0, tempIndex);
                         }
-                        catch { }
-                        itemCollectionMain.Clear();
-                        while (!MatchItems2($"{typeID}:{subtypeID}", itemCollectionMain))
-                            yield return stateActive;
+                        //Splice
+                        substring = substring.Substring(tempIndex + comparison.Length);
 
-                        collectionCount = itemCollectionMain.Count;
-                        tempIndex = substring.IndexOf(":");
+                        //Type
+                        tempIndex = substring.IndexOf(':');
                         if (tempIndex > 0)
                         {
-                            itemCollectionAlternate.Clear();
-
-                            typeID = substring.Substring(0, tempIndex);
-                            subtypeID = substring.Substring(tempIndex + 1);
-
-                            while (!MatchItems2($"{typeID}:{subtypeID}", itemCollectionAlternate))
-                                yield return stateActive;
-
-                            comparisonCollectionCount = itemCollectionAlternate.Count;
-                            for (int i = 0; i < collectionCount; i++)
-                                for (int y = 0; y < comparisonCollectionCount; y++)
-                                {
-                                    if (PauseTickRun) yield return stateActive;
-
-                                    tempLogicComparisons.Add(new LogicComparison { typeID = itemCollectionMain[i].ItemReference.DisplayID, compareAgainst = itemCollectionAlternate[y].ItemReference.DisplayID, comparison = comparison });
-                                }
-                        }
-                        else
-                            for (int i = 0; i < collectionCount; i++)
+                            itemBType = substring.Substring(0, tempIndex);
+                            substring = substring.Substring(tempIndex + 1);
+                            mathIndex = NextMathIndex(substring);
+                            if (mathIndex < substring.Length)
                             {
-                                if (PauseTickRun) yield return stateActive;
-
-                                tempLogicComparisons.Add(new LogicComparison { typeID = itemCollectionMain[i].ItemReference.DisplayID, compareAgainst = substring, comparison = comparison });
+                                itemBSubtype = substring.Substring(0, mathIndex);
+                                substring = substring.Substring(mathIndex);
                             }
+                            else
+                            {
+                                itemBSubtype = substring;
+                                substring = "";
+                            }
+                        }
+                        itemBData = substring;
                     }
+                    catch { }
+                    itemCollectionMain.Clear();
+                    itemCollectionAlternate.Clear();
+                    while (!MatchItems2($"{itemAType}:{itemASubtype}", itemCollectionMain)) yield return stateActive;
+                    if (TextHasLength(itemBType) && TextHasLength(itemBSubtype))
+                        while (!MatchItems2($"{itemBType}:{itemBSubtype}", itemCollectionAlternate)) yield return stateActive;
+
+                    foreach (ItemEntry itemA in itemCollectionMain.ItemList.Values)
+                    {
+                        if (PauseTickRun) yield return stateActive;
+                        foreach (ItemEntry itemB in itemCollectionAlternate.ItemList.Values)
+                        {
+                            if (PauseTickRun) yield return stateActive;
+                            tempLogicComparisons.Add(new LogicComparison(itemA.ItemReference, itemAData, comparison, itemB.ItemReference, itemBData));
+                        }
+                        if (itemCollectionAlternate.Count == 0)
+                            tempLogicComparisons.Add(new LogicComparison(itemA.ItemReference, itemAData, comparison, null, itemBData));
+                    }
+                }
 
                 yield return stateContinue;
             }
@@ -1837,7 +1858,7 @@ namespace IngameScript
                     itemCollectionMain.Clear();
                     itemCollectionAlternate.Clear();
                     itemCollectionAlternate.AddCollection(mainBlockDefinition.Settings.loadout);
-                    itemCollectionAlternate.ConvertPercentages(mainBlockDefinition.block);
+                    itemCollectionAlternate.ConvertPercentages(mainBlockDefinition.Block);
                     while (!CountItemsInList(itemCollectionMain, new List<long> { index }))
                         yield return stateActive;
 
@@ -2007,38 +2028,90 @@ namespace IngameScript
 
         IEnumerator<FunctionState> LogicState()
         {
-            ItemDefinition definition;
+            List<string> mathGroups = NewStringList;
+            string itemAData, itemBData;
+            double valueA, valueB;
+            ItemDefinition itemA, itemB;
+            bool andComparison, pass;
             yield return stateContinue;
 
             while (true)
             {
-                bool andComparison, pass = true;
                 foreach (long index in typedIndexes[setKeyIndexLogic])
                 {
                     if (PauseTickRun) yield return stateActive;
 
+                    if (IsBlockBad(index)) continue;
+
+
                     alternateBlockDefinition = managedBlocks[index];
-                    if (!(alternateBlockDefinition.block is IMyTimerBlock) || ((IMyFunctionalBlock)alternateBlockDefinition.block).Enabled)
+                    pass = false;
+                    if (((alternateBlockDefinition.Block is IMyTimerBlock) && ((IMyTimerBlock)alternateBlockDefinition.Block).Enabled) ||
+                        (alternateBlockDefinition.Block is IMyFunctionalBlock))
                     {
                         andComparison = alternateBlockDefinition.Settings.andComparison;
                         for (int x = 0; x < alternateBlockDefinition.Settings.logicComparisons.Count; x++)
                         {
-                            if (PauseTickRun)
-                                yield return stateActive;
+                            if (PauseTickRun) yield return stateActive;
 
-                            if (GetDefinition(out definition, alternateBlockDefinition.Settings.logicComparisons[x].typeID))
-                                pass = LogicPass(definition, alternateBlockDefinition.Settings.logicComparisons[x].comparison, alternateBlockDefinition.Settings.logicComparisons[x].compareAgainst);
+                            itemAData = alternateBlockDefinition.Settings.logicComparisons[x].ItemAData;
+                            itemBData = alternateBlockDefinition.Settings.logicComparisons[x].ItemBData;
+                            itemA = alternateBlockDefinition.Settings.logicComparisons[x].ItemA;
+                            itemB = alternateBlockDefinition.Settings.logicComparisons[x].ItemB;
 
-                            if ((!pass && andComparison) || (pass && !andComparison))
-                                break;
+                            if (TextHasLength(itemAData))
+                                SplitMathGroups(itemAData, mathGroups);
+                            else mathGroups.Clear();
+                            if (itemA != null)
+                                valueA = itemA.amount;
+                            else if (mathGroups.Count == 0 || !double.TryParse(mathGroups[0], out valueA))
+                                continue;
+                            valueA = ApplyMathGroups(valueA, mathGroups, itemA == null ? 1 : 0);
+
+                            if (TextHasLength(itemBData))
+                                SplitMathGroups(itemBData, mathGroups);
+                            else mathGroups.Clear();
+                            if (itemB != null)
+                                valueB = itemB.amount;
+                            else if (mathGroups.Count == 0 || !double.TryParse(mathGroups[0], out valueB))
+                            {
+                                if (StringsMatch(mathGroups[0], "quota") && itemA != null)
+                                    valueB = itemA.currentQuota;
+                                else continue;
+                            }
+                            valueB = ApplyMathGroups(valueB, mathGroups, itemB == null ? 1 : 0);
+
+                            switch (alternateBlockDefinition.Settings.logicComparisons[x].Comparison)
+                            {
+                                case ">":
+                                    pass = valueA > valueB;
+                                    break;
+                                case "<":
+                                    pass = valueA < valueB;
+                                    break;
+                                case ">=":
+                                    pass = valueA >= valueB;
+                                    break;
+                                case "<=":
+                                    pass = valueA <= valueB;
+                                    break;
+                                case "=":
+                                    pass = valueA == valueB;
+                                    break;
+                                default:
+                                    continue;
+                            }
+
+                            if (pass != andComparison) break;
                         }
-                        if (alternateBlockDefinition.block is IMyTimerBlock)
+
+                        if (alternateBlockDefinition.Block is IMyTimerBlock)
                         {
                             if (pass)
-                                ((IMyTimerBlock)alternateBlockDefinition.block).Trigger();
+                                ((IMyTimerBlock)alternateBlockDefinition.Block).Trigger();
                         }
                         else
-                            ((IMyFunctionalBlock)alternateBlockDefinition.block).Enabled = pass;
+                            ((IMyFunctionalBlock)alternateBlockDefinition.Block).Enabled = pass;
                     }
                 }
 
@@ -2749,7 +2822,7 @@ namespace IngameScript
 
                         if (UsableAssembler(managedBlocks[index], blueprintID, tempDistributeBlueprintMode))
                         {
-                            block = managedBlocks[index].block;
+                            block = managedBlocks[index].Block;
                             blocksubtype = BlockSubtype(block);
                             if (!potentialAssemblerList.ContainsKey(blocksubtype))
                                 potentialAssemblerList[blocksubtype] = new List<PotentialAssembler>();
@@ -2834,7 +2907,7 @@ namespace IngameScript
             while (true)
             {
                 currentAmount = Math.Floor(tempInsertBlueprintAmount);
-                assembler = (IMyAssembler)tempInsertBlueprintBlockDefinition.block;
+                assembler = (IMyAssembler)tempInsertBlueprintBlockDefinition.Block;
                 assembler.Mode = tempInsertBlueprintMode;
                 if (assembler.Mode != tempInsertBlueprintMode)
                     assembler.Mode = tempInsertBlueprintMode;
@@ -2945,7 +3018,7 @@ namespace IngameScript
                     if (PauseTickRun) yield return stateActive;
                     if (IsBlockBad(index)) continue;
 
-                    assembler = (IMyAssembler)managedBlocks[index].block;
+                    assembler = (IMyAssembler)managedBlocks[index].Block;
 
                     if (assembler.Mode == tempRemoveBlueprintMode && !assembler.IsQueueEmpty)
                     {
@@ -3062,7 +3135,7 @@ namespace IngameScript
                         {
                             if (PauseTickRun) yield return stateActive;
 
-                            if (mainBlockDefinition.Settings.loadout.ItemCount(mainFunctionItemList[x], mainBlockDefinition.block) > 0)
+                            if (mainBlockDefinition.Settings.loadout.ItemCount(mainFunctionItemList[x], mainBlockDefinition.Block) > 0)
                                 mainFunctionItemList.RemoveAtFast(x);
                             else
                                 x++;
@@ -3095,7 +3168,7 @@ namespace IngameScript
                     if (IsBlockBad(index) || managedBlock.Settings.GetOption(BlockOptions.NoSorting))
                         continue;
 
-                    assembler = (IMyAssembler)managedBlock.block;
+                    assembler = (IMyAssembler)managedBlock.Block;
                     if (!assembler.IsQueueEmpty && assembler.Enabled && assembler.Mode == assemblyMode)
                     {
                         blueprintListMain.Clear();
@@ -3174,7 +3247,7 @@ namespace IngameScript
 
                     if (IsBlockBad(originIndex)) continue;
 
-                    currentAssembler = (IMyAssembler)managedBlocks[originIndex].block;
+                    currentAssembler = (IMyAssembler)managedBlocks[originIndex].Block;
 
                     if (currentAssembler.IsQueueEmpty) continue;
 
@@ -3206,7 +3279,7 @@ namespace IngameScript
 
                     if (IsBlockBad(originIndex)) continue;
 
-                    currentAssembler = (IMyAssembler)managedBlocks[originIndex].block;
+                    currentAssembler = (IMyAssembler)managedBlocks[originIndex].Block;
                     currentEntityID = currentAssembler.EntityId;
 
                     foreach (KeyValuePair<MyAssemblerMode, SortedList<string, BlueprintSpreadInformation>> modePair in blueprintInformation)
@@ -3226,7 +3299,7 @@ namespace IngameScript
 
                     if (IsBlockBad(index)) continue;
 
-                    currentAssembler = (IMyAssembler)managedBlocks[index].block;
+                    currentAssembler = (IMyAssembler)managedBlocks[index].Block;
 
                     if (currentAssembler.IsQueueEmpty) continue;
 
@@ -3622,7 +3695,7 @@ namespace IngameScript
                         {
                             maxAmount = DefaultMax(tempDistributeItem, managedBlocks[kvp.Key]);
                             foundLimit = managedBlocks[kvp.Key].Settings.limits.ContainsKey(tempDistributeItem.Type);
-                            itemLimit = foundLimit ? managedBlocks[kvp.Key].Settings.limits.ItemCount(tempDistributeItem, managedBlocks[kvp.Key].block) : 0;
+                            itemLimit = foundLimit ? managedBlocks[kvp.Key].Settings.limits.ItemCount(tempDistributeItem, managedBlocks[kvp.Key].Block) : 0;
                             if (foundLimit) maxAmount = itemLimit;
 
                             foundLimit = maxAmount < double.MaxValue;
@@ -3764,7 +3837,7 @@ namespace IngameScript
                     if (IsBlockBad(index)) continue;
 
                     mainBlockDefinition = managedBlocks[index];
-                    block = mainBlockDefinition.block;
+                    block = mainBlockDefinition.Block;
 
                     if (mainBlockDefinition.Settings.GetOption(BlockOptions.RemoveInput) || (!mainBlockDefinition.Settings.manual && Sortable(mainBlockDefinition, 0)))
                     {
@@ -3834,7 +3907,7 @@ namespace IngameScript
             while (true)
             {
                 storageDefinitionA = managedBlocks[tempStorageBlockIndex];
-                origBlock = storageDefinitionA.block;
+                origBlock = storageDefinitionA.Block;
 
                 foreach (MyInventoryItem item in tempStorageItemList)
                 {
@@ -3876,8 +3949,8 @@ namespace IngameScript
 
                             if (IsBlockBad(storageIndex) || CurrentVolumePercentage(storageIndex) >= 0.99 || !AcceptsItem(managedBlocks[storageIndex], item)) continue;
 
-                            destBlock = managedBlocks[storageIndex].block;
-                            if (storageDefinitionA.block != destBlock)
+                            destBlock = managedBlocks[storageIndex].Block;
+                            if (storageDefinitionA.Block != destBlock)
                             {
                                 while (!Transfer(ref transferAmount, originInventory, managedBlocks[storageIndex], item))
                                     yield return stateActive;
@@ -3896,7 +3969,7 @@ namespace IngameScript
         IEnumerator<FunctionState> CountBlueprintState()
         {
             IMyAssembler assembler;
-            bool assembly, queueAssembly = GetKeyBool(setKeyToggleQueueAssembly);
+            bool assembly, queueAssembly;
             List<Blueprint> blueprints = new List<Blueprint>();
             List<ItemDefinition> itemList = NewItemDefinitionList;
             Blueprint blueprint;
@@ -3904,6 +3977,7 @@ namespace IngameScript
 
             while (true)
             {
+                queueAssembly = GetKeyBool(setKeyToggleQueueAssembly);
                 blueprints.Clear();
                 foreach (long index in typedIndexes[setKeyIndexAssemblers])
                 {
@@ -3912,13 +3986,13 @@ namespace IngameScript
                     if (IsBlockBad(index)) continue;
 
                     mainBlockDefinition = managedBlocks[index];
-                    assembler = (IMyAssembler)mainBlockDefinition.block;
+                    assembler = (IMyAssembler)mainBlockDefinition.Block;
                     blueprintListMain.Clear();
                     assembler.GetQueue(blueprintListMain);
                     if (blueprintListMain.Count == 0)
                         assembler.Mode = assemblyMode;
 
-                    assembly = ((IMyAssembler)mainBlockDefinition.block).Mode == assemblyMode;
+                    assembly = ((IMyAssembler)mainBlockDefinition.Block).Mode == assemblyMode;
                     for (int x = 0; x < blueprintListMain.Count; x++)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -3975,7 +4049,7 @@ namespace IngameScript
 
                     if (IsBlockBad(index)) continue;
 
-                    assembler = (IMyAssembler)managedBlocks[index].block;
+                    assembler = (IMyAssembler)managedBlocks[index].Block;
                     if (assemblyNeededByMachine.Contains(BlockSubtype(assembler))) continue;
                     foreach (Blueprint blueprint in tempAddAssemblyNeededList)
                     {
@@ -4010,7 +4084,7 @@ namespace IngameScript
 
                     if (IsBlockBad(index) || managedBlocks[index].Settings.GetOption(BlockOptions.NoCounting)) continue;
 
-                    block = managedBlocks[index].block;
+                    block = managedBlocks[index].Block;
 
                     for (int inv = 0; inv < block.InventoryCount; inv++)
                     {
@@ -4048,22 +4122,24 @@ namespace IngameScript
             IMyTextSurfaceProvider provider;
             IMyTerminalBlock currentBlock;
             BlockDefinition currentDefinition;
-            bool currentPriority, emptyLoadout, isClone;
+            bool currentPriority, emptyLoadout, isClone, storeAllCategories;
             string blockDef, typeID, subtypeID;
             IMyCubeGrid currentGrid;
             yield return stateContinue;
 
             while (true)
             {
+                scanning = true;
                 // ----------------------------------------------------
                 // ------------- Set Variables -------------
                 // ----------------------------------------------------
-                //Clear indexes
+                //Clear typed indexes
                 for (int i = 0; i < typedIndexes.Count; i++)
                 {
                     if (PauseTickRun) yield return stateActive;
                     typedIndexes.Values[i].Clear();
                 }
+                //Clear item category indexes
                 for (int i = 0; i < indexesStorageLists.Count; i++)
                 {
                     if (PauseTickRun) yield return stateActive;
@@ -4143,19 +4219,19 @@ namespace IngameScript
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    if (kvp.Value.block is IMyTextPanel) continue;
+                    if (kvp.Value.Block is IMyTextPanel) continue;
 
                     if (!kvp.Value.IsClone) while (!ProcessBlockOptions(kvp.Value)) yield return stateActive;
                     else if (!TextHasLength(kvp.Value.DataSource)) setRemoveIDs.Add(kvp.Key);
 
                     if (kvp.Value.Settings.GetOption(BlockOptions.CrossGrid))
-                        includedIDs.Add(kvp.Value.block.EntityId);
+                        includedIDs.Add(kvp.Value.Block.EntityId);
 
                     if (kvp.Value.Settings.GetOption(BlockOptions.ExcludeGrid))
-                        excludedGridList.Add(kvp.Value.block.CubeGrid);
+                        excludedGridList.Add(kvp.Value.Block.CubeGrid);
 
                     if (kvp.Value.Settings.GetOption(BlockOptions.IncludeGrid))
-                        gridList.Add(kvp.Value.block.CubeGrid);
+                        gridList.Add(kvp.Value.Block.CubeGrid);
 
                 }
                 //excludedIDs, excludedGridList, accessibleIDs, managedBlocks (all-processed), gridList
@@ -4202,8 +4278,8 @@ namespace IngameScript
                 foreach (KeyValuePair<long, BlockDefinition> kvp in managedBlocks)
                 {
                     if (PauseTickRun) yield return stateActive;
-                    currentEntityID = kvp.Value.block.EntityId;
-                    currentGrid = kvp.Value.block.CubeGrid;
+                    currentEntityID = kvp.Value.Block.EntityId;
+                    currentGrid = kvp.Value.Block.CubeGrid;
                     if (!accessibleIDs.Contains(currentEntityID) ||
                         kvp.Value.Settings.GetOption(BlockOptions.Exclude) ||
                         excludedIDs.Contains(currentEntityID) ||
@@ -4227,15 +4303,6 @@ namespace IngameScript
                 setRemoveIDs.Clear();
                 //managedBlocks (filtered-processed)
 
-                //Clear unused item category indexes
-                for (int i = 0; i < indexesStorageLists.Count; i += 0)
-                {
-                    if (PauseTickRun)
-                        yield return stateActive;
-                    if (!itemCategoryList.Contains(indexesStorageLists.Keys[i]))
-                        indexesStorageLists.RemoveAt(i);
-                    else i++;
-                }
 
                 // ----------------------------------------------------
                 // ------------- Process Blocks -------------
@@ -4248,7 +4315,7 @@ namespace IngameScript
 
                     currentDefinition = managedBlocks[index];
                     isClone = currentDefinition.IsClone;
-                    currentBlock = currentDefinition.block;
+                    currentBlock = currentDefinition.Block;
                     currentPriority = currentDefinition.Settings.priority != 1.0;
                     prioritySystemActivated = prioritySystemActivated || currentPriority;
                     currentDefinition.isGravelSifter = IsGravelSifter(currentBlock);
@@ -4322,25 +4389,15 @@ namespace IngameScript
                                 typedIndexes[setKeyIndexStorage].Add(index);
                                 if (currentPriority)
                                     priorityCategories.Add(setKeyIndexStorage);
-                                if (currentDefinition.Settings.storageCategories.Contains("all", stringComparer) || currentDefinition.Settings.storageCategories.Contains("*"))
-                                    for (int x = 0; x < indexesStorageLists.Count; x++)
-                                    {
-                                        if (PauseTickRun) yield return stateActive;
-                                        indexesStorageLists.Values[x].Add(index);
-                                        if (currentPriority)
-                                            priorityCategories.Add(indexesStorageLists.Keys[x]);
-                                    }
-                                else
-                                    foreach (string storageType in currentDefinition.Settings.storageCategories)
-                                    {
-                                        if (PauseTickRun) yield return stateActive;
-                                        if (indexesStorageLists.ContainsKey(storageType))
-                                        {
-                                            indexesStorageLists[storageType].Add(index);
-                                            if (currentPriority)
-                                                priorityCategories.Add(storageType);
-                                        }
-                                    }
+                                storeAllCategories = currentDefinition.Settings.storageCategories.Where(x => IsWildCard(x)).Count() > 0;
+                                foreach (KeyValuePair<string, LongListPlus> pair in indexesStorageLists)
+                                {
+                                    if (PauseTickRun) yield return stateActive;
+                                    if (storeAllCategories || currentDefinition.Settings.storageCategories.Contains(pair.Key, stringComparer))
+                                        pair.Value.Add(index);
+                                    if (currentPriority)
+                                        priorityCategories.Add(pair.Key);
+                                }
                             }
                         }
                         //Index blocks with inventories
@@ -4368,7 +4425,7 @@ namespace IngameScript
                             {
                                 typedIndexes[setKeyIndexLoadout].Add(index);
                                 if (addLoadoutsToQuota && !currentDefinition.Settings.GetOption(BlockOptions.NoCountLoadout))
-                                    itemCollectionProcessTotalLoadout.AddCollectionConverted(currentDefinition.Settings.loadout, currentDefinition.block);
+                                    itemCollectionProcessTotalLoadout.AddCollectionConverted(currentDefinition.Settings.loadout, currentDefinition.Block);
                                 if (currentPriority)
                                     priorityTypes.Add(setKeyIndexLoadout);
                             }
@@ -4379,7 +4436,7 @@ namespace IngameScript
                                 typedIndexes[setKeyIndexLimit].Add(index);
                             }
                             if ((!currentDefinition.Settings.manual || currentDefinition.Settings.GetOption(BlockOptions.RemoveInput) || currentDefinition.Settings.GetOption(BlockOptions.RemoveOutput)) && !(currentDefinition.Settings.GetOption(BlockOptions.KeepInput) && currentDefinition.Settings.GetOption(BlockOptions.KeepOutput)))
-                                for (int i = 0; i < currentDefinition.block.InventoryCount; i++)
+                                for (int i = 0; i < currentDefinition.Block.InventoryCount; i++)
                                     if (Sortable(currentDefinition, i))
                                     {
                                         typedIndexes[setKeyIndexSortable].Add(index);
@@ -4428,6 +4485,21 @@ namespace IngameScript
 
                 while (!SetBlockQuotas(itemCollectionProcessTotalLoadout)) yield return stateActive;
                 itemCollectionProcessTotalLoadout.Clear();
+
+                //Clear unused item category indexes
+                for (int i = 0; i < indexesStorageLists.Count; i += 0)
+                {
+                    if (PauseTickRun)
+                        yield return stateActive;
+                    if (!loading &&
+                        !itemCategoryList.Contains(indexesStorageLists.Keys[i], stringComparer) &&
+                        indexesStorageLists.Values[i].Count() == 0)
+                        indexesStorageLists.RemoveAt(i);
+                    else i++;
+                }
+
+                scanning = false;
+
                 yield return stateContinue;
             }
         }
@@ -4457,7 +4529,7 @@ namespace IngameScript
             while (true)
             {
                 dataSource = tempBlockOptionDefinition.DataSource;
-                block = tempBlockOptionDefinition.block;
+                block = tempBlockOptionDefinition.Block;
                 dataPrevious = dataAfter = "";
                 tempOptions = null;
                 processedSettings = -1;
@@ -4477,6 +4549,7 @@ namespace IngameScript
                     foreach (string line in dataLines)
                     {
                         if (line.StartsWith("//")) continue;
+                        if (line.StartsWith(panelTag)) break;
                         if (PauseTickRun) yield return stateActive;
 
                         if (SplitData(line, out key, out data))
@@ -4528,6 +4601,7 @@ namespace IngameScript
                             }
                         }
                     }
+                    dataLines.Clear();
 
 
                     if ((tempOptions == null || tempOptions.Length == 0) &&
@@ -4550,9 +4624,9 @@ namespace IngameScript
 
                 // Update
                 if (tempBlockOptionDefinition.Settings.updateTime < itemAddedOrChanged ||
-                (tempBlockOptionDefinition.Settings.loadout.Count == 0 || TextHasLength(tempBlockOptionDefinition.Settings.loadoutSearchString)) ||
-                (tempBlockOptionDefinition.Settings.limits.Count == 0 || TextHasLength(tempBlockOptionDefinition.Settings.limitSearchString)) ||
-                (tempBlockOptionDefinition.Settings.logicComparisons.Count == 0 || TextHasLength(tempBlockOptionDefinition.Settings.logicSearchString)))
+                (tempBlockOptionDefinition.Settings.loadout.Count == 0 && TextHasLength(tempBlockOptionDefinition.Settings.loadoutSearchString)) ||
+                (tempBlockOptionDefinition.Settings.limits.Count == 0 && TextHasLength(tempBlockOptionDefinition.Settings.limitSearchString)) ||
+                (tempBlockOptionDefinition.Settings.logicComparisons.Count == 0 && TextHasLength(tempBlockOptionDefinition.Settings.logicSearchString)))
                 {
 
                     tempBlockOptionDefinition.Settings.limits.Clear();
@@ -4574,12 +4648,12 @@ namespace IngameScript
                         foreach (IMyTerminalBlock cBlock in groupBlocks)
                         {
                             if (PauseTickRun) yield return stateActive;
-                            if (tempBlockOptionDefinition.block != cBlock && managedBlocks.ContainsKey(cBlock.EntityId))
+                            if (tempBlockOptionDefinition.Block != cBlock && managedBlocks.ContainsKey(cBlock.EntityId))
                             {
                                 clonedEntityIDs.Add(cBlock.EntityId);
                                 managedBlocks[cBlock.EntityId].SetClone(tempBlockOptionDefinition);
                                 if (!TextHasLength(cBlock.CustomData))
-                                    cBlock.CustomData = $"Cloning: {tempBlockOptionDefinition.block.CustomName}";
+                                    cBlock.CustomData = $"Cloning: {tempBlockOptionDefinition.Block.CustomName}";
                             }
                         }
                     }
@@ -4595,6 +4669,57 @@ namespace IngameScript
 
         #region Return Methods
 
+        double ApplyMathGroups(double value, List<string> mathGroups, int startIndex)
+        {
+            char mathSymbol;
+            double mathValue;
+            for (int i = startIndex; i < mathGroups.Count; i++)
+            {
+                try
+                {
+                    mathSymbol = mathGroups[i][0];
+                    mathValue = double.Parse(mathGroups[i].Substring(1));
+                    switch (mathSymbol)
+                    {
+                        case '*': value *= mathValue; break;
+                        case '/': value /= mathValue; break;
+                        case '+': value += mathValue; break;
+                        case '-': value -= mathValue; break;
+                    }
+                }
+                catch { }
+            }
+            return value;
+        }
+
+        int IndexOfLast(string data, char value)
+        {
+            int index = data.IndexOf(value);
+            return index >= 0 ? index : data.Length;
+        }
+
+        int NextMathIndex(string data) => Math.Min(IndexOfLast(data, '*'), Math.Min(IndexOfLast(data, '/'), Math.Min(IndexOfLast(data, '+'), IndexOfLast(data, '-'))));
+
+        void SplitMathGroups(string data, List<string> mathGroups)
+        {
+            mathGroups.Clear();
+            int index = NextMathIndex(data);
+
+            if (index == data.Length)
+            {
+                mathGroups.Add(data);
+                return;
+            }
+
+            while (index < data.Length)
+            {
+                mathGroups.Add(data.Substring(0, index));
+                data = data.Substring(index);
+                index = NextMathIndex(data.Substring(1)) + 1;
+            }
+
+            mathGroups.Add(data);
+        }
 
         static List<string> GetEnumList<TEnum>() where TEnum : struct
         {
@@ -4626,24 +4751,13 @@ namespace IngameScript
                 extractedLines.AddRange(lineList.GetRange(startIndex, endIndex - startIndex));
         }
 
-        string ColoredEcho(string text, int color = 2)
-        {
-            if (text.Length < 2) return text;
+        string ColoredEcho(string text, int color = 2) =>
+            text.Length < 2 ? text :
+            color == 1 ? $"[Color=#FFFF0000]{text}[/Color]" :
+            color == 2 ? $"[Color=#FF00FF00]{text}[/Color]" :
+            color == 3 ? $"[Color=#FF0000FF]{text}[/Color]" : text;
 
-            if (color == 1)
-                return $"[Color=#FFFF0000]{text}[/Color]";
-            if (color == 2)
-                return $"[Color=#FF00FF00]{text}[/Color]";
-            if (color == 3)
-                return $"[Color=#FF0000FF]{text}[/Color]";
-
-            return text;
-        }
-
-        static string[] SplitLines(string data)
-        {
-            return data.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-        }
+        static string[] SplitLines(string data) => data.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
         static void OptionHeaderIndex(out int startIndex, out int endIndex, string[] lines, string key)
         {
@@ -4664,37 +4778,20 @@ namespace IngameScript
                 }
         }
 
-        TimeSpan SpanDelay(double seconds = 0)
-        {
-            return scriptSpan + TimeSpan.FromSeconds(seconds);
-        }
+        TimeSpan SpanDelay(double seconds = 0) => scriptSpan + TimeSpan.FromSeconds(seconds);
 
-        bool SpanElapsed(TimeSpan span)
-        {
-            return scriptSpan >= span;
-        }
+        bool SpanElapsed(TimeSpan span) => scriptSpan >= span;
 
-        bool IsGravelSifter(IMyTerminalBlock block)
-        {
-            return settingsListsStrings[setKeyGravelSifterKeys].Contains(BlockSubtype(block).ToLower());
-        }
+        bool IsGravelSifter(IMyTerminalBlock block) => settingsListsStrings[setKeyGravelSifterKeys].Contains(BlockSubtype(block).ToLower());
 
-        static string PositionPrefix(string prefix, string input)
-        {
-            return $"Position{prefix}_{input}";
-        }
+        static string PositionPrefix(string prefix, string input) => $"Position{prefix}_{input}";
 
-        bool IsPanelProvider(IMyTerminalBlock block)
-        {
-            return block is IMyTextSurfaceProvider && (block is IMyTextPanel || block is IMyCockpit || block is IMyButtonPanel);
-        }
+        bool IsPanelProvider(IMyTerminalBlock block) => block is IMyTextSurfaceProvider && ((IMyTextSurfaceProvider)block).SurfaceCount > 0;
 
-        bool ScanFilter(IMyTerminalBlock block, HashSet<long> excludedIds)
-        {
-            return (block.IsFunctional && GlobalFilter(block) && PassPanel(block) &&
+        bool ScanFilter(IMyTerminalBlock block, HashSet<long> excludedIds) =>
+            (block.IsFunctional && GlobalFilter(block) && PassPanel(block) &&
                 (block.InventoryCount > 0 || IsPanelProvider(block) || block is IMyProgrammableBlock || block is IMyTimerBlock || TextHasLength(block.CustomData)) &&
                 !excludedIds.Contains(block.EntityId));
-        }
 
         string GetItemCategory(string itemID)
         {
@@ -4712,15 +4809,9 @@ namespace IngameScript
                 IsTool(typeID) ? toolKeyword : typeID;
         }
 
-        string GetItemCategory(MyInventoryItem item)
-        {
-            return GetItemCategory($"{item.Type}");
-        }
+        string GetItemCategory(MyInventoryItem item) => GetItemCategory($"{item.Type}");
 
-        static bool IsBlueprint(string data)
-        {
-            return TextHasLength(data) && !StringsMatch(data, nothingType);
-        }
+        static bool IsBlueprint(string data) => TextHasLength(data) && !StringsMatch(data, nothingType);
 
         bool HasBlueprintMatch(MyInventoryItem item, ref string matchingKey)
         {
@@ -4765,43 +4856,19 @@ namespace IngameScript
             return false;
         }
 
-        string AutoMatchNormalize(string source)
-        {
-            return source.ToLower().Replace("component", "").Replace("magazine", "").Replace("blueprint", "").Replace("tier", "t").Replace("hydrogen", "hydro").Replace("thruster", "thrust");
-        }
+        string AutoMatchNormalize(string source) => source.ToLower().Replace("component", "").Replace("magazine", "").Replace("blueprint", "").Replace("tier", "t").Replace("hydrogen", "hydro").Replace("thruster", "thrust");
 
-        static string Formatted(string text)
-        {
-            return text.Length <= 1 ? text.ToUpper() : String.Join(" ", text.Split(' ').Select(x => x.Length <= 1 ? x.ToUpper() : $"{x.Substring(0, 1).ToUpper()}{x.Substring(1)}"));
-        }
+        static string Formatted(string text) => text.Length <= 1 ? text.ToUpper() : String.Join(" ", text.Split(' ').Select(x => x.Length <= 1 ? x.ToUpper() : $"{x.Substring(0, 1).ToUpper()}{x.Substring(1)}"));
 
-        bool ContainsString(string whole, string key)
-        {
-            if (whole.Length >= key.Length && TextHasLength(key))
-                return whole.ToLower().Contains(key.ToLower());
+        bool ContainsString(string whole, string key) => whole.Length >= key.Length && TextHasLength(key) && whole.ToLower().Contains(key.ToLower());
 
-            return false;
-        }
+        string ShortMSTime(double milliseconds) => $"{(milliseconds >= 1000.0 ? $"{ShortNumber2(milliseconds / 1000.0)}s" : $"{ShortNumber2(milliseconds)}ms")}";
 
-        string ShortMSTime(double milliseconds)
-        {
-            return $"{(milliseconds >= 1000.0 ? $"{ShortNumber2(milliseconds / 1000.0)}s" : $"{ShortNumber2(milliseconds)}ms")}";
-        }
+        static string BlockSubtype(IMyTerminalBlock block) => block.BlockDefinition.SubtypeName;
 
-        static string BlockSubtype(IMyTerminalBlock block)
-        {
-            return block.BlockDefinition.SubtypeName;
-        }
+        static string BlueprintSubtype(MyProductionItem blueprint) => blueprint.BlueprintId.SubtypeName;
 
-        static string BlueprintSubtype(MyProductionItem blueprint)
-        {
-            return blueprint.BlueprintId.SubtypeName;
-        }
-
-        bool GlobalFilter(IMyTerminalBlock block)
-        {
-            return (!TextHasLength(globalFilterKeyword) || ContainsString(block.CustomName, globalFilterKeyword)) && !settingsListsStrings[setKeyExcludedDefinitions].Contains(BlockSubtype(block));
-        }
+        bool GlobalFilter(IMyTerminalBlock block) => (!TextHasLength(globalFilterKeyword) || ContainsString(block.CustomName, globalFilterKeyword)) && !settingsListsStrings[setKeyExcludedDefinitions].Contains(BlockSubtype(block));
 
         static bool SplitData(string text, out string key, out string data, char splitter = '=', bool firstIndex = true)
         {
@@ -4818,7 +4885,7 @@ namespace IngameScript
 
         bool AcceptsItem(BlockDefinition managedBlock, MyItemType itemType)
         {
-            IMyTerminalBlock block = managedBlock.block;
+            IMyTerminalBlock block = managedBlock.Block;
 
             bool limited = managedBlock.Settings.limits.ContainsKey(itemType);
 
@@ -4833,18 +4900,15 @@ namespace IngameScript
             return true;
         }
 
-        bool AcceptsItem(BlockDefinition managedBlock, MyInventoryItem item)
-        {
-            return AcceptsItem(managedBlock, item.Type);
-        }
+        bool AcceptsItem(BlockDefinition managedBlock, MyInventoryItem item) => AcceptsItem(managedBlock, item.Type);
 
         bool GetSetLimit(BlockDefinition managedBlock, ref double foundMax, MyInventoryItem item)
         {
             bool hasLimit = managedBlock.Settings.limits.ContainsKey(item.Type),
                  hasLoadout = managedBlock.Settings.loadout.ContainsKey(item.Type);
 
-            double limit = hasLimit ? managedBlock.Settings.limits.ItemCount(item, managedBlock.block) : 0,
-                   loadout = hasLoadout ? managedBlock.Settings.loadout.ItemCount(item, managedBlock.block) : 0;
+            double limit = hasLimit ? managedBlock.Settings.limits.ItemCount(item, managedBlock.Block) : 0,
+                   loadout = hasLoadout ? managedBlock.Settings.loadout.ItemCount(item, managedBlock.Block) : 0;
 
             double tempMax = hasLimit && hasLoadout ? Math.Min(limit, loadout) :
                              hasLimit ? limit :
@@ -4917,10 +4981,7 @@ namespace IngameScript
             return false;
         }
 
-        static bool StringsMatch(string a, string b)
-        {
-            return a.Length == b.Length && string.Compare(a, b, true) == 0;
-        }
+        static bool StringsMatch(string a, string b) => a.Length == b.Length && string.Compare(a, b, true) == 0;
 
         double LeastKeyedOrePercentage(string subtypeID)
         {
@@ -4936,10 +4997,7 @@ namespace IngameScript
             return leastFound;
         }
 
-        double LeastKeyedOrePercentage(MyInventoryItem item)
-        {
-            return LeastKeyedOrePercentage(item.Type.SubtypeId);
-        }
+        double LeastKeyedOrePercentage(MyInventoryItem item) => LeastKeyedOrePercentage(item.Type.SubtypeId);
 
         Blueprint ItemToBlueprint(ItemDefinition definition) => new Blueprint { blueprintID = definition.blueprintID, subtypeID = definition.subtypeID, typeID = definition.typeID, multiplier = definition.assemblyMultiplier };
 
@@ -4957,43 +5015,7 @@ namespace IngameScript
             return !modBlueprintList.Contains(BlueprintSubtype(blueprint)) && !blueprintList.ContainsKey(BlueprintSubtype(blueprint));
         }
 
-        bool LogicPass(ItemDefinition definition, string comparison, string compare)
-        {
-            string compareAgainst = compare.ToLower();
-            double comparisonNumber = 0, changeNumber;
-            if (LeadsString(compareAgainst, "quota"))
-            {
-                comparisonNumber = definition.currentQuota;
-                int indexP = compareAgainst.IndexOf("+"), indexM = compareAgainst.IndexOf("*");
-                if (indexP > 0)
-                {
-                    if (!double.TryParse(compareAgainst.Substring(indexP + 1), out changeNumber))
-                        comparisonNumber += changeNumber;
-                }
-                else if (indexM > 0 && !double.TryParse(compareAgainst.Substring(indexM + 1), out changeNumber))
-                    comparisonNumber *= changeNumber;
-            }
-            else if (ContainsString(compare, "/"))
-            {
-                ItemDefinition comparisonDefinition;
-                if (GetDefinition(out comparisonDefinition, compare))
-                    comparisonNumber = comparisonDefinition.amount;
-            }
-            else if (!double.TryParse(compareAgainst, out comparisonNumber))
-                return false;
-
-            return
-                comparison == ">=" ? definition.amount >= comparisonNumber :
-                comparison == "<=" ? definition.amount <= comparisonNumber :
-                comparison == ">" ? definition.amount > comparisonNumber :
-                comparison == "<" ? definition.amount < comparisonNumber :
-                comparison == "=" && definition.amount == comparisonNumber;
-        }
-
-        bool PassPanel(IMyTerminalBlock block)
-        {
-            return block.InventoryCount > 0 || block is IMyTimerBlock || (IsPanelProvider(block) && (block is IMyProgrammableBlock || ContainsString(block.CustomName, panelTag)));
-        }
+        bool PassPanel(IMyTerminalBlock block) => block.InventoryCount > 0 || block is IMyTimerBlock || (IsPanelProvider(block) && (block is IMyProgrammableBlock || ContainsString(block.CustomName, panelTag)));
 
         static string ShortenName(string name, int length = 20, bool pad = false)
         {
@@ -5005,13 +5027,11 @@ namespace IngameScript
             return shortName;
         }
 
-        bool IsBlockBad(long index)
-        {
-            return !managedBlocks.ContainsKey(index) ||
-                   managedBlocks[index].block == null ||
-                   !gtSystem.CanAccess(managedBlocks[index].block) ||
-                   !managedBlocks[index].block.IsFunctional;
-        }
+        bool IsBlockBad(long index) =>
+            !managedBlocks.ContainsKey(index) ||
+            managedBlocks[index].Block == null ||
+            !gtSystem.CanAccess(managedBlocks[index].Block) ||
+            !managedBlocks[index].Block.IsFunctional;
 
         bool GetDefinition(out ItemDefinition definition, string itemID)
         {
@@ -5024,15 +5044,9 @@ namespace IngameScript
             return false;
         }
 
-        static string TruncateNumber(double number, int decimalPlaces)
-        {
-            return $"{Math.Floor(number * (Math.Pow(10.0, decimalPlaces))) / (Math.Pow(10.0, decimalPlaces))}";
-        }
+        static string TruncateNumber(double number, int decimalPlaces) => $"{Math.Floor(number * (Math.Pow(10.0, decimalPlaces))) / (Math.Pow(10.0, decimalPlaces))}";
 
-        bool IsGas(MyInventoryItem item)
-        {
-            return IsGas(item.Type.TypeId, item.Type.SubtypeId);
-        }
+        bool IsGas(MyInventoryItem item) => IsGas(item.Type.TypeId, item.Type.SubtypeId);
 
         bool IsGas(string typeID, string subtypeID)
         {
@@ -5043,14 +5057,11 @@ namespace IngameScript
             return IsIce(typeID, subtypeID);
         }
 
-        static bool IsIce(string typeID, string subtypeID)
-        {
-            return IsOre(typeID) && subtypeID == "Ice";
-        }
+        static bool IsIce(string typeID, string subtypeID) => IsOre(typeID) && subtypeID == "Ice";
 
         bool UsableAssembler(BlockDefinition block, MyDefinitionId blueprintID, MyAssemblerMode mode)
         {
-            IMyAssembler assembler = (IMyAssembler)block.block;
+            IMyAssembler assembler = (IMyAssembler)block.Block;
 
             if (!assembler.Enabled)
                 return false;
@@ -5064,10 +5075,7 @@ namespace IngameScript
             return assembler.CanUseBlueprint(blueprintID) && (assembler.IsQueueEmpty || assembler.Mode == mode);
         }
 
-        string MakeBlueprint(Blueprint blueprint)
-        {
-            return $"{blueprintPrefix}/{blueprint.blueprintID}";
-        }
+        string MakeBlueprint(Blueprint blueprint) => $"{blueprintPrefix}/{blueprint.blueprintID}";
 
         double AssemblyAmount(Blueprint blueprint, bool disassembly = false)
         {
@@ -5108,25 +5116,13 @@ namespace IngameScript
             return SpanElapsed(delaySpans[functionKey]);
         }
 
-        double AvailableVolume(IMyTerminalBlock block)
-        {
-            return (double)block.GetInventory(0).MaxVolume - (double)block.GetInventory(0).CurrentVolume;
-        }
+        double AvailableVolume(IMyTerminalBlock block) => (double)block.GetInventory(0).MaxVolume - (double)block.GetInventory(0).CurrentVolume;
 
-        double CurrentVolumePercentage(long index)
-        {
-            return (double)managedBlocks[index].Input.CurrentVolume / (double)managedBlocks[index].Input.MaxVolume;
-        }
+        double CurrentVolumePercentage(long index) => (double)managedBlocks[index].Input.CurrentVolume / (double)managedBlocks[index].Input.MaxVolume;
 
-        bool OverRange(double amount, double goal, double multiplier)
-        {
-            return amount > goal + (goal * multiplier);
-        }
+        bool OverRange(double amount, double goal, double multiplier) => amount > goal + (goal * multiplier);
 
-        bool UnderRange(double amount, double goal, double multiplier)
-        {
-            return amount < goal - (goal * multiplier);
-        }
+        bool UnderRange(double amount, double goal, double multiplier) => amount < goal - (goal * multiplier);
 
         bool Distributable(MyInventoryItem item, BlockDefinition block)
         {
@@ -5148,14 +5144,11 @@ namespace IngameScript
             return true;
         }
 
-        double DefaultMax(MyInventoryItem item, BlockDefinition block)
-        {
-            return DefaultMax(item.Type.TypeId, item.Type.SubtypeId, block);
-        }
+        double DefaultMax(MyInventoryItem item, BlockDefinition block) => DefaultMax(item.Type.TypeId, item.Type.SubtypeId, block);
 
         double DefaultMax(string typeID, string subtypeID, BlockDefinition blockDef)
         {
-            IMyTerminalBlock block = blockDef.block;
+            IMyTerminalBlock block = blockDef.Block;
             if (block is IMyGasGenerator)
             {
                 if (IsGas(typeID, subtypeID))
@@ -5175,10 +5168,20 @@ namespace IngameScript
             return double.MaxValue;
         }
 
-        static double PercentageMax(float value, string typeID, string subtypeID, IMyTerminalBlock block)
+        static double ConvertCount(VariableItemCount count, string typeID, string subtypeID, IMyTerminalBlock block)
         {
-            float calcedValue = value;
-            if (value <= 1f)
+            double amount = count.percentage ? ((float)block.GetInventory(0).MaxVolume / ItemVolume(typeID, subtypeID)) * count.count : count.count;
+
+            if (!FractionalItem(typeID, subtypeID))
+                amount = Math.Floor(amount);
+
+            return amount;
+        }
+
+        static double PercentageMax(double value, string typeID, string subtypeID, IMyTerminalBlock block)
+        {
+            double calcedValue = value;
+            if (value <= 1.0)
             {
                 calcedValue = ((float)block.GetInventory(0).MaxVolume / ItemVolume(typeID, subtypeID)) * value;
                 if (!FractionalItem(typeID, subtypeID))
@@ -5209,15 +5212,9 @@ namespace IngameScript
             return GetDefinition(out definition, item.Type.ToString()) && definition.fuel;
         }
 
-        string ItemName(MyItemType itemType)
-        {
-            return ItemName(itemType.TypeId, itemType.SubtypeId);
-        }
+        string ItemName(MyItemType itemType) => ItemName(itemType.TypeId, itemType.SubtypeId);
 
-        string ItemName(MyInventoryItem item)
-        {
-            return ItemName(item.Type);
-        }
+        string ItemName(MyInventoryItem item) => ItemName(item.Type);
 
         string ItemName(string typeID, string subtypeID)
         {
@@ -5228,10 +5225,7 @@ namespace IngameScript
             return subtypeID;
         }
 
-        double GetCurrentVolumeLimit(MyInventoryItem item, IMyTerminalBlock block)
-        {
-            return AvailableVolume(block) / ItemVolume(item);
-        }
+        double GetCurrentVolumeLimit(MyInventoryItem item, IMyTerminalBlock block) => AvailableVolume(block) / ItemVolume(item);
 
         static bool FractionalItem(string typeID, string subtypeID)
         {
@@ -5248,17 +5242,14 @@ namespace IngameScript
             return typeID == ingotType || typeID == oreType;
         }
 
-        static bool FractionalItem(MyInventoryItem item)
-        {
-            return item.Type.GetItemInfo().UsesFractions;
-        }
+        static bool FractionalItem(MyInventoryItem item) => item.Type.GetItemInfo().UsesFractions;
 
         bool Sortable(BlockDefinition blockDef, int inventoryIndex)
         {
             if ((inventoryIndex == 0 && blockDef.Settings.GetOption(BlockOptions.KeepInput)) || (inventoryIndex == 1 && blockDef.Settings.GetOption(BlockOptions.KeepOutput)))
                 return false;
 
-            IMyTerminalBlock block = blockDef.block;
+            IMyTerminalBlock block = blockDef.Block;
             if (blockDef.isGravelSifter || block is IMyRefinery)
                 return inventoryIndex == 1;
 
@@ -5273,14 +5264,11 @@ namespace IngameScript
             return true;
         }
 
-        bool IsGun(BlockDefinition block)
-        {
-            return block.block is IMyUserControllableGun || block.Settings.GetOption(BlockOptions.GunOverride);
-        }
+        bool IsGun(BlockDefinition block) => block.Block is IMyUserControllableGun || block.Settings.GetOption(BlockOptions.GunOverride);
 
         bool Sortable(MyInventoryItem item, BlockDefinition blockDef, int inventoryIndex = 0)
         {
-            IMyTerminalBlock block = blockDef.block;
+            IMyTerminalBlock block = blockDef.Block;
             if (fillingBottles && IsBottle(item))
                 return !(block is IMyGasGenerator || block is IMyGasTank);
 
@@ -5298,46 +5286,23 @@ namespace IngameScript
             return true;
         }
 
-        bool IsStorage(BlockDefinition block, MyInventoryItem item)
-        {
-            return block.Settings.storageCategories.Contains("all", stringComparer) || block.Settings.storageCategories.Contains("*") ||
-                   block.Settings.storageCategories.Contains(GetItemCategory(item), stringComparer);
-        }
+        bool IsStorage(BlockDefinition block, MyInventoryItem item) =>
+            block.Settings.storageCategories.Contains("all", stringComparer) || block.Settings.storageCategories.Contains("*") ||
+            block.Settings.storageCategories.Contains(GetItemCategory(item), stringComparer);
 
-        bool LoadoutHome(BlockDefinition block, MyInventoryItem item)
-        {
-            return block.Settings.loadout.ItemCount(item) > 0;
-        }
+        bool LoadoutHome(BlockDefinition block, MyInventoryItem item) => block.Settings.loadout.ItemCount(item) > 0;
 
-        float ItemVolume(MyInventoryItem item)
-        {
-            return item.Type.GetItemInfo().Volume;
-        }
+        float ItemVolume(MyInventoryItem item) => item.Type.GetItemInfo().Volume;
 
-        bool IsBottle(MyInventoryItem item)
-        {
-            return IsBottle(item.Type.TypeId);
-        }
+        bool IsBottle(MyInventoryItem item) => IsBottle(item.Type.TypeId);
 
-        bool IsBottle(string typeID)
-        {
-            return StringsMatch(typeID, hydBottleType) || StringsMatch(typeID, oxyBottleType);
-        }
+        bool IsBottle(string typeID) => StringsMatch(typeID, hydBottleType) || StringsMatch(typeID, oxyBottleType);
 
-        static bool IsIngot(string typeID)
-        {
-            return IsWildCard(typeID) || StringsMatch(typeID, ingotType) || StringsMatch(typeID, ingotKeyword) || (typeID.Length > 1 && LeadsString(ingotKeyword, typeID));
-        }
+        static bool IsIngot(string typeID) => IsWildCard(typeID) || StringsMatch(typeID, ingotType) || StringsMatch(typeID, ingotKeyword) || (typeID.Length > 1 && LeadsString(ingotKeyword, typeID));
 
-        static bool IsOre(string typeID)
-        {
-            return IsWildCard(typeID) || StringsMatch(typeID, oreType) || StringsMatch(typeID, oreKeyword) || (typeID.Length > 1 && LeadsString(oreKeyword, typeID));
-        }
+        static bool IsOre(string typeID) => IsWildCard(typeID) || StringsMatch(typeID, oreType) || StringsMatch(typeID, oreKeyword) || (typeID.Length > 1 && LeadsString(oreKeyword, typeID));
 
-        bool IsAmmo(string typeID)
-        {
-            return IsWildCard(typeID) || StringsMatch(typeID, ammoType) || StringsMatch(typeID, ammoKeyword) || (typeID.Length > 1 && LeadsString(ammoKeyword, typeID));
-        }
+        bool IsAmmo(string typeID) => IsWildCard(typeID) || StringsMatch(typeID, ammoType) || StringsMatch(typeID, ammoKeyword) || (typeID.Length > 1 && LeadsString(ammoKeyword, typeID));
 
         bool GetItemFromBlueprint(string blueprintID, out string typeID, out string subtypeID)
         {
@@ -5352,14 +5317,9 @@ namespace IngameScript
             return false;
         }
 
-        bool IsComponent(string typeID)
-        {
-            return IsWildCard(typeID) || StringsMatch(typeID, componentType) || StringsMatch(typeID, componentKeyword) || (typeID.Length > 1 && LeadsString(componentKeyword, typeID));
-        }
+        bool IsComponent(string typeID) => IsWildCard(typeID) || StringsMatch(typeID, componentType) || StringsMatch(typeID, componentKeyword) || (typeID.Length > 1 && LeadsString(componentKeyword, typeID));
 
-        bool IsTool(string typeID)
-        {
-            return IsWildCard(typeID) || StringsMatch(typeID, toolType) || IsBottle(typeID) || StringsMatch(typeID, dataPadType) || StringsMatch(typeID, consumableType) || StringsMatch(typeID, physicalObjectType) || StringsMatch(typeID, toolKeyword) ||
+        bool IsTool(string typeID) => IsWildCard(typeID) || StringsMatch(typeID, toolType) || IsBottle(typeID) || StringsMatch(typeID, dataPadType) || StringsMatch(typeID, consumableType) || StringsMatch(typeID, physicalObjectType) || StringsMatch(typeID, toolKeyword) ||
                 (
                     typeID.Length > 1 &&
                     (
@@ -5370,42 +5330,20 @@ namespace IngameScript
                         LeadsString(toolKeyword, typeID)
                     )
                 );
-        }
 
-        bool EndsString(string whole, string end)
-        {
-            return RemoveSpaces(whole, true).EndsWith(RemoveSpaces(end, true));
-        }
+        bool EndsString(string whole, string end) => RemoveSpaces(whole, true).EndsWith(RemoveSpaces(end, true));
 
-        static bool LeadsString(string whole, string lead)
-        {
-            return RemoveSpaces(whole, true).StartsWith(RemoveSpaces(lead, true));
-        }
+        static bool LeadsString(string whole, string lead) => RemoveSpaces(whole, true).StartsWith(RemoveSpaces(lead, true));
 
-        bool IsIngot(MyInventoryItem item)
-        {
-            return item.Type.GetItemInfo().IsIngot;
-        }
+        bool IsIngot(MyInventoryItem item) => item.Type.GetItemInfo().IsIngot;
 
-        bool IsOre(MyInventoryItem item)
-        {
-            return item.Type.GetItemInfo().IsOre;
-        }
+        bool IsOre(MyInventoryItem item) => item.Type.GetItemInfo().IsOre;
 
-        bool IsComponent(MyInventoryItem item)
-        {
-            return item.Type.GetItemInfo().IsComponent;
-        }
+        bool IsComponent(MyInventoryItem item) => item.Type.GetItemInfo().IsComponent;
 
-        bool IsAmmo(MyInventoryItem item)
-        {
-            return item.Type.GetItemInfo().IsAmmo;
-        }
+        bool IsAmmo(MyInventoryItem item) => item.Type.GetItemInfo().IsAmmo;
 
-        bool IsCategory(string typeID)
-        {
-            return IsWildCard(typeID) || itemCategoryList.Contains(typeID, stringComparer);
-        }
+        bool IsCategory(string typeID) => IsWildCard(typeID) || itemCategoryList.Contains(typeID, stringComparer);
 
         bool UnavailableActions()
         {
@@ -5417,7 +5355,7 @@ namespace IngameScript
             (Now - tickStartTime).TotalMilliseconds >= runTimeLimiter * mult;
         }
 
-        bool StateManager(FunctionIdentifier identifier, bool updateStatus = true, bool reportErrors = true)
+        bool StateManager(FunctionIdentifier identifier, bool updateStatus = true)
         {
             if (updateStatus) currentFunction = identifier;
 
@@ -5425,7 +5363,7 @@ namespace IngameScript
 
             if (!stateRecords.IsInitialized(identifier)) InitializeStateV2(identifier); // Initialize enumerator
 
-            bool complete = StateManager($"{identifier}", reportErrors);
+            bool complete = StateManager($"{identifier}");
 
             if (complete)
             {
@@ -5438,7 +5376,7 @@ namespace IngameScript
             return complete;
         }
 
-        bool StateManager(string identifier, bool reportErrors = true)
+        bool StateManager(string identifier)
         {
             if (identifier == "Idle") return true;
 
@@ -5456,10 +5394,10 @@ namespace IngameScript
                 currentState = stateRecords[identifier].lastStatus = stateError;
             }
             endTime = Now;
-            if (currentState == stateError && reportErrors)
+            if (currentState == stateError)
                 Output($"Error in function: {identifier}{(TextHasLength(stateRecords[identifier].errorCode) ? $" : {stateRecords[identifier].errorCode}" : "")}");
 
-            stateRecords[identifier].PostRun(Runtime.CurrentInstructionCount - currentActions, Now - startTime, currentState == stateError, reportErrors, currentState != stateActive);
+            stateRecords[identifier].PostRun(Runtime.CurrentInstructionCount - currentActions, Now - startTime, currentState == stateError, currentState != stateActive);
 
             if (currentState != stateActive)
             {
@@ -5474,10 +5412,7 @@ namespace IngameScript
             return currentState != stateActive;
         }
 
-        double Round(double number, int decimals = 2)
-        {
-            return Math.Round(number, decimals);
-        }
+        double Round(double number, int decimals = 2) => Math.Round(number, decimals);
 
         static string ShortNumberAbs2(double number, List<string> suffixes, int decimals)
         {
@@ -5497,10 +5432,7 @@ namespace IngameScript
             return highestIndex >= 0 ? $"{TruncateNumber(currentNumber, decimals)}{suffixes[highestIndex]}" : TruncateNumber(currentNumber, decimals);
         }
 
-        string ShortNumber2(double number, int decimals = 2, int padding = 0, bool left = true)
-        {
-            return ShortNumber2(number, settingsListsStrings[setKeyDefaultSuffixes], decimals, padding, left);
-        }
+        string ShortNumber2(double number, int decimals = 2, int padding = 0, bool left = true) => ShortNumber2(number, settingsListsStrings[setKeyDefaultSuffixes], decimals, padding, left);
 
         static string ShortNumber2(double number, List<string> suffixesList, int decimals = 2, int padding = 0, bool left = true)
         {
@@ -5509,25 +5441,15 @@ namespace IngameScript
             return left ? $"{prefix}{ShortNumberAbs2(Math.Abs(number), suffixesList, decimals)}".PadLeft(padding) : $"{prefix}{ShortNumberAbs2(Math.Abs(number), suffixesList, decimals)}".PadRight(padding);
         }
 
-        static bool TextHasLength(string text)
-        {
-            return text.Length > 0;
-        }
+        static bool TextHasLength(string text) => text.Length > 0;
 
-        static bool BuilderHasLength(StringBuilder builder)
-        {
-            return builder.Length > 0;
-        }
+        static bool BuilderHasLength(StringBuilder builder) => builder.Length > 0;
 
-        static string RemoveSpaces(string text, bool lower = false)
-        {
-            return lower ? text.Replace(" ", "").ToLower() : text.Replace(" ", "");
-        }
+        static string RemoveSpaces(string text, bool lower = false) => lower ? text.Replace(" ", "").ToLower() : text.Replace(" ", "");
 
-        static bool IsWildCard(string text)
-        {
-            return StringsMatch(text, "all") || text == "*";
-        }
+        static bool IsWildCard(string text) => StringsMatch(text, "all") || text == "*";
+
+        static double TorchAverage(double a, double b) => (a + (b * tickWeight)) * (1.0 - tickWeight);
 
 
         #endregion
@@ -5705,11 +5627,6 @@ namespace IngameScript
             }
         }
 
-        static double TorchAverage(double a, double b)
-        {
-            return (a + (b * tickWeight)) * (1.0 - tickWeight);
-        }
-
         static void BuilderAppendLine(StringBuilder builder, string text = "")
         {
             builder.AppendLine(text);
@@ -5732,6 +5649,7 @@ namespace IngameScript
 
         void AddCategory(string category)
         {
+            category = category.ToLower();
             if (!itemCategoryList.Contains(category))
                 itemCategoryList.Add(category);
             if (!indexesStorageLists.ContainsKey(category))
@@ -5941,7 +5859,7 @@ namespace IngameScript
 
         void ConveyorControl(BlockDefinition managedBlock)
         {
-            IMyTerminalBlock block = managedBlock.block;
+            IMyTerminalBlock block = managedBlock.Block;
             bool applyOverride = false, autoConveyor = managedBlock.Settings.GetOption(BlockOptions.AutoConveyor), tempBool;
 
             if (block is IMyAssembler)
@@ -6151,25 +6069,13 @@ namespace IngameScript
                 }
             }
 
-            public bool IsActive(FunctionIdentifier functionName)
-            {
-                return IsActive($"{functionName}");
-            }
+            public bool IsActive(FunctionIdentifier functionName) => IsActive($"{functionName}");
 
-            public bool IsActive(string functionName)
-            {
-                return this[functionName].lastStatus == FunctionState.Active;
-            }
+            public bool IsActive(string functionName) => this[functionName].lastStatus == FunctionState.Active;
 
-            public bool IsInitialized(FunctionIdentifier functionName)
-            {
-                return IsInitialized($"{functionName}");
-            }
+            public bool IsInitialized(FunctionIdentifier functionName) => IsInitialized($"{functionName}");
 
-            public bool IsInitialized(string functionName)
-            {
-                return this[functionName].enumerator != null;
-            }
+            public bool IsInitialized(string functionName) => this[functionName].enumerator != null;
         }
 
         public class LongListPlus : List<long>
@@ -6214,14 +6120,13 @@ namespace IngameScript
 
             public string errorCode = "";
 
-            public void PostRun(int actions, TimeSpan span, bool errorCaught, bool reportError, bool complete)
+            public void PostRun(int actions, TimeSpan span, bool errorCaught, bool complete)
             {
                 if (errorCaught)
                 {
                     currentTicks = currentActions = 0;
                     currentSpan = TimeSpan.Zero;
-                    if (reportError)
-                        health = Math.Max(0m, health - 5m);
+                    health = Math.Max(0m, health - 5m);
                     return;
                 }
                 currentActions += actions;
@@ -6360,7 +6265,7 @@ namespace IngameScript
                 double count;
                 if (double.TryParse(text, out count))
                 {
-                    itemCount = new VariableItemCount(count, percent);
+                    itemCount = new VariableItemCount(count / (percent ? 100.0 : 1.0), percent);
                     return true;
                 }
                 itemCount = null;
@@ -6444,14 +6349,14 @@ namespace IngameScript
             public void AddCollectionConverted(ItemCollection2 itemCollection, IMyTerminalBlock block, bool append = true)
             {
                 foreach (KeyValuePair<string, ItemEntry> pair in itemCollection.ItemList)
-                    AddItem(pair.Value.ItemReference, new VariableItemCount(PercentageMax((float)pair.Value.ItemCount.count, pair.Value.ItemReference.typeID, pair.Value.ItemReference.subtypeID, block)), append);
+                    AddItem(pair.Value.ItemReference, new VariableItemCount(ConvertCount(pair.Value.ItemCount, pair.Value.ItemReference.typeID, pair.Value.ItemReference.subtypeID, block)), append);
             }
 
             public void ConvertPercentages(IMyTerminalBlock block)
             {
                 foreach (KeyValuePair<string, ItemEntry> pair in ItemList)
                     if (pair.Value.ItemCount.percentage)
-                        pair.Value.ItemCount = new VariableItemCount(PercentageMax((float)pair.Value.ItemCount.count, pair.Value.ItemReference.typeID, pair.Value.ItemReference.subtypeID, block));
+                        pair.Value.ItemCount = new VariableItemCount(ConvertCount(pair.Value.ItemCount, pair.Value.ItemReference.typeID, pair.Value.ItemReference.subtypeID, block));
             }
 
             public void Clear(bool manual = true, bool automatic = true)
@@ -6474,21 +6379,20 @@ namespace IngameScript
 
             public bool ContainsKey(MyItemType itemType) => ItemList.ContainsKey($"{itemType}");
 
-            public double ItemCount(MyInventoryItem item, IMyTerminalBlock block = null)
-            {
-                return ItemCount(item.Type, block);
-            }
+            public double ItemCount(MyInventoryItem item, IMyTerminalBlock block = null) => ItemCount(item.Type, block);
 
-            public double ItemCount(ItemDefinition itemDefinition, IMyTerminalBlock block = null)
-            {
-                return ItemCount(itemDefinition.ItemType, block);
-            }
+            public double ItemCount(ItemDefinition itemDefinition, IMyTerminalBlock block = null) => ItemCount(itemDefinition.ItemType, block);
 
             public double ItemCount(MyItemType itemType, IMyTerminalBlock block = null)
             {
                 if (ContainsKey($"{itemType}"))
                     return ItemList[$"{itemType}"].ItemCount.percentage && block != null ? PercentageMax((float)ItemList[$"{itemType}"].ItemCount.count, itemType.TypeId, itemType.SubtypeId, block) : ItemList[$"{itemType}"].ItemCount.count;
                 return 0;
+            }
+
+            public override string ToString()
+            {
+                return String.Join("|", ItemList.Select(b => $"{(b.Value.ItemCount != null ? $"{b.Value.ItemCount.count}:" : "")}{b.Value.ItemReference.FullID}"));
             }
         }
 
@@ -6510,12 +6414,22 @@ namespace IngameScript
         {
             public static Program parent;
 
-            public string typeID = "", comparison = "", compareAgainst = "";
+            public ItemDefinition ItemA, ItemB;
+
+            public string Comparison, ItemAData, ItemBData;
+
+            public LogicComparison(ItemDefinition itemA, string itemAData, string comparison, ItemDefinition itemB, string itemBData)
+            {
+                ItemA = itemA;
+                ItemB = itemB;
+                Comparison = comparison;
+                ItemAData = itemAData;
+                ItemBData = itemBData;
+            }
 
             public override string ToString()
             {
-                ItemDefinition def;
-                return $"{(parent.GetDefinition(out def, typeID) ? $"{def.category}:{def.displayName}" : typeID)}{comparison}{compareAgainst}";
+                return $"{ItemA.DisplayID}{ItemAData}{Comparison}{(ItemB != null ? ItemB.DisplayID : "")}{ItemBData}";
             }
         }
 
@@ -6527,7 +6441,7 @@ namespace IngameScript
 
         public class BlockDefinition
         {
-            public IMyTerminalBlock block;
+            public IMyTerminalBlock Block;
 
             public MonitoredAssembler monitoredAssembler;
 
@@ -6543,15 +6457,15 @@ namespace IngameScript
 
             public BlockSettings Settings => isClone && cloneSource != null ? cloneSource.Settings : innerSettings;
 
-            public bool HasInventory => block.InventoryCount > 0;
+            public bool HasInventory => Block.InventoryCount > 0;
 
-            public IMyInventory Input => block.GetInventory(0);
+            public IMyInventory Input => Block.GetInventory(0);
 
             public bool IsClone => isClone;
 
             public BlockDefinition(IMyTerminalBlock block)
             {
-                this.block = block;
+                Block = block;
                 innerSettings.parent = this;
                 Settings.Initialize();
             }
@@ -6565,8 +6479,8 @@ namespace IngameScript
 
             public string DataSource
             {
-                get { return block.CustomData; }
-                set { block.CustomData = value; }
+                get { return Block.CustomData; }
+                set { Block.CustomData = value; }
             }
         }
 
@@ -6636,10 +6550,7 @@ namespace IngameScript
                 logicComparisons.Clear();
             }
 
-            public bool GetOption(BlockOptions key)
-            {
-                return optionList.Contains(key);
-            }
+            public bool GetOption(BlockOptions key) => optionList.Contains(key);
 
             public void SetOption(string text, bool enabled = true)
             {
@@ -6664,12 +6575,12 @@ namespace IngameScript
                 BuilderAppendLine(builder, $"Automatic={!manual}");
                 BuilderAppendLine(builder, $"Options={String.Join("|", optionList)}");
                 string optionsString = String.Join("|", toggleOptionList.Where(x => !optionList.Contains(x)));
-                if (parent.block.HasInventory)
-                    optionsString += $"{(optionsString.Length > 0 ? "|" : "")}{String.Join("|", toggleInputList.Where(x => !optionList.Contains(x)))}";
-                if (parent.block.InventoryCount > 1)
-                    optionsString += $"{(optionsString.Length > 0 ? "|" : "")}{String.Join("|", toggleOutputList.Where(x => !optionList.Contains(x)))}";
-                if (parent.block is IMyAssembler)
-                    optionsString += $"{(optionsString.Length > 0 ? "|" : "")}{String.Join("|", toggleAssemblerList.Where(x => !optionList.Contains(x)))}";
+                if (parent.Block.HasInventory)
+                    optionsString += $"{(TextHasLength(optionsString) ? "|" : "")}{String.Join("|", toggleInputList.Where(x => !optionList.Contains(x)))}";
+                if (parent.Block.InventoryCount > 1)
+                    optionsString += $"{(TextHasLength(optionsString) ? "|" : "")}{String.Join("|", toggleOutputList.Where(x => !optionList.Contains(x)))}";
+                if (parent.Block is IMyAssembler)
+                    optionsString += $"{(TextHasLength(optionsString) ? "|" : "")}{String.Join("|", toggleAssemblerList.Where(x => !optionList.Contains(x)))}";
                 if (TextHasLength(optionsString))
                     AppendOption(builder, optionsString);
                 AppendOption(builder, $"Priority={priority}", priority == 1);
@@ -6684,7 +6595,7 @@ namespace IngameScript
                     AppendOption(builder, "LogicAnd=Ingot:Iron<100 | Ore:Iron>=Quota*0.1");
                     AppendOption(builder, "LogicOr=Ingot:Iron<Quota*0.95 | Ingot:Silicon<Quota*0.95");
                 }
-                AppendOption(builder, $"{parent.block.BlockDefinition}");
+                AppendOption(builder, $"{parent.Block.BlockDefinition}");
                 return builder.ToString().TrimEnd();
             }
         }

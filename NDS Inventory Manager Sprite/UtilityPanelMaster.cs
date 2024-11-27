@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using Sandbox.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame;
+using System.Runtime.Remoting.Messaging;
 
 namespace IngameScript
 {
@@ -45,7 +46,10 @@ namespace IngameScript
 
             List<string> fontList = NewStringList;
 
-            public DateTime LastSyncTime = DateTime.MinValue;
+            public DateTime LastSyncTime = DateTime.MinValue, NextStorageTime = DateTime.MinValue;
+
+            Dictionary<string, double> StorageCurrentValues = new Dictionary<string, double>(),
+                                       StorageMaxValues = new Dictionary<string, double>();
 
             #endregion
 
@@ -89,7 +93,7 @@ namespace IngameScript
                     cacheSkip = false;
                     if (cachedDocuments.ContainsKey(tempManagerPanelDefinition.DocumentKey))
                     {
-                        if (Now >= cachedDocuments[tempManagerPanelDefinition.DocumentKey].expirationTime)
+                        if (!parent.scanning && Now >= cachedDocuments[tempManagerPanelDefinition.DocumentKey].expirationTime)
                             cachedDocuments.Remove(tempManagerPanelDefinition.DocumentKey);
                         else cacheSkip = true;
                     }
@@ -201,14 +205,14 @@ namespace IngameScript
                             }
                             else if (i < displayedRows)
                             {
-                                objectSize = new Vector2(multipleColumns ? (surfaceSize.X / 2f) - 5f : surfaceSize.X, surfaceSize.Y / (float)displayedRows);
-                                objectOffset = new Vector2(pair.Key == TextAlignment.RIGHT ? (surfaceSize.X / 2f) + 5f : 0f, (float)i * objectSize.Y);
+                                objectSize = new Vector2(multipleColumns ? (surfaceSize.X / 2f) - 1f : surfaceSize.X, surfaceSize.Y / (float)displayedRows);
+                                objectOffset = new Vector2(pair.Key == TextAlignment.RIGHT ? (surfaceSize.X / 2f) + 1f : 0f, (float)i * objectSize.Y);
                                 foreach (GraphicElement graphicElement in pair.Value[i].Elements)
                                 {
                                     if (PauseTickRun) yield return stateActive;
                                     spriteList.Add(ProcessSprite(
                                         graphicElement,
-                                        positionOffset + objectOffset + new Vector2(surfaceSize.X * graphicElement.StartPointHorizontal, surfaceSize.Y * graphicElement.StartPointVertical),
+                                        positionOffset + objectOffset + new Vector2(objectSize.X * graphicElement.StartPointHorizontal, objectSize.Y * graphicElement.StartPointVertical),
                                         new Vector2(objectSize.X * graphicElement.WidthPercentage, objectSize.Y * graphicElement.HeightPercentage),
                                         tempManagerPanelDefinition.PanelSettings.Font,
                                         surface
@@ -358,7 +362,7 @@ namespace IngameScript
                     {
                         if (PauseTickRun) yield return stateActive;
                         if (i + 1 < centerColumn.Count)
-                            builder.AppendLine(centerColumn[i].PadRight(centerMax));
+                            BuilderAppendLine(builder, centerColumn[i].PadRight(centerMax));
                         else
                             builder.Append(centerColumn[i].PadRight(centerMax));
                     }
@@ -402,7 +406,7 @@ namespace IngameScript
             IEnumerator<FunctionState> ItemPanelState()
             {
                 List<ItemDefinition> items = NewItemDefinitionList;
-                bool belowQuota;
+                bool belowQuota, hasActivity;
                 double minValue, maxValue;
                 while (true)
                 {
@@ -410,8 +414,9 @@ namespace IngameScript
                     items.Clear();
                     items.AddRange(tempManagerPanelDefinition.PanelSettings.Items.ItemList.Values.Select(b => b.ItemReference));
 
-                    // Filter by 'Below Quota'
+                    // Filters
                     belowQuota = tempManagerPanelDefinition.PanelSettings.Options.Contains(PanelOptions.BelowQuota);
+                    hasActivity = tempManagerPanelDefinition.PanelSettings.Options.Contains(PanelOptions.HasActivity);
                     minValue = tempManagerPanelDefinition.PanelSettings.MinimumItemValue;
                     maxValue = tempManagerPanelDefinition.PanelSettings.MaximumItemValue;
                     if (maxValue <= 0) maxValue = double.MaxValue;
@@ -420,7 +425,8 @@ namespace IngameScript
                         if (PauseTickRun) yield return stateActive;
                         if ((belowQuota && items[i].amount >= items[i].currentQuota) ||
                             items[i].amount < minValue ||
-                            items[i].amount > maxValue)
+                            items[i].amount > maxValue ||
+                            (hasActivity && items[i].amountDifference == 0.0))
                             items.RemoveAtFast(i);
                         else
                             i++;
@@ -470,6 +476,12 @@ namespace IngameScript
                         }
                     }
 
+                    if (document.GraphicObjects[centerAlignment].Count == 0)
+                    {
+                        document.GraphicObjects.Clear();
+                        document.GraphicObjects[leftAlignment] = new List<GraphicObject> { GenerateText(tempManagerPanelDefinition.PanelSettings.Items.Count == 0 ? "No Items. Add Items or Categories" : $"Filtered 0/{tempManagerPanelDefinition.PanelSettings.Items.Count} Items") };
+                    }
+
                     // Cache document
                     cachedDocuments[tempManagerPanelDefinition.DocumentKey] = document;
 
@@ -513,7 +525,7 @@ namespace IngameScript
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"H/O Tanks:  {ShortNumber2(typedIndexes[setKeyIndexHydrogenTank].Count, suffixes)}/{ShortNumber2(typedIndexes[setKeyIndexOxygenTank].Count, suffixes)}"));
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"Weapons:    {ShortNumber2(typedIndexes[setKeyIndexGun].Count, suffixes)}"));
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"Reactors:   {ShortNumber2(typedIndexes[setKeyIndexReactor].Count, suffixes)}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText(parent.errorFilter ? $"Errors:     {ShortNumber2(parent.currentErrorCount, suffixes, 0, 6)} of {ShortNumber2(parent.totalErrorCount, suffixes, 0, 6)}" : $"Status:  {ShortNumber2(parent.scriptHealth, null, 3, 6)}%"));
+                    document.GraphicObjects[leftAlignment].Add(GenerateText(parent.errorFilter ? $"Errors:     {ShortNumber2(parent.currentErrorCount, suffixes, 0, 6)} of {ShortNumber2(parent.totalErrorCount, suffixes, 0, 6)}" : $"Status:  {ShortNumber2(parent.scriptHealth, suffixes, 3, 6)}%"));
 
                     tempOutputList.Clear();
                     tempOutputList.AddRange(parent.errorFilter ? parent.outputErrorList : parent.outputList);
@@ -659,20 +671,20 @@ namespace IngameScript
             IEnumerator<FunctionState> CargoPanelState()
             {
                 List<string> categories = NewStringList;
-                Dictionary<string, double> currentValues = new Dictionary<string, double>(),
-                                           maxValues = new Dictionary<string, double>();
                 double current, max;
                 while (true)
                 {
                     GraphicDocument document = new GraphicDocument();
                     document.GraphicObjects[leftAlignment] = new List<GraphicObject>();
-                    currentValues.Clear();
-                    maxValues.Clear();
                     categories.Clear();
                     categories.AddRange(tempManagerPanelDefinition.PanelSettings.Categories);
 
-                    if (categories.Where(x => IsWildCard(x)).Count() > 0)
+                    // Update storage capacities
+                    if (Now >= NextStorageTime)
                     {
+                        StorageCurrentValues.Clear();
+                        StorageMaxValues.Clear();
+
                         foreach (KeyValuePair<string, LongListPlus> kvp in parent.indexesStorageLists)
                         {
                             current = max = 0;
@@ -681,42 +693,37 @@ namespace IngameScript
                                 if (PauseTickRun) yield return stateActive;
                                 if (!parent.IsBlockBad(index))
                                 {
-                                    current += (double)parent.managedBlocks[index].block.GetInventory(0).CurrentVolume;
-                                    max += (double)parent.managedBlocks[index].block.GetInventory(0).MaxVolume;
+                                    current += (double)managedBlocks[index].Block.GetInventory(0).CurrentVolume;
+                                    max += (double)managedBlocks[index].Block.GetInventory(0).MaxVolume;
                                 }
                             }
-                            currentValues[kvp.Key] = current;
-                            maxValues[kvp.Key] = max;
+                            StorageCurrentValues[kvp.Key] = current;
+                            StorageMaxValues[kvp.Key] = max;
                         }
+
+                        NextStorageTime = Now.AddSeconds(1 + Math.Min(4, typedIndexes[setKeyIndexStorage].Count / 25));
+                    }
+
+                    // Draw total storage object
+                    if (categories.Where(x => IsWildCard(x)).Count() > 0)
+                    {
                         current = max = 0;
-                        foreach (string key in currentValues.Keys)
+                        foreach (string key in StorageCurrentValues.Keys)
                         {
                             if (PauseTickRun) yield return stateActive;
-                            current += currentValues[key];
-                            max += maxValues[key];
+                            current += StorageCurrentValues[key];
+                            max += StorageMaxValues[key];
                         }
-                        document.GraphicObjects[leftAlignment].Add(GenerateStorage("All", (float)(current / max)));
+                        document.GraphicObjects[leftAlignment].Add(GenerateStorage("All", max == 0f ? 1f : (float)(current / max)));
                     }
-                    else
-                        foreach (string category in categories)
-                            if (parent.indexesStorageLists.ContainsKey(category))
-                            {
-                                current = max = 0;
-                                foreach (long index in parent.indexesStorageLists[category])
-                                {
-                                    if (PauseTickRun) yield return stateActive;
-                                    if (!parent.IsBlockBad(index))
-                                    {
-                                        current += (double)parent.managedBlocks[index].block.GetInventory(0).CurrentVolume;
-                                        max += (double)parent.managedBlocks[index].block.GetInventory(0).MaxVolume;
-                                    }
-                                }
-                                currentValues[category] = current;
-                                maxValues[category] = max;
-                            }
+
+                    // Draw chosen storage objects
                     foreach (string category in categories)
-                        if (currentValues.ContainsKey(category))
-                            document.GraphicObjects[leftAlignment].Add(GenerateStorage(Formatted(category), (float)(currentValues[category] / maxValues[category])));
+                        if (StorageCurrentValues.ContainsKey(category))
+                            document.GraphicObjects[leftAlignment].Add(GenerateStorage(Formatted(category), StorageMaxValues[category] == 0f ? 1f : (float)(StorageCurrentValues[category] / StorageMaxValues[category])));
+
+                    if (document.GraphicObjects[leftAlignment].Count == 0)
+                        document.GraphicObjects[leftAlignment].Add(GenerateText("No Categories Chosen"));
 
                     // Cache document
                     cachedDocuments[tempManagerPanelDefinition.DocumentKey] = document;
@@ -759,7 +766,7 @@ namespace IngameScript
                     if (!TextHasLength(dataSource) && (parent.GetKeyBool(setKeyAutoTagBlocks)))
                     {
                         tempSettingsPanelDefinition.DataSource = $"{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}{tempSettingsPanelDefinition.PanelSettings}{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}";
-                        tempSettingsPanelDefinition.Parent.block.CustomName = tempSettingsPanelDefinition.Parent.block.CustomName.Replace(panelTag, panelTag.ToUpper());
+                        tempSettingsPanelDefinition.Parent.Block.CustomName = tempSettingsPanelDefinition.Parent.Block.CustomName.Replace(panelTag, panelTag.ToUpper());
                     }
 
                     if (TextHasLength(dataSource) && !StringsMatch(dataSource, tempSettingsPanelDefinition.PanelSettings.SettingBackup))
@@ -783,11 +790,12 @@ namespace IngameScript
                         dataLines.Clear();
                     }
 
-                    if (tempSettingsPanelDefinition.PanelSettings.LastUpdateTime < parent.itemAddedOrChanged ||
-                        (tempSettingsPanelDefinition.PanelSettings.Items.Count == 0 && (TextHasLength(tempSettingsPanelDefinition.PanelSettings.ItemSearchString) || tempSettingsPanelDefinition.PanelSettings.Categories.Count > 0)))
+                    if (tempSettingsPanelDefinition.PanelSettings.Type == PanelType.Item &&
+                        (tempSettingsPanelDefinition.PanelSettings.LastUpdateTime < parent.itemAddedOrChanged ||
+                        (tempSettingsPanelDefinition.PanelSettings.Items.Count == 0 && (TextHasLength(tempSettingsPanelDefinition.PanelSettings.ItemSearchString) || tempSettingsPanelDefinition.PanelSettings.Categories.Count > 0))))
                     {
                         tempSettingsPanelDefinition.PanelSettings.Items.Clear();
-                        string searchString = $"{tempSettingsPanelDefinition.PanelSettings.ItemSearchString}{(TextHasLength(tempSettingsPanelDefinition.PanelSettings.ItemSearchString) ? "|" : "")}{String.Join("|", tempSettingsPanelDefinition.PanelSettings.Categories.Select(c => $"{c}:*"))}";
+                        string searchString = $"{tempSettingsPanelDefinition.PanelSettings.ItemSearchString}{(TextHasLength(tempSettingsPanelDefinition.PanelSettings.ItemSearchString) && tempSettingsPanelDefinition.PanelSettings.Categories.Count > 0 ? "|" : "")}{String.Join("|", tempSettingsPanelDefinition.PanelSettings.Categories.Select(c => $"{c}:*"))}";
                         while (!parent.MatchItems2(searchString, tempSettingsPanelDefinition.PanelSettings.Items)) yield return stateActive;
                         tempSettingsPanelDefinition.PanelSettings.LastUpdateTime = Now;
                     }
@@ -801,7 +809,7 @@ namespace IngameScript
                         {
                             tempSettingsPanelDefinition.DataSource = $"{dataPrevious}{(TextHasLength(dataPrevious) ? newLine : "")}{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}{tempSettingsPanelDefinition.PanelSettings}{newLine}{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}{(TextHasLength(dataAfter) ? newLine : "")}{dataAfter}";
 
-                            tempSettingsPanelDefinition.Parent.block.CustomName = tempSettingsPanelDefinition.Parent.block.CustomName.Replace(panelTag, panelTag.ToUpper());
+                            tempSettingsPanelDefinition.Parent.Block.CustomName = tempSettingsPanelDefinition.Parent.Block.CustomName.Replace(panelTag, panelTag.ToUpper());
                         }
                     }
 
@@ -817,7 +825,7 @@ namespace IngameScript
 
             void BlockStatus(long index, ref int assembling, ref int disassembling, ref int idle, ref int disabled, SortedList<string, int> assemblyList, SortedList<string, int> disassemblyList)
             {
-                IMyTerminalBlock block = managedBlocks[index].block;
+                IMyTerminalBlock block = managedBlocks[index].Block;
                 MyInventoryItem item;
                 MyProductionItem productionItem;
                 string key;
@@ -895,21 +903,15 @@ namespace IngameScript
                 }
             }
 
-            string BlockStatusTitle(string title, int disabled)
-            {
-                string formTitle = title;
-                if (disabled > 0)
-                    formTitle += $" -({ShortNumber2(disabled, tempManagerPanelDefinition.PanelSettings.Suffixes)})";
-                return formTitle;
-            }
+            string BlockStatusTitle(string title, int disabled) => $"{title}{(disabled > 0 ? $" -{ShortNumber2(disabled, tempManagerPanelDefinition.PanelSettings.Suffixes)}" : "")}";
 
             GraphicObject GenerateStorage(string text, float percent) =>
                 new GraphicObject(new List<GraphicElement>
                 {
                     new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true),
-                    new GraphicElement(text, tempManagerPanelDefinition.PanelSettings.TextColor, 0.75f),
+                    new GraphicElement(text.PadRight(9), tempManagerPanelDefinition.PanelSettings.TextColor, 0.75f),
                     ProgressBarBack(0.25f, 1, 0.75f, 0), // Progress bar back @ 75%,0% x 25%*100%
-                    ProgressBarFront(percent, 0.25f, 1, 0.75f, 0), // Progress bar front @ 75%,0% x 25%*100%
+                    ProgressBarFront(percent, 0.25f, 1, 0.75f, 0, true), // Progress bar front @ 75%,0% x 25%*100%
                     new GraphicElement($"{TruncateNumber(percent * 100f, 2)}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.25f, 1, 0.75f)
                 });
 
@@ -931,12 +933,13 @@ namespace IngameScript
                 {
                     new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true), // Background @ 0%,0% x 100%*100%
                     new GraphicElement(ShortenName(item.displayName, tempManagerPanelDefinition.PanelSettings.NameLength, true), tempManagerPanelDefinition.PanelSettings.TextColor, 0.5f, 0.5f), // Name @ 50%,0% x 50%*50%
-                    new GraphicElement($"{ShortNumber2(item.amount, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}/{ShortNumber2(item.currentQuota, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.35f, 0.5f, 0.5f), // Number @ 50%,0% x 35%*50%
-                    ProgressBarBack(0.2f, 0.5f, 0.8f, 0), // Progress bar back @ 80%,0% x 20%*50%
-                    ProgressBarFront(percent, 0.2f, 0.5f, 0.8f, 0), // Progress bar front @ 80%,0% x 20%*50%
-                    new GraphicElement($"{TruncateNumber(displayedPercent, 2):N2}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.2f, 0.5f, 0.8f), // Progress bar number @ 80%,0% x 20%*50%
-                    new GraphicElement($"{item.AssemblyStatus}", tempManagerPanelDefinition.PanelSettings.TextColor, 0.75f, 0.5f, 0, 0.5f), // Status @ 0%,50% x 75%*50%
-                    new GraphicElement($"{ShortNumber2(item.amountDifference, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.25f, 0.5f, 0.75f, 0.5f) // Rate @ 75%,50% x 25%*50%
+                    new GraphicElement($"{ShortNumber2(item.amount, tempManagerPanelDefinition.PanelSettings.Suffixes, tempManagerPanelDefinition.PanelSettings.Decimals, 6)}/{ShortNumber2(item.currentQuota, tempManagerPanelDefinition.PanelSettings.Suffixes, tempManagerPanelDefinition.PanelSettings.Decimals, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.35f, 0.5f, 0.5f), // Number @ 50%,0% x 35%*50%
+                    ProgressBarBack(0.15f, 0.5f, 0.85f, 0), // Progress bar back @ 85%,0% x 15%*50%
+                    ProgressBarFront(percent, 0.15f, 0.5f, 0.85f, 0), // Progress bar front @ 80%,0% x 20%*50%
+                    new GraphicElement($"{TruncateNumber(displayedPercent, 2):N2}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.15f, 0.5f, 0.85f), // Progress bar number @ 80%,0% x 20%*50%
+                    new GraphicElement($"Status: {item.AssemblyStatus,-16}", tempManagerPanelDefinition.PanelSettings.TextColor, 0.7f, 0.5f, 0, 0.5f), // Status @ 0%,50% x 70%*50%
+                    new GraphicElement("Rate: ", tempManagerPanelDefinition.PanelSettings.TextColor, 0.1f, 0.5f, 0.7f, 0.5f), // Rate @ 70%,50% x 10%*50%
+                    new GraphicElement($"{(item.amountDifference > 0.0 ? "+" : item.amountDifference == 0.0 ? "+/-" : "")}{ShortNumber2(item.amountDifference, tempManagerPanelDefinition.PanelSettings.Suffixes, tempManagerPanelDefinition.PanelSettings.Decimals, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.2f, 0.5f, 0.8f, 0.5f) // Rate @ 80%,50% x 20%*50%
                 });
             }
 
@@ -964,7 +967,7 @@ namespace IngameScript
                 {
                     new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true), // Background @ 0%,0% x 100%*100%
                     new GraphicElement(ShortenName(item.displayName, tempManagerPanelDefinition.PanelSettings.NameLength, true), tempManagerPanelDefinition.PanelSettings.TextColor, 0.6f), // Name @ 0%,0% x 60%*100%
-                    new GraphicElement($"{ShortNumber2(item.amount, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}/{ShortNumber2(item.currentQuota, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.4f, 1, 0.6f) // Number @ 60%,0% x 40%*100%
+                    new GraphicElement($"{ShortNumber2(item.amount, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}/{ShortNumber2(item.currentQuota, tempManagerPanelDefinition.PanelSettings.Suffixes, tempManagerPanelDefinition.PanelSettings.Decimals, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.4f, 1, 0.6f) // Number @ 60%,0% x 40%*100%
                 });
 
             GraphicObject GenerateStandardItem(ItemDefinition item)
@@ -981,7 +984,7 @@ namespace IngameScript
                 {
                     new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true), // Background @ 0%,0% x 100%*100%
                     new GraphicElement(ShortenName(item.displayName, tempManagerPanelDefinition.PanelSettings.NameLength, true), tempManagerPanelDefinition.PanelSettings.TextColor, 0.5f), // Name @ 0%,0% x 50%*100%
-                    new GraphicElement($"{ShortNumber2(item.amount, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}/{ShortNumber2(item.currentQuota, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.35f, 1, 0.5f), // Number @ 50%,0% x 35%*100%
+                    new GraphicElement($"{ShortNumber2(item.amount, tempManagerPanelDefinition.PanelSettings.Suffixes, 2, 6)}/{ShortNumber2(item.currentQuota, tempManagerPanelDefinition.PanelSettings.Suffixes, tempManagerPanelDefinition.PanelSettings.Decimals, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.35f, 1, 0.5f), // Number @ 50%,0% x 35%*100%
                     ProgressBarBack(0.15f, 1, 0.85f, 0), // Progress bar back @ 85%,0% x 15%*100%
                     ProgressBarFront(percent, 0.15f, 1, 0.85f, 0), // Progress bar front @ 85%,0% x 15%*100%
                     new GraphicElement($"{TruncateNumber(displayedPercent, 2):N2}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.15f, 1, 0.85f) // Progress bar number @ 85%,0% x 15%*100%
@@ -998,10 +1001,10 @@ namespace IngameScript
                     y,
                     true);
 
-            GraphicElement ProgressBarFront(float percent, float width, float height, float x, float y) =>
+            GraphicElement ProgressBarFront(float percent, float width, float height, float x, float y, bool invertColor = false) =>
                 new GraphicElement(
                     "SquareSimple",
-                    new Color((int)(230.0 * (1f - Math.Min(1f, percent))), (int)(230.0 * Math.Min(1f, percent)), 0, 220),
+                    invertColor ? new Color ((int)(230.0 * Math.Min(1f, percent)), (int)(230.0 * (1f - Math.Min(1f, percent))), 0, 220) : new Color((int)(230.0 * (1f - Math.Min(1f, percent))), (int)(230.0 * Math.Min(1f, percent)), 0, 220),
                     width * Math.Min(1f, percent),
                     height,
                     x,
@@ -1135,13 +1138,13 @@ namespace IngameScript
 
             public DateTime NextUpdateTime = Now;
 
-            public IMyTextSurface Surface => Provider ? ((IMyTextSurfaceProvider)Parent.block).GetSurface(SurfaceIndex) : (IMyTextPanel)Parent.block;
+            public IMyTextSurface Surface => Provider ? ((IMyTextSurfaceProvider)Parent.Block).GetSurface(SurfaceIndex) : (IMyTextPanel)Parent.Block;
 
             public string DocumentKey => PanelSettings.DocumentKey;
 
-            public string EntityFlickerID => $"{Parent.block.EntityId}{(Provider ? $":{SurfaceIndex}" : "")}";
+            public string EntityFlickerID => $"{Parent.Block.EntityId}{(Provider ? $":{SurfaceIndex}" : "")}";
 
-            public bool Provider => !(Parent.block is IMyTextPanel);
+            public bool Provider => !(Parent.Block is IMyTextPanel);
 
             public string DataSource
             {
@@ -1185,7 +1188,7 @@ namespace IngameScript
 
             public List<PanelOptions> Options = new List<PanelOptions>();
 
-            public double MinimumItemValue = 0, MaximumItemValue = 0, UpdateDelay = 1, OffsetMultiplier = 1, TextMultiplier = 1;
+            public double MinimumItemValue = 0, MaximumItemValue = double.MaxValue, UpdateDelay = 1, OffsetMultiplier = 1, TextMultiplier = 1;
 
             public int Rows = -1, NameLength = 18, Decimals = 2;
 
@@ -1209,9 +1212,12 @@ namespace IngameScript
             {
                 if (parent != null)
                     Parent = parent;
+                MinimumItemValue = 0;
+                MaximumItemValue = double.MaxValue;
                 ItemSearchString = SpanID = SpanChildID = documentKey = "";
                 Items.Clear();
                 Options.Clear();
+                Categories.Clear();
             }
 
             public bool LoadSetting(string text)
@@ -1367,7 +1373,7 @@ namespace IngameScript
                 AppendOption(builder, $"Sorting={(SortType == PanelItemSorting.Alphabetical ? String.Join("/", GetEnumList<PanelItemSorting>()) : $"{SortType}")}", SortType == PanelItemSorting.Alphabetical);
                 AppendOption(builder, $"Options={(Options.Count == 0 ? String.Join("|", GetEnumList<PanelOptions>()) : String.Join("|", Options))}", Options.Count == 0);
                 AppendOption(builder, $"Minimum Value={MinimumItemValue}", MinimumItemValue <= 0);
-                AppendOption(builder, $"Maximum Value={MaximumItemValue}", MaximumItemValue <= 0);
+                AppendOption(builder, $"Maximum Value={(MaximumItemValue < double.MaxValue ? $"{MaximumItemValue}" : "0")}", MaximumItemValue < double.MaxValue);
                 BuilderAppendLine(builder, $"Number Suffixes={String.Join("|", Suffixes)}");
                 BuilderAppendLine(builder, $"Text Color={ColorToString(TextColor)}");
                 BuilderAppendLine(builder, $"Number Color={ColorToString(NumberColor)}");
@@ -1384,6 +1390,5 @@ namespace IngameScript
                 return builder.ToString().Trim();
             }
         }
-
     }
 }
