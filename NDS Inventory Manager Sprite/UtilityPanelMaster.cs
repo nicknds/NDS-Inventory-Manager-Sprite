@@ -46,7 +46,7 @@ namespace IngameScript
 
             List<string> fontList = NewStringList;
 
-            public DateTime LastSyncTime = DateTime.MinValue, NextStorageTime = DateTime.MinValue;
+            DateTime NextStorageTime = DateTime.MinValue;
 
             Dictionary<string, double> StorageCurrentValues = new Dictionary<string, double>(),
                                        StorageMaxValues = new Dictionary<string, double>();
@@ -670,7 +670,8 @@ namespace IngameScript
 
             IEnumerator<FunctionState> CargoPanelState()
             {
-                List<string> categories = NewStringList;
+                List<string> categories = NewStringList, keys = NewStringList;
+                List<long> indexes = NewLongList;
                 double current, max;
                 while (true)
                 {
@@ -684,11 +685,14 @@ namespace IngameScript
                     {
                         StorageCurrentValues.Clear();
                         StorageMaxValues.Clear();
+                        PopulateClassList(keys, parent.indexesStorageLists.Keys);
 
-                        foreach (KeyValuePair<string, LongListPlus> kvp in parent.indexesStorageLists)
+                        foreach (string key in keys)
                         {
+                            if (!parent.indexesStorageLists.ContainsKey(key)) continue;
                             current = max = 0;
-                            foreach (long index in kvp.Value)
+                            PopulateStructList(indexes, parent.indexesStorageLists[key]);
+                            foreach (long index in indexes)
                             {
                                 if (PauseTickRun) yield return stateActive;
                                 if (!parent.IsBlockBad(index))
@@ -697,8 +701,8 @@ namespace IngameScript
                                     max += (double)managedBlocks[index].Block.GetInventory(0).MaxVolume;
                                 }
                             }
-                            StorageCurrentValues[kvp.Key] = current;
-                            StorageMaxValues[kvp.Key] = max;
+                            StorageCurrentValues[key] = current;
+                            StorageMaxValues[key] = max;
                         }
 
                         NextStorageTime = Now.AddSeconds(1 + Math.Min(4, typedIndexes[setKeyIndexStorage].Count / 25));
@@ -1203,7 +1207,7 @@ namespace IngameScript
                 get
                 {
                     if (!TextHasLength(documentKey))
-                        documentKey = Type == PanelType.Span && TextHasLength(SpanID) ? SpanID : $"{Type}:{Font}:{String.Join("|", Categories)}:{String.Join("|", Suffixes)}:{Items}:{DisplayType}:{SortType}:{String.Join("|", Options)}:{MinimumItemValue}:{MaximumItemValue}:{NameLength}:{Decimals}:{TextColor}:{NumberColor}:{BackColor}";
+                        documentKey = Type == PanelType.Span && TextHasLength(SpanID) ? SpanID : $"{Type}:{String.Join("|", Categories)}:{String.Join("|", Suffixes)}:{Items}:{DisplayType}:{SortType}:{String.Join("|", Options)}:{MinimumItemValue}:{MaximumItemValue}:{NameLength}:{Decimals}:{TextColor}:{NumberColor}:{BackColor}";
                     return documentKey;
                 }
             }
@@ -1381,9 +1385,9 @@ namespace IngameScript
                 AppendOption(builder, $"Rows={Rows}", Rows < 0);
                 AppendOption(builder, $"Name Length={NameLength}", NameLength != 18);
                 AppendOption(builder, $"Decimals={Decimals}", Decimals != 2);
-                BuilderAppendLine(builder, $"Update Delay={UpdateDelay}");
-                AppendOption(builder, $"Offset Multiplier={OffsetMultiplier}");
-                AppendOption(builder, $"Text Multiplier={TextMultiplier}");
+                AppendOption(builder, $"Update Delay={UpdateDelay}", UpdateDelay != 1.0);
+                AppendOption(builder, $"Offset Multiplier={OffsetMultiplier}", OffsetMultiplier == 1.0);
+                AppendOption(builder, $"Text Multiplier={TextMultiplier}", TextMultiplier == 1.0);
                 AppendOption(builder, $"Span ID={SpanID}", !TextHasLength(SpanID));
                 AppendOption(builder, $"Span Child ID={SpanChildID}", !TextHasLength(SpanChildID));
 

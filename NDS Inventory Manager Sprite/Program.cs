@@ -63,8 +63,8 @@ namespace IngameScript
         {
             get
             {
-                if (itemListAllItems.Count > 0) return itemListAllItems;
-                itemListMain.Values.ToList().ForEach(b => itemListAllItems.AddRange(b.Values));
+                if (itemListAllItems.Count == 0)
+                    itemListAllItems.AddRange(itemListMain.Values.SelectMany(b => b.Values));
                 return itemListAllItems;
             }
         }
@@ -531,14 +531,14 @@ namespace IngameScript
             toolKeyword, globalFilterKeyword,
             panelTag, optionBlockFilter, itemCategoryString;
 
-        static double settingVersion = 5.29, buildVersion = 283, torchAverage = 0, tickWeight = 0.005;
+        static double settingVersion = 5.29, buildVersion = 284, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
         #region Values
 
         bool
-            booted = false, saving, loading, fillingBottles = false,
+            saving, loading, fillingBottles = false,
             reset = false, autoLoadSettings = true, correctScript = false, correctVersion = false,
             allowEcho = true,
             prioritySystemActivated = false, errorFilter = false, useDynamicQuota, increaseDynamicQuotaWhenLow, update = false,
@@ -624,18 +624,16 @@ namespace IngameScript
 
             saving = !(loading = TextHasLength(Me.CustomData));
 
-            FillDict();
+            if (UseVanillaLibrary)
+                FillDict();
 
             foreach (FunctionIdentifier identifier in Enum.GetValues(typeof(FunctionIdentifier)))
                 if (identifier != FunctionIdentifier.Idle)
                     InitializeStateV2(identifier);
-
-            booted = true;
         }
 
         void FillDict()
         {
-            if (!UseVanillaLibrary || booted) return;
             AddItemDef("Bulletproof Glass", "BulletproofGlass", componentType, "BulletproofGlass");
             AddItemDef(canvasType, canvasType, componentType, PositionPrefix("0030", canvasType));
             AddItemDef("Computer", "Computer", componentType, "ComputerComponent");
@@ -1414,10 +1412,7 @@ namespace IngameScript
                                 case "orekeys":
                                     string[] oreKeys = data.Substring(1, data.Length - 2).Split('|');
                                     if (oreKeys.Length > 0)
-                                    {
-                                        definition.oreKeys.Clear();
-                                        definition.oreKeys.AddRange(oreKeys);
-                                    }
+                                        PopulateClassList(definition.oreKeys, oreKeys);
                                     if (definition.oreKeys.Count == 0 && IsIngot(definition.typeID))
                                         definition.oreKeys.Add(subtypeID);
 
@@ -1554,7 +1549,7 @@ namespace IngameScript
 
                         if (key == "script")
                         {
-                            if (stringValue == scriptName)
+                            if (StringsMatch(stringValue, scriptName))
                                 correctScript = true;
                         }
                         else if (key == "version")
@@ -2441,14 +2436,12 @@ namespace IngameScript
 
             while (true)
             {
-                panelIndexes.Clear();
-                panelIndexes.AddRange(typedIndexes[setKeyIndexPanel]);
+                PopulateStructList(panelIndexes, typedIndexes[setKeyIndexPanel]);
                 foreach (long index in panelIndexes)
                 {
                     if (IsBlockBad(index)) continue;
                     if (PauseTickRun) yield return stateActive;
-                    panels.Clear();
-                    panels.AddRange(managedBlocks[index].panelDefinitionList.Values);
+                    PopulateClassList(panels, managedBlocks[index].panelDefinitionList.Values);
                     foreach (PanelClass panel in panels)
                     {
                         if (panel.NextUpdateTime > Now || panel.PanelSettings.Type == PanelType.None) continue;
@@ -2493,8 +2486,7 @@ namespace IngameScript
                 uniqueIndexSet.Clear();
                 if (tempOrderByPriority && prioritySystemActivated)
                 {
-                    orderedList.Clear();
-                    orderedList.AddRange(tempOrderByPriorityIndexes);
+                    PopulateStructList(orderedList, tempOrderByPriorityIndexes);
                     sortableObjects = orderedList.OrderByDescending(x => managedBlocks[x].Settings.priority);
                     tempOrderByPriorityIndexes.Clear();
                     foreach (long index in sortableObjects)
@@ -2679,6 +2671,8 @@ namespace IngameScript
                     {
                         if (PauseTickRun) yield return stateActive;
 
+                        if (LeadsString(settingArray[i], panelTag)) break;
+
                         if (LeadsString(settingArray[i], "^") && settingList.Count > 0)
                             settingList[settingList.Count - 1] += $"||{settingArray[i].Substring(1).Trim()}";
                         else
@@ -2729,7 +2723,7 @@ namespace IngameScript
 
             while (true)
             {
-                tempBlueprintList.AddRange(blueprintList.Values);
+                PopulateClassList(tempBlueprintList, blueprintList.Values);
                 foreach (Blueprint blueprint in tempBlueprintList)
                 {
                     if (PauseTickRun) yield return stateActive;
@@ -2739,7 +2733,6 @@ namespace IngameScript
                         while (!DistributeBlueprint(blueprint, queueAmount, typedIndexes[setKeyIndexAssemblers]))
                             yield return stateActive;
                 }
-                tempBlueprintList.Clear();
                 int queuedIngots = settingsInts[setKeySurvivalKitQueuedIngots];
                 if (queuedIngots > 0)
                 {
@@ -2760,7 +2753,7 @@ namespace IngameScript
 
             while (true)
             {
-                tempBlueprintList.AddRange(blueprintList.Values);
+                PopulateClassList(tempBlueprintList, blueprintList.Values);
                 foreach (Blueprint blueprint in tempBlueprintList)
                 {
                     if (PauseTickRun) yield return stateActive;
@@ -2770,7 +2763,6 @@ namespace IngameScript
                         while (!DistributeBlueprint(blueprint, queueAmount, typedIndexes[setKeyIndexAssemblers], disassemblyMode))
                             yield return stateActive;
                 }
-                tempBlueprintList.Clear();
                 yield return stateContinue;
             }
         }
@@ -3323,7 +3315,7 @@ namespace IngameScript
                             if (moveAmount <= 0)
                                 continue;
                             currentAssembler.RemoveQueueItem(i, moveAmount);
-                            indexList.AddRange(blueprintInformation[currentMode][key].acceptingIndexList);
+                            PopulateStructList(indexList, blueprintInformation[currentMode][key].acceptingIndexList);
                             for (int z = 0; z < indexList.Count; z += 0)
                             {
                                 if (PauseTickRun) yield return stateActive;
@@ -3334,7 +3326,6 @@ namespace IngameScript
                             }
                             if (indexList.Count > 0)
                                 while (!DistributeBlueprint(new Blueprint { amount = moveAmount, blueprintID = BlueprintSubtype(currentProductionList[i]) }, moveAmount, indexList, currentMode, false)) yield return stateActive;
-                            indexList.Clear();
                         }
                     }
                     currentProductionList.Clear();
@@ -4020,6 +4011,7 @@ namespace IngameScript
                 if (queueAssembly)
                     while (!AddAssemblyNeeded(blueprints))
                         yield return stateActive;
+
                 yield return stateContinue;
             }
         }
@@ -4471,7 +4463,6 @@ namespace IngameScript
                     if (currentDefinition.Settings.logicComparisons.Count > 0)
                         typedIndexes[setKeyIndexLogic].Add(currentBlock.EntityId);
                 }
-                panelMaster.LastSyncTime = Now;
 
                 // ----------------------------------------------------
                 // ------------- Final Organization -------------
@@ -4506,6 +4497,8 @@ namespace IngameScript
 
         bool ProcessBlockOptions(BlockDefinition managedBlock)
         {
+            if (managedBlock.Block == Me) return true;
+
             selfContainedIdentifier = FunctionIdentifier.Processing_Block_Options;
 
             if (!IsStateRunning)
@@ -5457,6 +5450,17 @@ namespace IngameScript
 
         #region Methods
 
+        static void PopulateClassList<T>(List<T> destination, IEnumerable<T> source) where T : class
+        {
+            destination.Clear();
+            destination.AddRange(source);
+        }
+
+        static void PopulateStructList<T>(List<T> destination, IEnumerable<T> source) where T: struct
+        {
+            destination.Clear();
+            destination.AddRange(source);
+        }
 
         static bool AppendSearchString(StringBuilder builder, string searchString, string prefix)
         {
@@ -5471,8 +5475,7 @@ namespace IngameScript
 
         void PopulateItemList(List<ItemDefinition> list)
         {
-            list.Clear();
-            list.AddRange(GetAllItems);
+            PopulateClassList(list, GetAllItems);
         }
 
         void OptionalEcho(string text, bool condition)
@@ -5488,7 +5491,7 @@ namespace IngameScript
 
             stateRecords[identifier].essential = essential;
 
-            if (!booted) stateRecords[identifier].enumerator.MoveNext();
+            stateRecords[identifier].enumerator.MoveNext();
         }
 
         void InitializeStateV2(FunctionIdentifier identifier)
