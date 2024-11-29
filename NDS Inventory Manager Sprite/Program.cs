@@ -44,6 +44,8 @@ namespace IngameScript
         double overheatAverage { get { return OverheatAverage; } set { OverheatAverage = value; } }
         double actionLimiterMultiplier { get { return ActionLimiterMultiplier; } set { ActionLimiterMultiplier = value; } }
         double runTimeLimiter { get { return RunTimeLimiter; } set { RunTimeLimiter = value; } }
+        double actionPercentage => (double)Runtime.CurrentInstructionCount / (double)Runtime.MaxInstructionCount;
+        double runtimePercentage => Math.Min(1, torchAverage / runTimeLimiter);
 
         int echoDelay => EchoDelay;
 
@@ -77,8 +79,8 @@ namespace IngameScript
         {
             { "1/2 Global Tags", new SortedList<string, string>
                 {
-                    { setKeyExclusion, "exclude" }, { setKeyIncludeGrid, "includeGrid" }, { setKeyCrossGrid, "crossGrid" },
-                    { setKeyPanel, "[nds]" }, { setKeyGlobalFilter, "" }, { setKeyExcludeGrid, "excludeGrid" }, { setKeyOptionBlockFilter, "" }
+                    { setKeyExclusion, "exclude" }, { setKeyCrossGrid, "crossGrid" },
+                    { setKeyPanel, "[nds]" }, { setKeyGlobalFilter, "" }, { setKeyOptionBlockFilter, "" }
                 }
             },
             { "2/2 Default Categories", new SortedList<string, string>
@@ -412,7 +414,6 @@ namespace IngameScript
             suffixesTemplate = "K|M|B|T",
             setKeyExclusion = "exclusionKeyword", //modifier tags
             setKeyIncludeGrid = "includeGridKeyword",
-            setKeyExcludeGrid = "excludeGridKeyword",
             setKeyCrossGrid = "crossGridControlKeyword",
             setKeyGlobalFilter = "globalFilterKeyword",
             setKeyOptionBlockFilter = "optionHeader",
@@ -531,7 +532,7 @@ namespace IngameScript
             toolKeyword, globalFilterKeyword,
             panelTag, optionBlockFilter, itemCategoryString;
 
-        static double settingVersion = 5.29, buildVersion = 284, torchAverage = 0, tickWeight = 0.005;
+        static double settingVersion = 5.29, buildVersion = 286, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
@@ -562,7 +563,8 @@ namespace IngameScript
             allowedExcessPercent = 0,
             delayResetIdleAssembler = 45,
             scriptHealth = 100, tempTransferAmount, tempStorageMax, tempDistributeItemMax,
-            tempDistributeBlueprintAmount, tempInsertBlueprintAmount, tempRemoveBlueprintAmount, oreMinimum = 0.5;
+            tempDistributeBlueprintAmount, tempInsertBlueprintAmount, tempRemoveBlueprintAmount, oreMinimum = 0.5,
+            dynamicActionMultiplier = 1;
 
         long tempStorageBlockIndex;
 
@@ -1726,7 +1728,7 @@ namespace IngameScript
             if (!IsStateRunning)
             {
                 tempLogicComparisons = logicComparisons;
-                tempProcessLogicData = data;
+                tempProcessLogicData = data.Replace("┤", "|");
             }
 
             return RunStateManager;
@@ -4386,9 +4388,11 @@ namespace IngameScript
                                 {
                                     if (PauseTickRun) yield return stateActive;
                                     if (storeAllCategories || currentDefinition.Settings.storageCategories.Contains(pair.Key, stringComparer))
+                                    {
                                         pair.Value.Add(index);
-                                    if (currentPriority)
-                                        priorityCategories.Add(pair.Key);
+                                        if (currentPriority)
+                                            priorityCategories.Add(pair.Key);
+                                    }
                                 }
                             }
                         }
@@ -5340,12 +5344,11 @@ namespace IngameScript
 
         bool UnavailableActions()
         {
-            double mult = 1;
-            mult = Math.Max(0.00001, Math.Min(mult, overheatAverage > 0.0 ? 1.0 - (torchAverage / (overheatAverage * 1.001)) : 1.0 - (torchAverage / (runTimeLimiter * 2.0))));
+            dynamicActionMultiplier = Math.Max(0.00001, Math.Min(1, overheatAverage > 0.0 ? 1.0 - (torchAverage / (overheatAverage * 1.001)) : 1.0 - (torchAverage / (runTimeLimiter * 2.0))));
 
             return
-            Runtime.CurrentInstructionCount >= (Runtime.MaxInstructionCount * actionLimiterMultiplier * mult) ||
-            (Now - tickStartTime).TotalMilliseconds >= runTimeLimiter * mult;
+            Runtime.CurrentInstructionCount >= (Runtime.MaxInstructionCount * actionLimiterMultiplier * dynamicActionMultiplier) ||
+            (Now - tickStartTime).TotalMilliseconds >= runTimeLimiter * dynamicActionMultiplier;
         }
 
         bool StateManager(FunctionIdentifier identifier, bool updateStatus = true)
@@ -6090,7 +6093,7 @@ namespace IngameScript
 #pragma warning restore CS0108 // Member hides inherited member; missing new keyword
         }
 
-        public class BlueprintSpreadInformation
+        class BlueprintSpreadInformation
         {
             public List<long> acceptingIndexList = NewLongList;
 
@@ -6113,11 +6116,11 @@ namespace IngameScript
 
             public FunctionState lastStatus = stateContinue;
 
-            public int currentTicks = 0, currentActions = 0, lastTicks = 0, lastActions = 0, runs = 0,
+            int currentTicks = 0, currentActions = 0, lastTicks = 0, lastActions = 0, runs = 0,
                        minTicks = 0, maxTicks = 0, minActions = 0, maxActions = 0;
-            public TimeSpan
+            TimeSpan
                 minSpan = TimeSpan.Zero, maxSpan = TimeSpan.Zero, currentSpan = TimeSpan.Zero, lastSpan = TimeSpan.Zero;
-            public double averageTime = 0, averageActions = 0;
+            double averageTime = 0, averageActions = 0;
             public decimal health = 100m;
             public bool essential = false;
 
@@ -6215,15 +6218,14 @@ namespace IngameScript
             }
         }
 
-        public class OutputObject
+        class OutputObject
         {
             public string text = "";
             public int count = 1;
             public string Output => count > 1 ? $"{text} x{count}" : text;
-
         }
 
-        public class SortableObject
+        class SortableObject
         {
             public double amount = 0;
             public string key = "", text = "";
@@ -6231,7 +6233,7 @@ namespace IngameScript
             public long numberLong = 0;
         }
 
-        public class Blueprint
+        class Blueprint
         {
             public string blueprintID = "", typeID = "", subtypeID = "";
             public double amount = 0, multiplier = 1;
@@ -6291,7 +6293,7 @@ namespace IngameScript
 
             public bool IsEmpty => Count == 0;
 
-            public bool TrackAmounts;
+            bool TrackAmounts;
 
             public ItemEntry this[int index]
             {
@@ -6395,7 +6397,7 @@ namespace IngameScript
 
             public override string ToString()
             {
-                return String.Join("|", ItemList.Select(b => $"{(b.Value.ItemCount != null ? $"{b.Value.ItemCount.count}:" : "")}{b.Value.ItemReference.FullID}"));
+                return String.Join("|", ItemList.Select(b => $"{(TrackAmounts && b.Value.ItemCount != null ? $"{b.Value.ItemCount.count}:" : "")}{b.Value.ItemReference.FullID}"));
             }
         }
 
@@ -6436,7 +6438,7 @@ namespace IngameScript
             }
         }
 
-        public class PotentialAssembler
+        class PotentialAssembler
         {
             public long index;
             public bool empty, specific;
@@ -6603,7 +6605,7 @@ namespace IngameScript
             }
         }
 
-        public class ItemCountRecord
+        class ItemCountRecord
         {
             public double count = 0, disassembling = 0;
             public DateTime countTime = Now;
@@ -6629,9 +6631,9 @@ namespace IngameScript
 
             public List<string> oreKeys = NewStringList;
 
-            public List<ItemCountRecord> countRecordList = new List<ItemCountRecord>();
+            List<ItemCountRecord> countRecordList = new List<ItemCountRecord>();
 
-            public DateTime countRecordTime = Now, dynamicQuotaTime = Now;
+            DateTime countRecordTime = Now, dynamicQuotaTime = Now;
 
             public MyItemType ItemType => new MyItemType(typeID, subtypeID);
 

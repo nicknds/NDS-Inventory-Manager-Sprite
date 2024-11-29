@@ -6,7 +6,6 @@ using System.Linq;
 using System.Text;
 using Sandbox.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame;
-using System.Runtime.Remoting.Messaging;
 
 namespace IngameScript
 {
@@ -411,8 +410,7 @@ namespace IngameScript
                 while (true)
                 {
                     // Populate temporary list
-                    items.Clear();
-                    items.AddRange(tempManagerPanelDefinition.PanelSettings.Items.ItemList.Values.Select(b => b.ItemReference));
+                    PopulateClassList(items, tempManagerPanelDefinition.PanelSettings.Items.ItemList.Values.Select(b => b.ItemReference));
 
                     // Filters
                     belowQuota = tempManagerPanelDefinition.PanelSettings.Options.Contains(PanelOptions.BelowQuota);
@@ -517,6 +515,7 @@ namespace IngameScript
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"NDS Inventory Manager v{buildVersion}"));
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"{parent.currentMajorFunction}".Replace("_", " ")));
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"Runtime:    {parent.ShortMSTime(torchAverage)}"));
+                    document.GraphicObjects[leftAlignment].Add(GeneratePerformance);
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"Blocks:     {ShortNumber2(parent.managedBlocks.Count, suffixes)}"));
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"Storages:   {ShortNumber2(typedIndexes[setKeyIndexStorage].Count, suffixes)}"));
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"Assemblers: {ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, suffixes)}"));
@@ -527,8 +526,7 @@ namespace IngameScript
                     document.GraphicObjects[leftAlignment].Add(GenerateText($"Reactors:   {ShortNumber2(typedIndexes[setKeyIndexReactor].Count, suffixes)}"));
                     document.GraphicObjects[leftAlignment].Add(GenerateText(parent.errorFilter ? $"Errors:     {ShortNumber2(parent.currentErrorCount, suffixes, 0, 6)} of {ShortNumber2(parent.totalErrorCount, suffixes, 0, 6)}" : $"Status:  {ShortNumber2(parent.scriptHealth, suffixes, 3, 6)}%"));
 
-                    tempOutputList.Clear();
-                    tempOutputList.AddRange(parent.errorFilter ? parent.outputErrorList : parent.outputList);
+                    PopulateClassList(tempOutputList, parent.errorFilter ? parent.outputErrorList : parent.outputList);
                     foreach (OutputObject outputObject in tempOutputList)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -580,8 +578,7 @@ namespace IngameScript
                     assemblyList.Clear();
                     disassemblyList.Clear();
                     // Check assemblers
-                    tempIndices.Clear();
-                    tempIndices.AddRange(typedIndexes[setKeyIndexAssemblers]);
+                    PopulateStructList(tempIndices, typedIndexes[setKeyIndexAssemblers]);
                     foreach (long index in tempIndices)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -608,7 +605,7 @@ namespace IngameScript
                     assembling = idle = disabled = 0;
                     assemblyList.Clear();
                     // Check refineries
-                    tempIndices.AddRange(typedIndexes[setKeyIndexRefinery]);
+                    PopulateStructList(tempIndices, typedIndexes[setKeyIndexRefinery]);
                     foreach (long index in tempIndices)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -629,8 +626,7 @@ namespace IngameScript
                     assembling = idle = disabled = 0;
                     assemblyList.Clear();
                     // Check h2/o2 generators
-                    tempIndices.Clear();
-                    tempIndices.AddRange(typedIndexes[setKeyIndexGasGenerators]);
+                    PopulateStructList(tempIndices, typedIndexes[setKeyIndexGasGenerators]);
                     foreach (long index in tempIndices)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -677,8 +673,7 @@ namespace IngameScript
                 {
                     GraphicDocument document = new GraphicDocument();
                     document.GraphicObjects[leftAlignment] = new List<GraphicObject>();
-                    categories.Clear();
-                    categories.AddRange(tempManagerPanelDefinition.PanelSettings.Categories);
+                    PopulateClassList(categories, tempManagerPanelDefinition.PanelSettings.Categories);
 
                     // Update storage capacities
                     if (Now >= NextStorageTime)
@@ -909,6 +904,18 @@ namespace IngameScript
 
             string BlockStatusTitle(string title, int disabled) => $"{title}{(disabled > 0 ? $" -{ShortNumber2(disabled, tempManagerPanelDefinition.PanelSettings.Suffixes)}" : "")}";
 
+            GraphicObject GeneratePerformance =>
+                new GraphicObject(new List<GraphicElement>
+                {
+                    new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true),
+                    ProgressBarBack(1, 0.333f, 0, 0),
+                    ProgressBarFront((float)parent.runtimePercentage, 1, 0.333f, 0, 0, true),
+                    ProgressBarBack(1, 0.333f, 0, 0.333f),
+                    ProgressBarFront((float)parent.actionPercentage, 1, 0.333f, 0, 0.333f, true),
+                    ProgressBarBack(1, 0.334f, 0, 0.666f),
+                    ProgressBarFront((float)parent.dynamicActionMultiplier, 1, 0.334f, 0, 0.666f)
+                });
+
             GraphicObject GenerateStorage(string text, float percent) =>
                 new GraphicObject(new List<GraphicElement>
                 {
@@ -958,11 +965,9 @@ namespace IngameScript
                 double displayedPercent = Math.Min(100.0, item.Percentage);
                 return new GraphicObject(new List<GraphicElement>
                 {
-                    new GraphicElement("SquareSimple", tempManagerPanelDefinition.PanelSettings.BackColor, 1, 1, 0, 0, true), // Background @ 0%,0% x 100%*100%
-                    new GraphicElement(ShortenName(item.displayName, tempManagerPanelDefinition.PanelSettings.NameLength, true), tempManagerPanelDefinition.PanelSettings.TextColor, 0.75f), // Name @ 0%,0% x 75%*100%
-                    ProgressBarBack(0.25f, 1, 0.75f, 0), // Progress bar back @ 75%,0% x 25%*100%
-                    ProgressBarFront(percent, 0.25f, 1, 0.75f, 0), // Progress bar front @ 75%,0% x 25%*100%
-                    new GraphicElement($"{TruncateNumber(displayedPercent, 2):N2}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.25f, 1, 0.75f) // Progress bar number @ 75%,0% x 25%*100%
+                    ProgressBarBack(1, 1, 0, 0), // Progress bar back @ 0%,0% x 100%*100%
+                    ProgressBarFront(percent, 1, 1, 0, 0), // Progress bar front @ 0%,0% x 100%*100%
+                    new GraphicElement(ShortenName(item.displayName, tempManagerPanelDefinition.PanelSettings.NameLength, true), tempManagerPanelDefinition.PanelSettings.TextColor) // Name @ 0%,0% x 100%*100%
                 });
             }
 
@@ -1247,8 +1252,7 @@ namespace IngameScript
                             Parent.Surface.Font = Font;
                         break;
                     case "categories":
-                        Categories.Clear();
-                        Categories.AddRange(data.ToLower().Split('|').OrderBy(b => b));
+                        PopulateClassList(Categories, data.ToLower().Split('|').OrderBy(b => b));
                         break;
                     case "items":
                         ItemSearchString += $"{(TextHasLength(ItemSearchString) ? "┤" : "")}{data}";
@@ -1282,8 +1286,7 @@ namespace IngameScript
                         MaximumItemValue = Math.Max(0, Math.Max(MaximumItemValue, MinimumItemValue));
                         break;
                     case "number suffixes":
-                        Suffixes.Clear();
-                        Suffixes.AddRange(data.Split('|'));
+                        PopulateClassList(Suffixes, data.Split('|'));
                         if (Suffixes.Count == 0) Suffixes = suffixesTemplate.Split('|').ToList();
                         break;
                     case "text color":
@@ -1377,15 +1380,15 @@ namespace IngameScript
                 AppendOption(builder, $"Sorting={(SortType == PanelItemSorting.Alphabetical ? String.Join("/", GetEnumList<PanelItemSorting>()) : $"{SortType}")}", SortType == PanelItemSorting.Alphabetical);
                 AppendOption(builder, $"Options={(Options.Count == 0 ? String.Join("|", GetEnumList<PanelOptions>()) : String.Join("|", Options))}", Options.Count == 0);
                 AppendOption(builder, $"Minimum Value={MinimumItemValue}", MinimumItemValue <= 0);
-                AppendOption(builder, $"Maximum Value={(MaximumItemValue < double.MaxValue ? $"{MaximumItemValue}" : "0")}", MaximumItemValue < double.MaxValue);
+                AppendOption(builder, $"Maximum Value={(MaximumItemValue < double.MaxValue ? $"{MaximumItemValue}" : "0")}", MaximumItemValue == double.MaxValue);
                 BuilderAppendLine(builder, $"Number Suffixes={String.Join("|", Suffixes)}");
                 BuilderAppendLine(builder, $"Text Color={ColorToString(TextColor)}");
                 BuilderAppendLine(builder, $"Number Color={ColorToString(NumberColor)}");
                 BuilderAppendLine(builder, $"Back Color={ColorToString(BackColor)}");
                 AppendOption(builder, $"Rows={Rows}", Rows < 0);
-                AppendOption(builder, $"Name Length={NameLength}", NameLength != 18);
-                AppendOption(builder, $"Decimals={Decimals}", Decimals != 2);
-                AppendOption(builder, $"Update Delay={UpdateDelay}", UpdateDelay != 1.0);
+                AppendOption(builder, $"Name Length={NameLength}", NameLength == 18);
+                AppendOption(builder, $"Decimals={Decimals}", Decimals == 2);
+                AppendOption(builder, $"Update Delay={UpdateDelay}", UpdateDelay == 1.0);
                 AppendOption(builder, $"Offset Multiplier={OffsetMultiplier}", OffsetMultiplier == 1.0);
                 AppendOption(builder, $"Text Multiplier={TextMultiplier}", TextMultiplier == 1.0);
                 AppendOption(builder, $"Span ID={SpanID}", !TextHasLength(SpanID));
