@@ -413,7 +413,6 @@ namespace IngameScript
             blueprintPrefix = "MyObjectBuilder_BlueprintDefinition",
             suffixesTemplate = "K|M|B|T",
             setKeyExclusion = "exclusionKeyword", //modifier tags
-            setKeyIncludeGrid = "includeGridKeyword",
             setKeyCrossGrid = "crossGridControlKeyword",
             setKeyGlobalFilter = "globalFilterKeyword",
             setKeyOptionBlockFilter = "optionHeader",
@@ -532,7 +531,7 @@ namespace IngameScript
             toolKeyword, globalFilterKeyword,
             panelTag, optionBlockFilter, itemCategoryString;
 
-        static double settingVersion = 5.29, buildVersion = 286, torchAverage = 0, tickWeight = 0.005;
+        static double settingVersion = 5.29, buildVersion = 287, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
@@ -1204,7 +1203,12 @@ namespace IngameScript
                                 }
                             }
                             if (allNameBypass || nameMatch)
-                                tempMatchItems2Collection.AddItem(item, itemCount, false);
+                            {
+                                if (itemCount != null && itemCount.count < 0.0)
+                                    tempMatchItems2Collection.ItemList.Remove(item.FullID);
+                                else
+                                    tempMatchItems2Collection.AddItem(item, itemCount, false);
+                            }
                         }
                     }
                 }
@@ -1866,7 +1870,7 @@ namespace IngameScript
 
                         definition = itemCollectionMain[x].ItemReference;
                         if (itemCollectionAlternate.ContainsKey(definition.FullID))
-                            itemCollectionAlternate.AddItem(definition, new VariableItemCount(-definition.amount), true);
+                            itemCollectionAlternate.AddItem(definition, new VariableItemCount(-itemCollectionMain[x].ItemCount.count), true);
                     }
                     excessFound = false;
                     itemCount = itemCollectionAlternate.Count;
@@ -6116,10 +6120,10 @@ namespace IngameScript
 
             public FunctionState lastStatus = stateContinue;
 
-            int currentTicks = 0, currentActions = 0, lastTicks = 0, lastActions = 0, runs = 0,
+            int currentTicks = 0, currentActions = 0, runs = 0,
                        minTicks = 0, maxTicks = 0, minActions = 0, maxActions = 0;
             TimeSpan
-                minSpan = TimeSpan.Zero, maxSpan = TimeSpan.Zero, currentSpan = TimeSpan.Zero, lastSpan = TimeSpan.Zero;
+                minSpan = TimeSpan.Zero, maxSpan = TimeSpan.Zero, currentSpan = TimeSpan.Zero;
             double averageTime = 0, averageActions = 0;
             public decimal health = 100m;
             public bool essential = false;
@@ -6155,9 +6159,6 @@ namespace IngameScript
                         minSpan = currentSpan < minSpan ? currentSpan : minSpan;
                         maxSpan = currentSpan > maxSpan ? currentSpan : maxSpan;
                     }
-                    lastActions = currentActions;
-                    lastSpan = currentSpan;
-                    lastTicks = currentTicks;
                     averageTime = TorchAverage(averageTime, currentSpan.TotalMilliseconds);
                     averageActions = TorchAverage(averageActions, currentActions);
 
@@ -6332,11 +6333,6 @@ namespace IngameScript
 
             public void AddItem(ItemDefinition itemDefinition, VariableItemCount itemCount, bool append = true)
             {
-                if (itemCount != null && itemCount.count < 0.0)
-                {
-                    ItemList.Remove(itemDefinition.FullID);
-                    return;
-                }
                 if (!ItemList.ContainsKey(itemDefinition.FullID))
                     ItemList[itemDefinition.FullID] = new ItemEntry(itemCount?.Clone, itemDefinition);
                 else if (append)
