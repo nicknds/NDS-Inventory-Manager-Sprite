@@ -81,7 +81,8 @@ namespace IngameScript
             { "1/2 Global Tags", new SortedList<string, string>
                 {
                     { setKeyExclusion, "exclude" }, { setKeyCrossGrid, "crossGrid" },
-                    { setKeyPanel, "[nds]" }, { setKeyGlobalFilter, "" }, { setKeyOptionBlockFilter, "" }
+                    { setKeyPanel, "[nds]" }, { setKeyGlobalFilter, "" }, { setKeyOptionBlockFilter, "" },
+                    { setKeyNoTag, "[notag]" }
                 }
             },
             { "2/2 Default Categories", new SortedList<string, string>
@@ -196,7 +197,8 @@ namespace IngameScript
 
         SortedList<string, string>
             modItemDictionary = new SortedList<string, string>(),
-            oreKeyedItemDictionary = new SortedList<string, string>();
+            oreKeyedItemDictionary = new SortedList<string, string>(),
+            itemCategoryDictionary = new SortedList<string, string>();
 
         SortedList<string, LongListPlus> typedIndexes = new SortedList<string, LongListPlus>
         {
@@ -229,9 +231,7 @@ namespace IngameScript
         Dictionary<string, Blueprint>
             blueprintList = new Dictionary<string, Blueprint>();
 
-        Dictionary<string, string>
-            gunAmmoDictionary = new Dictionary<string, string>(),
-            itemCategoryDictionary = new Dictionary<string, string>();
+        Dictionary<string, MyItemType> oneItemBlockDictionary = new Dictionary<string, MyItemType>();
 
         HashSet<string> antiflickerSet = NewHashSetString,
                         priorityCategories = NewHashSetString,
@@ -423,6 +423,7 @@ namespace IngameScript
             setKeyTool = "itemToolKeyword",
             setKeyAmmo = "itemAmmoKeyword",
             setKeyPanel = "panelKeyword",
+            setKeyNoTag = "noTagKeyword",
             setKeyDelayScan = "delayScan", //delays
             setKeyDelayProcessLimits = "delayProcessLimits",
             setKeyDelaySorting = "delaySortItems",
@@ -532,7 +533,7 @@ namespace IngameScript
             toolKeyword, globalFilterKeyword,
             panelTag, optionBlockFilter, itemCategoryString;
 
-        static double settingVersion = 5.3, buildVersion = 288, torchAverage = 0, tickWeight = 0.005;
+        static double settingVersion = 5.31, buildVersion = 289, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
@@ -614,7 +615,6 @@ namespace IngameScript
 
 
         #region Main
-
 
         Program()
         {
@@ -3569,7 +3569,7 @@ namespace IngameScript
                             else if (IsComponent(item) && subtypeID == canvasType)
                                 tempIndexes.AddRange(typedIndexes[setKeyIndexParachute]);
 
-                            if (IsFuel(item))
+                            if (IsFuel(item.Type))
                                 tempIndexes.AddRange(typedIndexes[setKeyIndexReactor]);
 
                             if (IsGas(item))
@@ -3691,7 +3691,7 @@ namespace IngameScript
                         indexCount = 0;
                         foreach (KeyValuePair<long, double> kvp in tempSortedIndexList)
                         {
-                            maxAmount = DefaultMax(tempDistributeItem, managedBlocks[kvp.Key]);
+                            maxAmount = DefaultMax(tempDistributeItem.Type, managedBlocks[kvp.Key]);
                             foundLimit = managedBlocks[kvp.Key].Settings.limits.ContainsKey(tempDistributeItem.Type);
                             itemLimit = foundLimit ? managedBlocks[kvp.Key].Settings.limits.ItemCount(tempDistributeItem, managedBlocks[kvp.Key].Block) : 0;
                             if (foundLimit) maxAmount = itemLimit;
@@ -4122,7 +4122,7 @@ namespace IngameScript
             IMyTerminalBlock currentBlock;
             BlockDefinition currentDefinition;
             bool currentPriority, emptyLoadout, isClone, storeAllCategories;
-            string blockDef, typeID, subtypeID;
+            string blockDef;
             IMyCubeGrid currentGrid;
             yield return stateContinue;
 
@@ -4408,16 +4408,13 @@ namespace IngameScript
                             if (currentPriority)
                                 priorityTypes.Add(setKeyIndexInventory);
                             emptyLoadout = currentDefinition.Settings.loadout.Count == 0 && !currentDefinition.Settings.manual;
-                            if (IsGun(currentDefinition))
+                            if (IsGun(currentDefinition) || currentBlock is IMyReactor)
                             {
                                 blockDef = BlockSubtype(currentBlock);
                                 if (currentDefinition.Input.ItemCount > 0)
-                                    gunAmmoDictionary[blockDef] = $"{((MyInventoryItem)currentDefinition.Input.GetItemAt(0)).Type}";
-                                if (!isClone && emptyLoadout && gunAmmoDictionary.ContainsKey(blockDef))
-                                {
-                                    SplitID(gunAmmoDictionary[blockDef], out typeID, out subtypeID);
-                                    currentDefinition.Settings.loadout.AddItem($"{typeID}/{subtypeID}", new VariableItemCount(DefaultMax(typeID, subtypeID, currentDefinition)));
-                                }
+                                    oneItemBlockDictionary[blockDef] = ((MyInventoryItem)currentDefinition.Input.GetItemAt(0)).Type;
+                                if (!isClone && emptyLoadout && oneItemBlockDictionary.ContainsKey(blockDef))
+                                    currentDefinition.Settings.loadout.AddItem(oneItemBlockDictionary[blockDef], new VariableItemCount(DefaultMax(oneItemBlockDictionary[blockDef], currentDefinition)));
                             }
                             if (!isClone && currentBlock is IMyParachute && emptyLoadout)
                                 currentDefinition.Settings.loadout.AddItem($"{componentType}/{canvasType}", new VariableItemCount(DefaultMax(componentType, canvasType, currentDefinition)));
@@ -4620,7 +4617,7 @@ namespace IngameScript
                     if (processedSettings == 0 && TextHasLength(dataSource) && TextHasLength(optionBlockFilter))
                         dataPrevious = dataSource;
 
-                    if (GetKeyBool(setKeyAutoTagBlocks))
+                    if (GetKeyBool(setKeyAutoTagBlocks) && !ContainsString(block.CustomName, GetKeyString(setKeyNoTag)))
                         tempBlockOptionDefinition.DataSource = $"{dataPrevious}{(TextHasLength(dataPrevious) ? newLine : "")}{(TextHasLength(optionBlockFilter) ? $"{optionBlockFilter}{newLine}" : "")}{tempBlockOptionDefinition.Settings}{(TextHasLength(optionBlockFilter) ? $"{optionBlockFilter}{newLine}" : "")}{(TextHasLength(dataAfter) ? newLine : "")}{dataAfter}";
                 }
 
@@ -4862,7 +4859,7 @@ namespace IngameScript
 
         static string Formatted(string text) => text.Length <= 1 ? text.ToUpper() : String.Join(" ", text.Split(' ').Select(x => x.Length <= 1 ? x.ToUpper() : $"{x.Substring(0, 1).ToUpper()}{x.Substring(1)}"));
 
-        bool ContainsString(string whole, string key) => whole.Length >= key.Length && TextHasLength(key) && whole.ToLower().Contains(key.ToLower());
+        static bool ContainsString(string whole, string key) => whole.Length >= key.Length && TextHasLength(key) && whole.ToLower().Contains(key.ToLower());
 
         string ShortMSTime(double milliseconds) => $"{(milliseconds >= 1000.0 ? $"{ShortNumber2(milliseconds / 1000.0)}s" : $"{ShortNumber2(milliseconds)}ms")}";
 
@@ -4896,8 +4893,9 @@ namespace IngameScript
             if (limited && limit <= zero)
                 return false;
 
-            if (IsAmmo(itemType.TypeId) && gunAmmoDictionary.ContainsKey(BlockSubtype(block)))
-                return gunAmmoDictionary[BlockSubtype(block)] == itemType.SubtypeId;
+            if ((IsAmmo(itemType.TypeId) || IsFuel(itemType)) &&
+                oneItemBlockDictionary.ContainsKey(BlockSubtype(block)))
+                return oneItemBlockDictionary[BlockSubtype(block)] == itemType;
 
             return true;
         }
@@ -5133,7 +5131,7 @@ namespace IngameScript
 
             string subtypeID = item.Type.SubtypeId;
 
-            return (IsOre(item) && RefinedOre(item) && (double)item.Amount >= oreMinimum) || IsAmmo(item) || IsFuel(item) || (typedIndexes[setKeyIndexGravelSifters].Count > 0 && IsIngot(item) && subtypeID == stoneType) ||
+            return (IsOre(item) && RefinedOre(item) && (double)item.Amount >= oreMinimum) || IsAmmo(item) || IsFuel(item.Type) || (typedIndexes[setKeyIndexGravelSifters].Count > 0 && IsIngot(item) && subtypeID == stoneType) ||
                    (IsComponent(item) && subtypeID == canvasType) || IsGas(item);
         }
 
@@ -5146,7 +5144,7 @@ namespace IngameScript
             return true;
         }
 
-        double DefaultMax(MyInventoryItem item, BlockDefinition block) => DefaultMax(item.Type.TypeId, item.Type.SubtypeId, block);
+        double DefaultMax(MyItemType itemType, BlockDefinition block) => DefaultMax(itemType.TypeId, itemType.SubtypeId, block);
 
         double DefaultMax(string typeID, string subtypeID, BlockDefinition blockDef)
         {
@@ -5208,10 +5206,10 @@ namespace IngameScript
             return 0.17f;
         }
 
-        bool IsFuel(MyInventoryItem item)
+        bool IsFuel(MyItemType itemType)
         {
             ItemDefinition definition;
-            return GetDefinition(out definition, item.Type.ToString()) && definition.fuel;
+            return GetDefinition(out definition, $"{itemType}") && definition.fuel;
         }
 
         string ItemName(MyItemType itemType) => ItemName(itemType.TypeId, itemType.SubtypeId);
