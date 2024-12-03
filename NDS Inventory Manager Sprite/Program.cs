@@ -29,6 +29,7 @@ namespace IngameScript
 
         const string trueString = "true", falseString = "false";
         const bool shortTrue = true, shortFalse = false;
+        const double zero = 0.0;
 
         IMyGridTerminalSystem gtSystem;
 
@@ -531,7 +532,7 @@ namespace IngameScript
             toolKeyword, globalFilterKeyword,
             panelTag, optionBlockFilter, itemCategoryString;
 
-        static double settingVersion = 5.29, buildVersion = 287, torchAverage = 0, tickWeight = 0.005;
+        static double settingVersion = 5.3, buildVersion = 288, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
@@ -1204,7 +1205,7 @@ namespace IngameScript
                             }
                             if (allNameBypass || nameMatch)
                             {
-                                if (itemCount != null && itemCount.count < 0.0)
+                                if (itemCount != null && itemCount.count < zero)
                                     tempMatchItems2Collection.ItemList.Remove(item.FullID);
                                 else
                                     tempMatchItems2Collection.AddItem(item, itemCount, false);
@@ -1367,7 +1368,7 @@ namespace IngameScript
                                             if (quotaMaxAmount < quota)
                                                 quotaMaxAmount = quota;
 
-                                            if (quotaMaxAmount < 0)
+                                            if (quotaMaxAmount < zero)
                                                 quotaMaxAmount = 0;
 
                                             definition.quotaMax = quotaMaxAmount;
@@ -1376,7 +1377,7 @@ namespace IngameScript
                                     else if (double.TryParse(data, out quota))
                                     {
                                         definition.quota = quota;
-                                        if (quota < 0)
+                                        if (quota < zero)
                                             quota = 0;
 
                                         definition.quotaMax = quota;
@@ -1484,7 +1485,7 @@ namespace IngameScript
 
                     if (isLimited)
                     {
-                        if (itemLimit <= 0)
+                        if (itemLimit <= zero)
                             stopFunc = true;
                         else
                         {
@@ -1505,7 +1506,7 @@ namespace IngameScript
                         if (!FractionalItem(tempTransferInventoryItem))
                             currentTransferAmount = Math.Floor(currentTransferAmount);
 
-                        if (currentTransferAmount > 0.0 && destinationInventory.TransferItemFrom(tempTransferOriginInventory, tempTransferInventoryItem, (MyFixedPoint)currentTransferAmount))
+                        if (currentTransferAmount > zero && destinationInventory.TransferItemFrom(tempTransferOriginInventory, tempTransferInventoryItem, (MyFixedPoint)currentTransferAmount))
                         {
                             if (currentTransferAmount >= 0.01)
                                 Output($"Moved {ShortNumber2(currentTransferAmount),-6} {ShortenName(ItemName(tempTransferInventoryItem), 12),-12} to {ShortenName(alternateBlockDefinition.Block.CustomName, 12),-12}");
@@ -1888,7 +1889,7 @@ namespace IngameScript
                         for (int x = 0; x < mainFunctionItemList.Count; x++)
                         {
                             addAmount = itemCollectionAlternate.ItemCount(mainFunctionItemList[x]);
-                            if (addAmount <= 0 - 0.01)
+                            if (addAmount <= -0.01)
                             {
                                 addAmount *= -1.0;
                                 addAmount = Math.Min(addAmount, (double)mainFunctionItemList[x].Amount);
@@ -1913,14 +1914,14 @@ namespace IngameScript
                         {
                             if (PauseTickRun) yield return stateActive;
 
-                            if (itemCollectionAlternate.ItemCount(mainFunctionItemList[y]) > 0)
+                            if (itemCollectionAlternate.ItemCount(mainFunctionItemList[y]) > zero)
                             {
                                 addAmount = Math.Min((double)mainFunctionItemList[y].Amount, itemCollectionAlternate.ItemCount(mainFunctionItemList[y], null));
 
                                 if (!FractionalItem(mainFunctionItemList[y]))
                                     addAmount = Math.Floor(addAmount);
 
-                                if (addAmount > 0 && loadoutInventory.TransferItemFrom(sourceInventory, mainFunctionItemList[y], (MyFixedPoint)addAmount))
+                                if (addAmount > zero && loadoutInventory.TransferItemFrom(sourceInventory, mainFunctionItemList[y], (MyFixedPoint)addAmount))
                                     itemCollectionAlternate.AddItem(mainFunctionItemList[y].Type, new VariableItemCount(-addAmount));
                             }
                         }
@@ -2272,7 +2273,7 @@ namespace IngameScript
                     if (FunctionDelay(key))
                     {
                         currentMajorFunction = key;
-                        bool useBottles = GetKeyDouble(setKeyDelayFillingBottles) > 0 && SpanElapsed(fillBottleSpan);
+                        bool useBottles = GetKeyDouble(setKeyDelayFillingBottles) > zero && SpanElapsed(fillBottleSpan);
                         if (useBottles)
                             fillingBottles = !fillingBottles;
 
@@ -2735,7 +2736,7 @@ namespace IngameScript
                     if (PauseTickRun) yield return stateActive;
 
                     queueAmount = AssemblyAmount(blueprint);
-                    if (queueAmount > 0)
+                    if (queueAmount > zero)
                         while (!DistributeBlueprint(blueprint, queueAmount, typedIndexes[setKeyIndexAssemblers]))
                             yield return stateActive;
                 }
@@ -2765,7 +2766,7 @@ namespace IngameScript
                     if (PauseTickRun) yield return stateActive;
 
                     queueAmount = AssemblyAmount(blueprint, true);
-                    if (queueAmount > 0)
+                    if (queueAmount > zero)
                         while (!DistributeBlueprint(blueprint, queueAmount, typedIndexes[setKeyIndexAssemblers], disassemblyMode))
                             yield return stateActive;
                 }
@@ -2933,7 +2934,7 @@ namespace IngameScript
                                     currentAmount = Math.Floor(currentAmount - (double)blueprintListMain[i].Amount);
                             }
                         }
-                        if (currentAmount > 0 && (contains || (tempInsertBlueprintMode == assemblyMode && !tempInsertBlueprintBlockDefinition.Settings.GetOption(BlockOptions.NoSorting))))
+                        if (currentAmount > zero && (contains || (tempInsertBlueprintMode == assemblyMode && !tempInsertBlueprintBlockDefinition.Settings.GetOption(BlockOptions.NoSorting))))
                             for (int i = 0; i < blueprintListMain.Count; i++)
                             {
                                 if (PauseTickRun) yield return stateActive;
@@ -2951,7 +2952,7 @@ namespace IngameScript
                                 }
                             }
 
-                        if (!inserted && currentAmount > 0)
+                        if (!inserted && currentAmount > zero)
                             assembler.AddQueueItem(tempInsertBlueprintID, currentAmount);
                     }
                     if (tempInsertBlueprintCount)
@@ -2977,7 +2978,7 @@ namespace IngameScript
                     if (GetDefinition(out definition, $"{kvp.Value.typeID}/{kvp.Value.subtypeID}"))
                     {
                         excessQueued = Math.Floor(definition.currentExcessAssembly);
-                        if (excessQueued > 0)
+                        if (excessQueued > zero)
                             while (!RemoveBlueprint(kvp.Value, excessQueued))
                                 yield return stateActive;
                     }
@@ -3012,7 +3013,7 @@ namespace IngameScript
 
                 foreach (long index in typedIndexes[setKeyIndexAssemblers])
                 {
-                    if (toBeRemovedAmount <= 0) break;
+                    if (toBeRemovedAmount <= zero) break;
                     if (PauseTickRun) yield return stateActive;
                     if (IsBlockBad(index)) continue;
 
@@ -3022,7 +3023,7 @@ namespace IngameScript
                     {
                         blueprintListMain.Clear();
                         assembler.GetQueue(blueprintListMain);
-                        for (int x = blueprintListMain.Count - 1; x >= 0 && toBeRemovedAmount > 0; x--)
+                        for (int x = blueprintListMain.Count - 1; x >= 0 && toBeRemovedAmount > zero; x--)
                         {
                             if (PauseTickRun) yield return stateActive;
 
@@ -3059,7 +3060,7 @@ namespace IngameScript
                     if (GetDefinition(out definition, $"{kvp.Value.typeID}/{kvp.Value.subtypeID}"))
                     {
                         excessQueued = Math.Floor(definition.currentExcessDisassembly);
-                        if (excessQueued > 0)
+                        if (excessQueued > zero)
                             while (!RemoveBlueprint(kvp.Value, excessQueued, disassemblyMode))
                                 yield return stateActive;
                     }
@@ -3133,7 +3134,7 @@ namespace IngameScript
                         {
                             if (PauseTickRun) yield return stateActive;
 
-                            if (mainBlockDefinition.Settings.loadout.ItemCount(mainFunctionItemList[x], mainBlockDefinition.Block) > 0)
+                            if (mainBlockDefinition.Settings.loadout.ItemCount(mainFunctionItemList[x], mainBlockDefinition.Block) > zero)
                                 mainFunctionItemList.RemoveAtFast(x);
                             else
                                 x++;
@@ -3312,13 +3313,13 @@ namespace IngameScript
                             continue;
 
                         averageAmount = Math.Floor(blueprintInformation[currentMode][key].totalCount / (double)blueprintInformation[currentMode][key].acceptingIndexList.Count);
-                        if (averageAmount <= 0)
+                        if (averageAmount <= zero)
                             continue;
                         minimalRange = Math.Max(minimalRange, 1.0 / averageAmount);
                         if (OverRange((double)currentProductionList[i].Amount, averageAmount, minimalRange))
                         {
                             moveAmount = Math.Floor((double)currentProductionList[i].Amount - averageAmount);
-                            if (moveAmount <= 0)
+                            if (moveAmount <= zero)
                                 continue;
                             currentAssembler.RemoveQueueItem(i, moveAmount);
                             PopulateStructList(indexList, blueprintInformation[currentMode][key].acceptingIndexList);
@@ -3448,7 +3449,7 @@ namespace IngameScript
                                 managedBlocks[sortableListMain[i].numberLong].Input.GetItems(mainFunctionItemList, b => b.Type == kvpA.Key);
                                 sortableListMain[i].amount = mainFunctionItemList.Count > 0 ? (double)mainFunctionItemList[0].Amount : 0;
                                 excess = mainFunctionItemList.Count > 0 ? (double)mainFunctionItemList[0].Amount - average : 0;
-                                if (excess > 0.0)
+                                if (excess > zero)
                                     for (int x = sortableListAlternate.Count - 1; x >= 0; x--)
                                     {
                                         if (PauseTickRun) yield return stateActive;
@@ -3460,7 +3461,7 @@ namespace IngameScript
                                             transferAmount = Math.Floor(transferAmount);
                                             if (transferAmount < 1) break;
                                         }
-                                        if (transferAmount > 0.0 && managedBlocks[sortableListAlternate[x].numberLong].Input.TransferItemFrom(managedBlocks[sortableListMain[i].numberLong].Input, mainFunctionItemList[0], (MyFixedPoint)transferAmount))
+                                        if (transferAmount > zero && managedBlocks[sortableListAlternate[x].numberLong].Input.TransferItemFrom(managedBlocks[sortableListMain[i].numberLong].Input, mainFunctionItemList[0], (MyFixedPoint)transferAmount))
                                         {
                                             sortableListAlternate[x].amount += transferAmount;
                                             sortableListMain[i].amount -= transferAmount;
@@ -3655,7 +3656,7 @@ namespace IngameScript
 
                     totalAmount = (double)tempDistributeItem.Amount;
                     balanceRange = GetKeyDouble(setKeyBalanceRange);
-                    if (tempDistributeItemMax > 0 && totalAmount > tempDistributeItemMax)
+                    if (tempDistributeItemMax > zero && totalAmount > tempDistributeItemMax)
                         totalAmount = tempDistributeItemMax;
 
                     fractional = FractionalItem(tempDistributeItem);
@@ -3729,7 +3730,7 @@ namespace IngameScript
                             while (!Transfer(ref splitAmount, tempDistributeItemBlockDefinition.Input, managedBlocks[kvp.Key], tempDistributeItem))
                                 yield return stateActive;
 
-                            if (splitAmount > 0)
+                            if (splitAmount > zero)
                                 totalAmount -= originalSplitAmount - splitAmount;
                             indexCount++;
                         }
@@ -3811,7 +3812,7 @@ namespace IngameScript
                         if (GetSetLimit(mainBlockDefinition, ref limit, mainFunctionItemList[x]))
                         {
                             excess = (double)mainFunctionItemList[x].Amount - limit;
-                            if (excess > 0)
+                            if (excess > zero)
                                 while (!PutInStorage(new List<MyInventoryItem> { mainFunctionItemList[x] }, index, 0, excess)) yield return stateActive;
                         }
                     }
@@ -3913,13 +3914,13 @@ namespace IngameScript
                     typeID = item.Type.TypeId;
                     transferAmount = (double)item.Amount;
 
-                    if (tempStorageMax > 0 && transferAmount > tempStorageMax)
+                    if (tempStorageMax > zero && transferAmount > tempStorageMax)
                         transferAmount = tempStorageMax;
 
                     originInventory = origBlock.GetInventory(tempStorageInventoryIndex);
                     bottleException = fillingBottles && IsBottle(item) && !(origBlock is IMyGasGenerator || origBlock is IMyGasTank);
 
-                    if (transferAmount > 0)
+                    if (transferAmount > zero)
                     {
                         if (bottleException)
                         {
@@ -3952,7 +3953,7 @@ namespace IngameScript
                                 while (!Transfer(ref transferAmount, originInventory, managedBlocks[storageIndex], item))
                                     yield return stateActive;
 
-                                if (transferAmount <= 0)
+                                if (transferAmount <= zero)
                                     break;
                             }
                         }
@@ -4892,7 +4893,7 @@ namespace IngameScript
 
             double limit = limited ? managedBlock.Settings.limits.ItemCount(itemType, block) : 0;
 
-            if (limited && limit <= 0.0)
+            if (limited && limit <= zero)
                 return false;
 
             if (IsAmmo(itemType.TypeId) && gunAmmoDictionary.ContainsKey(BlockSubtype(block)))
@@ -5082,7 +5083,7 @@ namespace IngameScript
         {
             ItemDefinition definition;
             if (GetDefinition(out definition, $"{blueprint.typeID}/{blueprint.subtypeID}"))
-                return disassembly && definition.differenceNeeded < 0 ? -definition.differenceNeeded : !disassembly && definition.differenceNeeded > 0 ? definition.differenceNeeded : 0;
+                return disassembly && definition.differenceNeeded < zero ? -definition.differenceNeeded : !disassembly && definition.differenceNeeded > zero ? definition.differenceNeeded : 0;
             return 0;
         }
 
@@ -5291,7 +5292,7 @@ namespace IngameScript
             block.Settings.storageCategories.Contains("all", stringComparer) || block.Settings.storageCategories.Contains("*") ||
             block.Settings.storageCategories.Contains(GetItemCategory(item), stringComparer);
 
-        bool LoadoutHome(BlockDefinition block, MyInventoryItem item) => block.Settings.loadout.ItemCount(item) > 0;
+        bool LoadoutHome(BlockDefinition block, MyInventoryItem item) => block.Settings.loadout.ItemCount(item) > zero;
 
         float ItemVolume(MyInventoryItem item) => item.Type.GetItemInfo().Volume;
 
@@ -5348,7 +5349,7 @@ namespace IngameScript
 
         bool UnavailableActions()
         {
-            dynamicActionMultiplier = Math.Max(0.00001, Math.Min(1, overheatAverage > 0.0 ? 1.0 - (torchAverage / (overheatAverage * 1.001)) : 1.0 - (torchAverage / (runTimeLimiter * 2.0))));
+            dynamicActionMultiplier = Math.Max(0.00001, Math.Min(1, overheatAverage > zero ? 1.0 - (torchAverage / (overheatAverage * 1.001)) : 1.0 - (torchAverage / (runTimeLimiter * 2.0))));
 
             return
             Runtime.CurrentInstructionCount >= (Runtime.MaxInstructionCount * actionLimiterMultiplier * dynamicActionMultiplier) ||
@@ -5436,7 +5437,7 @@ namespace IngameScript
 
         static string ShortNumber2(double number, List<string> suffixesList, int decimals = 2, int padding = 0, bool left = true)
         {
-            string prefix = number < 0 ? "-" : "";
+            string prefix = number < zero ? "-" : "";
 
             return left ? $"{prefix}{ShortNumberAbs2(Math.Abs(number), suffixesList, decimals)}".PadLeft(padding) : $"{prefix}{ShortNumberAbs2(Math.Abs(number), suffixesList, decimals)}".PadRight(padding);
         }
@@ -5738,7 +5739,7 @@ namespace IngameScript
             definition.quotaMax = amount <= max ? max : amount;
             definition.currentMax = maxAmount >= definition.quotaMax ? maxAmount : definition.quotaMax;
 
-            if (definition.quotaMax < 0)
+            if (definition.quotaMax < zero)
                 definition.quotaMax = 0;
 
             definition.SetCurrentQuota();
@@ -6637,10 +6638,10 @@ namespace IngameScript
 
             public string DisplayID => $"{category}:{displayName}";
 
-            public string AssemblyStatus => currentAssemblyAmount == 0 && currentDisassemblyAmount == 0 ? "Idle" :
-                                            $"{(currentAssemblyAmount > 0 ? $"Assembling {currentAssemblyAmount}{(currentDisassemblyAmount > 0 ? " " : "")}" : "")}{(currentDisassemblyAmount > 0 ? $"Disassembling {currentDisassemblyAmount}" : "")}";
+            public string AssemblyStatus => currentAssemblyAmount == zero && currentDisassemblyAmount == zero ? "Idle" :
+                                            $"{(currentAssemblyAmount > zero ? $"Assembling {currentAssemblyAmount}{(currentDisassemblyAmount > zero ? " " : "")}" : "")}{(currentDisassemblyAmount > zero ? $"Disassembling {currentDisassemblyAmount}" : "")}";
 
-            public double Percentage => currentQuota == 0 ? double.MaxValue : (amount / currentQuota) * 100.0;
+            public double Percentage => currentQuota == zero ? double.MaxValue : (amount / currentQuota) * 100.0;
 
             public void FinalizeKeys()
             {
@@ -6667,20 +6668,20 @@ namespace IngameScript
 
                 bool allOut = amount < 1.0;
 
-                amountDifference = averageSpanSeconds > 0 ? (amount - countRecordList[0].count) / averageSpanSeconds : 0;
+                amountDifference = averageSpanSeconds > zero ? (amount - countRecordList[0].count) / averageSpanSeconds : 0;
 
                 tempDifference = amountDifference;
 
-                tempQuota += (quota > 0 ? quota : 0) + (blockQuota > 0 ? blockQuota : 0);
+                tempQuota += (quota > zero ? quota : 0) + (blockQuota > zero ? blockQuota : 0);
 
-                if (useMultiplier && tempQuota > 0)
+                if (useMultiplier && tempQuota > zero)
                 {
                     if (lastSeconds >= 1)
                     {
                         if (increaseWhenLow && allOut)
                             tempDifference -= tempQuota * 0.001;
 
-                        if (!allOut && tempDifference == 0)
+                        if (!allOut && tempDifference == zero)
                             tempDifference += tempQuota * 0.1;
 
                         if (disassembleCount >= 1)
@@ -6757,9 +6758,9 @@ namespace IngameScript
                 if (TextHasLength(blueprintID) && blueprintID != nothingType)
                 {
                     currentMax =
-                        currentQuota < 0 ? 0 :
+                        currentQuota < zero ? 0 :
                         quotaMax > currentQuota ? quotaMax :
-                        currentQuota > 0 ? Math.Floor(currentQuota * (1.0 + excessAmount)) : double.MaxValue;
+                        currentQuota > zero ? Math.Floor(currentQuota * (1.0 + excessAmount)) : double.MaxValue;
 
                     if (!disassembleAll)
                     {
@@ -6775,10 +6776,10 @@ namespace IngameScript
                         if (currentDisassemblyAmount > 0 && currentDisassemblyAmount > amount)
                             currentExcessDisassembly = currentDisassemblyAmount - amount;
                     }
-                    if (currentExcessAssembly > 0)
+                    if (currentExcessAssembly > zero)
                         currentExcessAssembly = Math.Floor(currentExcessAssembly / assemblyMultiplier);
 
-                    if (currentDisassemblyAmount > 0 && currentDisassemblyAmount < assemblyMultiplier)
+                    if (currentDisassemblyAmount > zero && currentDisassemblyAmount < assemblyMultiplier)
                         currentExcessDisassembly = currentDisassemblyAmount;
 
                     if (!assemble)
@@ -6789,12 +6790,12 @@ namespace IngameScript
                     //Logic
                     if (disassembleAll)
                     {
-                        if (postAssemblyAmount > 0)
+                        if (postAssemblyAmount > zero)
                             differenceNeeded = -postAssemblyAmount;
                     }
                     else
                     {
-                        if (currentQuota == 0)
+                        if (currentQuota == zero)
                             differenceNeeded = 0;
                         else
                         {
@@ -6805,19 +6806,19 @@ namespace IngameScript
                         }
                     }
 
-                    if (differenceNeeded > 0)
+                    if (differenceNeeded > zero)
                         differenceNeeded = Math.Ceiling(differenceNeeded / assemblyMultiplier);
-                    else if (differenceNeeded < 0)
+                    else if (differenceNeeded < zero)
                         differenceNeeded = Math.Abs(differenceNeeded) < assemblyMultiplier ? 0 : Math.Floor(Math.Abs(differenceNeeded) / assemblyMultiplier) * -assemblyMultiplier;
 
 
-                    if (differenceNeeded > 0)
+                    if (differenceNeeded > zero)
                         currentNeededAssembly = differenceNeeded;
 
-                    if (differenceNeeded > 0 && (currentDisassemblyAmount > 0 || !assemble))
+                    if (differenceNeeded > zero && (currentDisassemblyAmount > zero || !assemble))
                         differenceNeeded = 0;
 
-                    if (differenceNeeded < 0 && (currentAssemblyAmount > 0 || !disassemble))
+                    if (differenceNeeded < zero && (currentAssemblyAmount > zero || !disassemble))
                         differenceNeeded = 0;
                 }
             }
@@ -6825,11 +6826,11 @@ namespace IngameScript
             public void SetCurrentQuota()
             {
                 currentQuota =
-                    (quota > 0 ? quota : 0) +
-                    (blockQuota > 0 ? blockQuota : 0);
+                    (quota > zero ? quota : 0) +
+                    (blockQuota > zero ? blockQuota : 0);
 
-                disassembleAll = currentQuota == 0 && quota < 0;
-                if (!disassembleAll && currentQuota > 0)
+                disassembleAll = currentQuota == zero && quota < zero;
+                if (!disassembleAll && currentQuota > zero)
                     currentQuota *= quotaMultiplier;
 
                 currentQuota = Math.Floor(currentQuota);
@@ -6837,7 +6838,7 @@ namespace IngameScript
 
             public override string ToString()
             {
-                return $"Name={displayName}||Category={Formatted(category)}||Quota={quota}{(quota >= 0 && quotaMax > quota ? $"<{quotaMax}" : "")}{newLine}" +
+                return $"Name={displayName}||Category={Formatted(category)}||Quota={quota}{(quota >= zero && quotaMax > quota ? $"<{quotaMax}" : "")}{newLine}" +
                        $"^Type={typeID}||Subtype={subtypeID}" +
                        $"{(IsBlueprint(blueprintID) ? $"||Blueprint={blueprintID}||Assembly Multiplier={assemblyMultiplier}||Assemble={assemble}||Disassemble={disassemble}" : StringsMatch(blueprintID, nothingType) ? "||Blueprint=None" : "")}" +
                        $"{(IsOre(typeID) ? $"||Refine={refine}" : "")}" +

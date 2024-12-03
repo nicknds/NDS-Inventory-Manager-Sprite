@@ -417,14 +417,14 @@ namespace IngameScript
                     hasActivity = tempManagerPanelDefinition.PanelSettings.Options.Contains(PanelOptions.HasActivity);
                     minValue = tempManagerPanelDefinition.PanelSettings.MinimumItemValue;
                     maxValue = tempManagerPanelDefinition.PanelSettings.MaximumItemValue;
-                    if (maxValue <= 0) maxValue = double.MaxValue;
+                    if (maxValue <= zero) maxValue = double.MaxValue;
                     for (int i = 0; i < items.Count; i += 0)
                     {
                         if (PauseTickRun) yield return stateActive;
                         if ((belowQuota && items[i].amount >= items[i].currentQuota) ||
                             items[i].amount < minValue ||
                             items[i].amount > maxValue ||
-                            (hasActivity && items[i].amountDifference == 0.0))
+                            (hasActivity && items[i].amountDifference == zero))
                             items.RemoveAtFast(i);
                         else
                             i++;
@@ -950,7 +950,7 @@ namespace IngameScript
                     new GraphicElement($"{TruncateNumber(displayedPercent, 2):N2}%".PadLeft(6), tempManagerPanelDefinition.PanelSettings.NumberColor, 0.15f, 0.5f, 0.85f), // Progress bar number @ 80%,0% x 20%*50%
                     new GraphicElement($"Status: {item.AssemblyStatus,-16}", tempManagerPanelDefinition.PanelSettings.TextColor, 0.7f, 0.5f, 0, 0.5f), // Status @ 0%,50% x 70%*50%
                     new GraphicElement("Rate: ", tempManagerPanelDefinition.PanelSettings.TextColor, 0.1f, 0.5f, 0.7f, 0.5f), // Rate @ 70%,50% x 10%*50%
-                    new GraphicElement($"{(item.amountDifference > 0.0 ? "+" : item.amountDifference == 0.0 ? "+/-" : "")}{ShortNumber2(item.amountDifference, tempManagerPanelDefinition.PanelSettings.Suffixes, tempManagerPanelDefinition.PanelSettings.Decimals, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.2f, 0.5f, 0.8f, 0.5f) // Rate @ 80%,50% x 20%*50%
+                    new GraphicElement($"{(item.amountDifference > zero ? "+" : item.amountDifference == zero ? "+/-" : "")}{ShortNumber2(item.amountDifference, tempManagerPanelDefinition.PanelSettings.Suffixes, tempManagerPanelDefinition.PanelSettings.Decimals, 6, false)}", tempManagerPanelDefinition.PanelSettings.NumberColor, 0.2f, 0.5f, 0.8f, 0.5f) // Rate @ 80%,50% x 20%*50%
                 });
             }
 
@@ -1379,7 +1379,7 @@ namespace IngameScript
                 AppendOption(builder, $"Item Display={(DisplayType == DisplayType.Standard ? String.Join("/", GetEnumList<DisplayType>()) : $"{DisplayType}")}", DisplayType == DisplayType.Standard);
                 AppendOption(builder, $"Sorting={(SortType == PanelItemSorting.Alphabetical ? String.Join("/", GetEnumList<PanelItemSorting>()) : $"{SortType}")}", SortType == PanelItemSorting.Alphabetical);
                 AppendOption(builder, $"Options={(Options.Count == 0 ? String.Join("|", GetEnumList<PanelOptions>()) : String.Join("|", Options))}", Options.Count == 0);
-                AppendOption(builder, $"Minimum Value={MinimumItemValue}", MinimumItemValue <= 0);
+                AppendOption(builder, $"Minimum Value={MinimumItemValue}", MinimumItemValue <= zero);
                 AppendOption(builder, $"Maximum Value={(MaximumItemValue < double.MaxValue ? $"{MaximumItemValue}" : "0")}", MaximumItemValue == double.MaxValue);
                 BuilderAppendLine(builder, $"Number Suffixes={String.Join("|", Suffixes)}");
                 BuilderAppendLine(builder, $"Text Color={ColorToString(TextColor)}");
