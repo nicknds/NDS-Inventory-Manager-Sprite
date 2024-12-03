@@ -4505,7 +4505,7 @@ namespace IngameScript
 
         bool ProcessBlockOptions(BlockDefinition managedBlock)
         {
-            if (managedBlock.Block == Me) return true;
+            if (managedBlock.Block is IMyProgrammableBlock) return true;
 
             selfContainedIdentifier = FunctionIdentifier.Processing_Block_Options;
 
