@@ -762,12 +762,6 @@ namespace IngameScript
 
                     surfaceHeader = tempSettingsPanelDefinition.Provider ? $"{panelTag}:{tempSettingsPanelDefinition.SurfaceIndex}" : "";
 
-                    if (!TextHasLength(dataSource) && (parent.GetKeyBool(setKeyAutoTagBlocks)))
-                    {
-                        tempSettingsPanelDefinition.DataSource = $"{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}{tempSettingsPanelDefinition.PanelSettings}{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}";
-                        tempSettingsPanelDefinition.Parent.Block.CustomName = tempSettingsPanelDefinition.Parent.Block.CustomName.Replace(panelTag, panelTag.ToUpper());
-                    }
-
                     if (TextHasLength(dataSource) && !StringsMatch(dataSource, tempSettingsPanelDefinition.PanelSettings.SettingBackup))
                     {
                         tempSettingsPanelDefinition.PanelSettings.SettingBackup = dataSource;
@@ -804,7 +798,7 @@ namespace IngameScript
                         if (processedSettings == 0 && TextHasLength(dataSource) && !tempSettingsPanelDefinition.Provider)
                             dataPrevious = dataSource;
 
-                        if (parent.GetKeyBool(setKeyAutoTagBlocks))
+                        if (parent.GetKeyBool(setKeyAutoTagBlocks) && !ContainsString(tempSettingsPanelDefinition.Parent.Block.CustomName, parent.GetKeyString(setKeyNoTag)))
                         {
                             tempSettingsPanelDefinition.DataSource = $"{dataPrevious}{(TextHasLength(dataPrevious) ? newLine : "")}{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}{tempSettingsPanelDefinition.PanelSettings}{newLine}{(tempSettingsPanelDefinition.Provider ? $"{surfaceHeader}{newLine}" : "")}{(TextHasLength(dataAfter) ? newLine : "")}{dataAfter}";
 
