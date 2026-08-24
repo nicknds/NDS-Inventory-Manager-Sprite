@@ -8,6 +8,7 @@ using VRage;
 using VRage.Game;
 using VRage.Game.GUI.TextPanel;
 using VRage.Game.ModAPI.Ingame;
+using VRage.Network;
 
 namespace IngameScript
 {
@@ -88,7 +89,7 @@ namespace IngameScript
             { "2/2 Default Categories", new SortedList<string, string>
                 {
                     { setKeyIngot, "ingot" }, { setKeyOre, "ore" }, { setKeyComponent, "component" },
-                    { setKeyTool, "tool" }, { setKeyAmmo, "ammo" }
+                    { setKeyTool, "tool" }, { setKeyAmmo, "ammo" }, { setKeyConsumable, "consumable" }
                 }
             }
         };
@@ -408,6 +409,7 @@ namespace IngameScript
             dataPadType = "MyObjectBuilder_Datapad",
             consumableType = "MyObjectBuilder_ConsumableItem",
             physicalObjectType = "MyObjectBuilder_PhysicalObject",
+            seedItemType = "MyObjectBuilder_SeedItem",
             nothingType = "None",
             stoneType = "Stone",
             canvasType = "Canvas",
@@ -422,6 +424,7 @@ namespace IngameScript
             setKeyComponent = "itemComponentKeyword",
             setKeyTool = "itemToolKeyword",
             setKeyAmmo = "itemAmmoKeyword",
+            setKeyConsumable = "itemConsumableKeyword",
             setKeyPanel = "panelKeyword",
             setKeyNoTag = "noTagKeyword",
             setKeyDelayScan = "delayScan", //delays
@@ -530,10 +533,10 @@ namespace IngameScript
         static string
             ingotKeyword, oreKeyword,
             componentKeyword, ammoKeyword,
-            toolKeyword, globalFilterKeyword,
+            toolKeyword, consumableKeyword, globalFilterKeyword,
             panelTag, optionBlockFilter, itemCategoryString;
 
-        static double settingVersion = 5.31, buildVersion = 289, torchAverage = 0, tickWeight = 0.005;
+        static double settingVersion = 5.32, buildVersion = 292, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
@@ -572,7 +575,7 @@ namespace IngameScript
         string
             scriptName = "NDS Inventory Manager",
             settingBackup = "", mergeItem = "",
-            stoneOreToIngotBasicID = PositionPrefix("0010", "StoneOreToIngotBasic"),
+            stoneOreToIngotBasicID = PositionPrefix("10", "StoneOreToIngotBasic"),
             lastString = "", tempItemSetting,
             tempScriptSetting, tempProcessLogicData,
             tempCountItemsInListTypeID, tempCountItemsInListSubtypeID,
@@ -637,7 +640,7 @@ namespace IngameScript
         void FillDict()
         {
             AddItemDef("Bulletproof Glass", "BulletproofGlass", componentType, "BulletproofGlass");
-            AddItemDef(canvasType, canvasType, componentType, PositionPrefix("0030", canvasType));
+            AddItemDef(canvasType, canvasType, componentType, PositionPrefix("30", canvasType));
             AddItemDef("Computer", "Computer", componentType, "ComputerComponent");
             AddItemDef("Construction Comp", "Construction", componentType, "ConstructionComponent");
             AddItemDef("Detector Component", "Detector", componentType, "DetectorComponent");
@@ -659,32 +662,32 @@ namespace IngameScript
             AddItemDef("Superconductor", "Superconductor", componentType, "Superconductor");
             AddItemDef("Thruster Component", "Thrust", componentType, "ThrustComponent");
             AddItemDef("Zone Chip", "ZoneChip", componentType, nothingType, false);
-            AddItemDef("MR-20", "AutomaticRifleItem", toolType, PositionPrefix("0040", "AutomaticRifle"));
-            AddItemDef("MR-8P", "PreciseAutomaticRifleItem", toolType, PositionPrefix("0060", "PreciseAutomaticRifle"));
-            AddItemDef("MR-50A", "RapidFireAutomaticRifleItem", toolType, PositionPrefix("0050", "RapidFireAutomaticRifle"));
-            AddItemDef("MR-30E", "UltimateAutomaticRifleItem", toolType, PositionPrefix("0070", "UltimateAutomaticRifle"));
-            AddItemDef("Welder 1", "WelderItem", toolType, PositionPrefix("0090", "Welder"));
-            AddItemDef("Welder 2", "Welder2Item", toolType, PositionPrefix("0100", "Welder2"));
-            AddItemDef("Welder 3", "Welder3Item", toolType, PositionPrefix("0110", "Welder3"));
-            AddItemDef("Welder 4", "Welder4Item", toolType, PositionPrefix("0120", "Welder4"));
-            AddItemDef("Grinder 1", "AngleGrinderItem", toolType, PositionPrefix("0010", "AngleGrinder"));
-            AddItemDef("Grinder 2", "AngleGrinder2Item", toolType, PositionPrefix("0020", "AngleGrinder2"));
-            AddItemDef("Grinder 3", "AngleGrinder3Item", toolType, PositionPrefix("0030", "AngleGrinder3"));
-            AddItemDef("Grinder 4", "AngleGrinder4Item", toolType, PositionPrefix("0040", "AngleGrinder4"));
-            AddItemDef("Drill 1", "HandDrillItem", toolType, PositionPrefix("0050", "HandDrill"));
-            AddItemDef("Drill 2", "HandDrill2Item", toolType, PositionPrefix("0060", "HandDrill2"));
-            AddItemDef("Drill 3", "HandDrill3Item", toolType, PositionPrefix("0070", "HandDrill3"));
-            AddItemDef("Drill 4", "HandDrill4Item", toolType, PositionPrefix("0080", "HandDrill4"));
-            AddItemDef("Datapad", "Datapad", dataPadType, "Datapad", false);
-            AddItemDef("Powerkit", "Powerkit", consumableType, nothingType, false);
-            AddItemDef("Medkit", "Medkit", consumableType, nothingType, false);
+            AddItemDef("MR-20", "AutomaticRifleItem", toolType, PositionPrefix("40", "AutomaticRifle"));
+            AddItemDef("MR-8P", "PreciseAutomaticRifleItem", toolType, PositionPrefix("60", "PreciseAutomaticRifle"));
+            AddItemDef("MR-50A", "RapidFireAutomaticRifleItem", toolType, PositionPrefix("50", "RapidFireAutomaticRifle"));
+            AddItemDef("MR-30E", "UltimateAutomaticRifleItem", toolType, PositionPrefix("70", "UltimateAutomaticRifle"));
+            AddItemDef("Welder 1", "WelderItem", toolType, PositionPrefix("90", "Welder"));
+            AddItemDef("Welder 2", "Welder2Item", toolType, PositionPrefix("100", "Welder2"));
+            AddItemDef("Welder 3", "Welder3Item", toolType, PositionPrefix("110", "Welder3"));
+            AddItemDef("Welder 4", "Welder4Item", toolType, PositionPrefix("120", "Welder4"));
+            AddItemDef("Grinder 1", "AngleGrinderItem", toolType, PositionPrefix("10", "AngleGrinder"));
+            AddItemDef("Grinder 2", "AngleGrinder2Item", toolType, PositionPrefix("20", "AngleGrinder2"));
+            AddItemDef("Grinder 3", "AngleGrinder3Item", toolType, PositionPrefix("30", "AngleGrinder3"));
+            AddItemDef("Grinder 4", "AngleGrinder4Item", toolType, PositionPrefix("40", "AngleGrinder4"));
+            AddItemDef("Drill 1", "HandDrillItem", toolType, PositionPrefix("50", "HandDrill"));
+            AddItemDef("Drill 2", "HandDrill2Item", toolType, PositionPrefix("60", "HandDrill2"));
+            AddItemDef("Drill 3", "HandDrill3Item", toolType, PositionPrefix("70", "HandDrill3"));
+            AddItemDef("Drill 4", "HandDrill4Item", toolType, PositionPrefix("80", "HandDrill4"));
+            AddItemDef("Datapad", "Datapad", dataPadType, PositionPrefix("40", "Datapad"), false);
+            AddItemDef("Powerkit", "Powerkit", consumableType, PositionPrefix("22", "Powerkit"), false);
+            AddItemDef("Medkit", "Medkit", consumableType, PositionPrefix("21", "Medkit"), false);
             AddItemDef("Clang Cola", "ClangCola", consumableType, nothingType, false);
             AddItemDef("Cosmic Coffee", "CosmicCoffee", consumableType, nothingType, false);
             AddItemDef("SpaceCredit", "SpaceCredit", physicalObjectType, nothingType, false);
-            AddItemDef("Oxygen Bottle", "OxygenBottle", oxyBottleType, PositionPrefix("0010", "OxygenBottle"));
-            AddItemDef("Hydrogen Bottle", "HydrogenBottle", hydBottleType, PositionPrefix("0020", "HydrogenBottle"));
-            AddItemDef("NATO 25x184mm", "NATO_25x184mm", ammoType, PositionPrefix("0080", "NATO_25x184mmMagazine"));
-            AddItemDef("Missile 200mm", "Missile200mm", ammoType, PositionPrefix("0100", "Missile200mm"));
+            AddItemDef("Oxygen Bottle", "OxygenBottle", oxyBottleType, PositionPrefix("10", "OxygenBottle"));
+            AddItemDef("Hydrogen Bottle", "HydrogenBottle", hydBottleType, PositionPrefix("20", "HydrogenBottle"));
+            AddItemDef("NATO 25x184mm", "NATO_25x184mm", ammoType, PositionPrefix("80", "NATO_25x184mmMagazine"));
+            AddItemDef("Missile 200mm", "Missile200mm", ammoType, PositionPrefix("100", "Missile200mm"));
             AddItemDef("Cobalt Ore", "Cobalt", oreType);
             AddItemDef("Gold Ore", "Gold", oreType);
             AddItemDef("Ice", "Ice", oreType);
@@ -707,23 +710,23 @@ namespace IngameScript
             AddItemDef("Silicon Wafer", "Silicon", ingotType, "", true, new List<string>() { stoneType });
             AddItemDef("Silver Ingot", "Silver", ingotType);
             AddItemDef("Uranium Ingot", "Uranium", ingotType);
-            AddItemDef("MR-20 Magazine", "AutomaticRifleGun_Mag_20rd", ammoType, PositionPrefix("0040", "AutomaticRifleGun_Mag_20rd"));
-            AddItemDef("S-10E Magazine", "ElitePistolMagazine", ammoType, PositionPrefix("0030", "ElitePistolMagazine"));
-            AddItemDef("S-20A Magazine", "FullAutoPistolMagazine", ammoType, PositionPrefix("0020", "FullAutoPistolMagazine"));
-            AddItemDef("MR-8P Magazine", "PreciseAutomaticRifleGun_Mag_5rd", ammoType, PositionPrefix("0060", "PreciseAutomaticRifleGun_Mag_5rd"));
-            AddItemDef("MR-50A Magazine", "RapidFireAutomaticRifleGun_Mag_50rd", ammoType, PositionPrefix("0050", "RapidFireAutomaticRifleGun_Mag_50rd"));
-            AddItemDef("S-10 Magazine", "SemiAutoPistolMagazine", ammoType, PositionPrefix("0010", "SemiAutoPistolMagazine"));
-            AddItemDef("MR-30E Magazine", "UltimateAutomaticRifleGun_Mag_30rd", ammoType, PositionPrefix("0070", "UltimateAutomaticRifleGun_Mag_30rd"));
-            AddItemDef("Artillery Shell", "LargeCalibreAmmo", ammoType, PositionPrefix("0120", "LargeCalibreAmmo"));
-            AddItemDef("Assault Cannon Shell", "MediumCalibreAmmo", ammoType, PositionPrefix("0110", "MediumCalibreAmmo"));
-            AddItemDef("Autocannon Mag", "AutocannonClip", ammoType, PositionPrefix("0090", "AutocannonClip"));
-            AddItemDef("Large Railgun Sabot", "LargeRailgunAmmo", ammoType, PositionPrefix("0140", "LargeRailgunAmmo"));
-            AddItemDef("Small Railgun Sabot", "SmallRailgunAmmo", ammoType, PositionPrefix("0130", "SmallRailgunAmmo"));
-            AddItemDef("PRO-1", "AdvancedHandHeldLauncherItem", toolType, PositionPrefix("0090", "AdvancedHandHeldLauncher"));
-            AddItemDef("RO-1", "BasicHandHeldLauncherItem", toolType, PositionPrefix("0080", "BasicHandHeldLauncher"));
-            AddItemDef("S-10E", "ElitePistolItem", toolType, PositionPrefix("0030", "EliteAutoPistol"));
-            AddItemDef("S-20A", "FullAutoPistolItem", toolType, PositionPrefix("0020", "FullAutoPistol"));
-            AddItemDef("S-10", "SemiAutoPistolItem", toolType, PositionPrefix("0010", "SemiAutoPistol"));
+            AddItemDef("MR-20 Magazine", "AutomaticRifleGun_Mag_20rd", ammoType, PositionPrefix("40", "AutomaticRifleGun_Mag_20rd"));
+            AddItemDef("S-10E Magazine", "ElitePistolMagazine", ammoType, PositionPrefix("30", "ElitePistolMagazine"));
+            AddItemDef("S-20A Magazine", "FullAutoPistolMagazine", ammoType, PositionPrefix("20", "FullAutoPistolMagazine"));
+            AddItemDef("MR-8P Magazine", "PreciseAutomaticRifleGun_Mag_5rd", ammoType, PositionPrefix("60", "PreciseAutomaticRifleGun_Mag_5rd"));
+            AddItemDef("MR-50A Magazine", "RapidFireAutomaticRifleGun_Mag_50rd", ammoType, PositionPrefix("50", "RapidFireAutomaticRifleGun_Mag_50rd"));
+            AddItemDef("S-10 Magazine", "SemiAutoPistolMagazine", ammoType, PositionPrefix("10", "SemiAutoPistolMagazine"));
+            AddItemDef("MR-30E Magazine", "UltimateAutomaticRifleGun_Mag_30rd", ammoType, PositionPrefix("70", "UltimateAutomaticRifleGun_Mag_30rd"));
+            AddItemDef("Artillery Shell", "LargeCalibreAmmo", ammoType, PositionPrefix("120", "LargeCalibreAmmo"));
+            AddItemDef("Assault Cannon Shell", "MediumCalibreAmmo", ammoType, PositionPrefix("110", "MediumCalibreAmmo"));
+            AddItemDef("Autocannon Mag", "AutocannonClip", ammoType, PositionPrefix("90", "AutocannonClip"));
+            AddItemDef("Large Railgun Sabot", "LargeRailgunAmmo", ammoType, PositionPrefix("140", "LargeRailgunAmmo"));
+            AddItemDef("Small Railgun Sabot", "SmallRailgunAmmo", ammoType, PositionPrefix("130", "SmallRailgunAmmo"));
+            AddItemDef("PRO-1", "AdvancedHandHeldLauncherItem", toolType, PositionPrefix("90", "AdvancedHandHeldLauncher"));
+            AddItemDef("RO-1", "BasicHandHeldLauncherItem", toolType, PositionPrefix("80", "BasicHandHeldLauncher"));
+            AddItemDef("S-10E", "ElitePistolItem", toolType, PositionPrefix("30", "EliteAutoPistol"));
+            AddItemDef("S-20A", "FullAutoPistolItem", toolType, PositionPrefix("20", "FullAutoPistol"));
+            AddItemDef("S-10", "SemiAutoPistolItem", toolType, PositionPrefix("10", "SemiAutoPistol"));
         }
 
         void SetConstants()
@@ -734,6 +737,7 @@ namespace IngameScript
             oreKeyword = GetKeyString(setKeyOre);
             componentKeyword = GetKeyString(setKeyComponent);
             ammoKeyword = GetKeyString(setKeyAmmo);
+            consumableKeyword = GetKeyString(setKeyConsumable);
             toolKeyword = GetKeyString(setKeyTool);
             globalFilterKeyword = GetKeyString(setKeyGlobalFilter);
             panelTag = GetKeyString(setKeyPanel);
@@ -881,9 +885,12 @@ namespace IngameScript
                     }
                     else if (index < modBlueprintList.Count)
                     {
-                        UpdateItemDef(mergeItem, modBlueprintList[index]);
+                        if (index < 0)
+                            UpdateItemDef(mergeItem, nothingType);
+                        else
+                            UpdateItemDef(mergeItem, modBlueprintList[index]);
                         mergeItem = "";
-                        echoMode = modItemDictionary.Count > 0 && modBlueprintList.Count > 0 ? EchoMode.MergeMenu : EchoMode.Main;
+                        echoMode = modItemDictionary.Count > 0 ? EchoMode.MergeMenu : EchoMode.Main;
                         saving = true;
                     }
                 }
@@ -905,7 +912,12 @@ namespace IngameScript
             }
             else
             {
-                Echo($"Choose Blueprint For {mergeItem}");
+                Echo("Choose Blueprint For");
+                string typeId, subtypeId;
+                SplitID(mergeItem, out typeId, out subtypeId);
+                Echo($"({typeId}/)");
+                Echo(subtypeId);
+                Echo("0 : Nothing");
                 for (int i = 0, max = modBlueprintList.Count; i < max; i++)
                     Echo($"{i + 1} : {modBlueprintList[i]}");
 
@@ -941,7 +953,7 @@ namespace IngameScript
 
             OptionalEcho($"Mod Items: {modItemDictionary.Count}", modItemDictionary.Count > 0);
             OptionalEcho($"Mod Blueprints: {modBlueprintList.Count}", modBlueprintList.Count > 0);
-            OptionalEcho("-Enter 'merge' to begin merge", modItemDictionary.Count > 0 && modBlueprintList.Count > 0);
+            OptionalEcho("-Enter 'merge' to begin merge", modItemDictionary.Count > 0);
 
             OptionalEcho($"{ColoredEcho($"Overheat x{overheatTicks}", 1)}", overheatTicks > 0);
 
@@ -1018,7 +1030,7 @@ namespace IngameScript
                     SetLastString(echoMode == EchoMode.MergeHelp ? "Opened Merge Help List" : "Closed Merge Help List");
                     break;
                 case "merge":
-                    echoMode = (echoMode == EchoMode.Main && modItemDictionary.Count > 0 && modBlueprintList.Count > 0) ? EchoMode.MergeMenu : EchoMode.Main;
+                    echoMode = (echoMode == EchoMode.Main && modItemDictionary.Count > 0) ? EchoMode.MergeMenu : EchoMode.Main;
                     SetLastString(echoMode == EchoMode.MergeMenu ? "Opened Merge Menu" : "Closed Merge Menu");
                     break;
                 case "scan":
@@ -1879,8 +1891,7 @@ namespace IngameScript
                     {
                         if (PauseTickRun) yield return stateActive;
 
-                        definition = itemCollectionAlternate[x].ItemReference;
-                        excessFound = definition.amount <= -0.01;
+                        excessFound = itemCollectionAlternate[x].ItemCount.count <= -0.01;
                     }
                     if (excessFound)
                     {
@@ -2967,19 +2978,21 @@ namespace IngameScript
         {
             ItemDefinition definition;
             double excessQueued;
+            List<Blueprint> bpList = new List<Blueprint>();
             yield return stateContinue;
 
             while (true)
             {
-                foreach (KeyValuePair<string, Blueprint> kvp in blueprintList)
+                PopulateClassList(bpList, blueprintList.Values);
+                foreach (Blueprint blueprint in bpList)
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    if (GetDefinition(out definition, $"{kvp.Value.typeID}/{kvp.Value.subtypeID}"))
+                    if (GetDefinition(out definition, $"{blueprint.typeID}/{blueprint.subtypeID}"))
                     {
                         excessQueued = Math.Floor(definition.currentExcessAssembly);
                         if (excessQueued > zero)
-                            while (!RemoveBlueprint(kvp.Value, excessQueued))
+                            while (!RemoveBlueprint(blueprint, excessQueued))
                                 yield return stateActive;
                     }
                 }
@@ -3049,19 +3062,21 @@ namespace IngameScript
         {
             ItemDefinition definition;
             double excessQueued;
+            List<Blueprint> bpList = new List<Blueprint>();
             yield return stateContinue;
 
             while (true)
             {
-                foreach (KeyValuePair<string, Blueprint> kvp in blueprintList)
+                PopulateClassList(bpList, blueprintList.Values);
+                foreach (Blueprint blueprint in bpList)
                 {
                     if (PauseTickRun) yield return stateActive;
 
-                    if (GetDefinition(out definition, $"{kvp.Value.typeID}/{kvp.Value.subtypeID}"))
+                    if (GetDefinition(out definition, $"{blueprint.typeID}/{blueprint.subtypeID}"))
                     {
                         excessQueued = Math.Floor(definition.currentExcessDisassembly);
                         if (excessQueued > zero)
-                            while (!RemoveBlueprint(kvp.Value, excessQueued, disassemblyMode))
+                            while (!RemoveBlueprint(blueprint, excessQueued, disassemblyMode))
                                 yield return stateActive;
                     }
                 }
@@ -4319,133 +4334,131 @@ namespace IngameScript
                     prioritySystemActivated = prioritySystemActivated || currentPriority;
                     currentDefinition.isGravelSifter = IsGravelSifter(currentBlock);
 
-                    if (!(IsPanelProvider(currentBlock)) || currentBlock is IMyShipController) //Process non-panel blocks
+                    //Index automated blocks
+                    if (!currentDefinition.Settings.manual)
                     {
-                        //Index automated blocks
-                        if (!currentDefinition.Settings.manual)
+                        if (currentDefinition.isGravelSifter)
                         {
-                            if (currentDefinition.isGravelSifter)
+                            typedIndexes[setKeyIndexGravelSifters].Add(index);
+                            if (currentPriority)
+                                priorityTypes.Add(setKeyIndexGravelSifters);
+                        }
+                        else if (IsGun(currentDefinition))
+                        {
+                            typedIndexes[setKeyIndexGun].Add(index);
+                            if (currentPriority)
+                                priorityTypes.Add(setKeyIndexGun);
+                        }
+                        else if (currentBlock is IMyAssembler)
+                        {
+                            typedIndexes[setKeyIndexAssemblers].Add(index);
+                            if (currentPriority)
+                                priorityTypes.Add(setKeyIndexAssemblers);
+                            if (currentDefinition.monitoredAssembler == null)
+                                currentDefinition.monitoredAssembler = new MonitoredAssembler { assembler = (IMyAssembler)currentBlock };
+                        }
+                        else if (currentBlock is IMyGasGenerator)
+                        {
+                            typedIndexes[setKeyIndexGasGenerators].Add(index);
+                            if (currentPriority)
+                                priorityTypes.Add(setKeyIndexGasGenerators);
+                        }
+                        else if (currentBlock is IMyGasTank)
+                        {
+                            if (ContainsString(BlockSubtype(currentBlock), "hydrogen"))
                             {
-                                typedIndexes[setKeyIndexGravelSifters].Add(index);
+                                typedIndexes[setKeyIndexHydrogenTank].Add(index);
                                 if (currentPriority)
-                                    priorityTypes.Add(setKeyIndexGravelSifters);
+                                    priorityTypes.Add(setKeyIndexHydrogenTank);
                             }
-                            else if (IsGun(currentDefinition))
+                            else
                             {
-                                typedIndexes[setKeyIndexGun].Add(index);
+                                typedIndexes[setKeyIndexOxygenTank].Add(index);
                                 if (currentPriority)
-                                    priorityTypes.Add(setKeyIndexGun);
-                            }
-                            else if (currentBlock is IMyAssembler)
-                            {
-                                typedIndexes[setKeyIndexAssemblers].Add(index);
-                                if (currentPriority)
-                                    priorityTypes.Add(setKeyIndexAssemblers);
-                                if (currentDefinition.monitoredAssembler == null)
-                                    currentDefinition.monitoredAssembler = new MonitoredAssembler { assembler = (IMyAssembler)currentBlock };
-                            }
-                            else if (currentBlock is IMyGasGenerator)
-                            {
-                                typedIndexes[setKeyIndexGasGenerators].Add(index);
-                                if (currentPriority)
-                                    priorityTypes.Add(setKeyIndexGasGenerators);
-                            }
-                            else if (currentBlock is IMyGasTank)
-                            {
-                                if (ContainsString(BlockSubtype(currentBlock), "hydrogen"))
-                                {
-                                    typedIndexes[setKeyIndexHydrogenTank].Add(index);
-                                    if (currentPriority)
-                                        priorityTypes.Add(setKeyIndexHydrogenTank);
-                                }
-                                else
-                                {
-                                    typedIndexes[setKeyIndexOxygenTank].Add(index);
-                                    if (currentPriority)
-                                        priorityTypes.Add(setKeyIndexOxygenTank);
-                                }
-                            }
-                            else if (currentBlock is IMyParachute)
-                            {
-                                typedIndexes[setKeyIndexParachute].Add(index);
-                                if (currentPriority)
-                                    priorityTypes.Add(setKeyIndexParachute);
-                            }
-                            else if (currentBlock is IMyReactor)
-                            {
-                                typedIndexes[setKeyIndexReactor].Add(index);
-                                if (currentPriority)
-                                    priorityTypes.Add(setKeyIndexReactor);
-                            }
-                            else if (currentBlock is IMyRefinery)
-                            {
-                                typedIndexes[setKeyIndexRefinery].Add(index);
-                                if (currentPriority)
-                                    priorityTypes.Add(setKeyIndexRefinery);
-                            }
-                            if (currentDefinition.Settings.GetOption(BlockOptions.Storage))
-                            {
-                                typedIndexes[setKeyIndexStorage].Add(index);
-                                if (currentPriority)
-                                    priorityCategories.Add(setKeyIndexStorage);
-                                storeAllCategories = currentDefinition.Settings.storageCategories.Where(x => IsWildCard(x)).Count() > 0;
-                                foreach (KeyValuePair<string, LongListPlus> pair in indexesStorageLists)
-                                {
-                                    if (PauseTickRun) yield return stateActive;
-                                    if (storeAllCategories || currentDefinition.Settings.storageCategories.Contains(pair.Key, stringComparer))
-                                    {
-                                        pair.Value.Add(index);
-                                        if (currentPriority)
-                                            priorityCategories.Add(pair.Key);
-                                    }
-                                }
+                                    priorityTypes.Add(setKeyIndexOxygenTank);
                             }
                         }
-                        //Index blocks with inventories
-                        if (currentDefinition.HasInventory)
+                        else if (currentBlock is IMyParachute)
                         {
-                            typedIndexes[setKeyIndexInventory].Add(index);
+                            typedIndexes[setKeyIndexParachute].Add(index);
                             if (currentPriority)
-                                priorityTypes.Add(setKeyIndexInventory);
-                            emptyLoadout = currentDefinition.Settings.loadout.Count == 0 && !currentDefinition.Settings.manual;
-                            if (IsGun(currentDefinition) || currentBlock is IMyReactor)
+                                priorityTypes.Add(setKeyIndexParachute);
+                        }
+                        else if (currentBlock is IMyReactor)
+                        {
+                            typedIndexes[setKeyIndexReactor].Add(index);
+                            if (currentPriority)
+                                priorityTypes.Add(setKeyIndexReactor);
+                        }
+                        else if (currentBlock is IMyRefinery)
+                        {
+                            typedIndexes[setKeyIndexRefinery].Add(index);
+                            if (currentPriority)
+                                priorityTypes.Add(setKeyIndexRefinery);
+                        }
+                        if (currentDefinition.Settings.GetOption(BlockOptions.Storage))
+                        {
+                            typedIndexes[setKeyIndexStorage].Add(index);
+                            if (currentPriority)
+                                priorityCategories.Add(setKeyIndexStorage);
+                            storeAllCategories = currentDefinition.Settings.storageCategories.Where(x => IsWildCard(x)).Count() > 0;
+                            foreach (KeyValuePair<string, LongListPlus> pair in indexesStorageLists)
                             {
-                                blockDef = BlockSubtype(currentBlock);
-                                if (currentDefinition.Input.ItemCount > 0)
-                                    oneItemBlockDictionary[blockDef] = ((MyInventoryItem)currentDefinition.Input.GetItemAt(0)).Type;
-                                if (!isClone && emptyLoadout && oneItemBlockDictionary.ContainsKey(blockDef))
-                                    currentDefinition.Settings.loadout.AddItem(oneItemBlockDictionary[blockDef], new VariableItemCount(DefaultMax(oneItemBlockDictionary[blockDef], currentDefinition)));
+                                if (PauseTickRun) yield return stateActive;
+                                if (storeAllCategories || currentDefinition.Settings.storageCategories.Contains(pair.Key, stringComparer))
+                                {
+                                    pair.Value.Add(index);
+                                    if (currentPriority)
+                                        priorityCategories.Add(pair.Key);
+                                }
                             }
-                            if (!isClone && currentBlock is IMyParachute && emptyLoadout)
-                                currentDefinition.Settings.loadout.AddItem($"{componentType}/{canvasType}", new VariableItemCount(DefaultMax(componentType, canvasType, currentDefinition)));
-
-                            if (currentDefinition.Settings.loadout.Count > 0)
-                            {
-                                typedIndexes[setKeyIndexLoadout].Add(index);
-                                if (addLoadoutsToQuota && !currentDefinition.Settings.GetOption(BlockOptions.NoCountLoadout))
-                                    itemCollectionProcessTotalLoadout.AddCollectionConverted(currentDefinition.Settings.loadout, currentDefinition.Block);
-                                if (currentPriority)
-                                    priorityTypes.Add(setKeyIndexLoadout);
-                            }
-                            if (currentDefinition.Settings.limits.Count > 0)
-                            {
-                                if (currentPriority)
-                                    priorityTypes.Add(setKeyIndexLimit);
-                                typedIndexes[setKeyIndexLimit].Add(index);
-                            }
-                            if ((!currentDefinition.Settings.manual || currentDefinition.Settings.GetOption(BlockOptions.RemoveInput) || currentDefinition.Settings.GetOption(BlockOptions.RemoveOutput)) && !(currentDefinition.Settings.GetOption(BlockOptions.KeepInput) && currentDefinition.Settings.GetOption(BlockOptions.KeepOutput)))
-                                for (int i = 0; i < currentDefinition.Block.InventoryCount; i++)
-                                    if (Sortable(currentDefinition, i))
-                                    {
-                                        typedIndexes[setKeyIndexSortable].Add(index);
-                                        if (currentPriority)
-                                            priorityTypes.Add(setKeyIndexSortable);
-                                        break;
-                                    }
-                            if (conveyorControl)
-                                ConveyorControl(currentDefinition);
                         }
                     }
+                    //Index blocks with inventories
+                    if (currentDefinition.HasInventory)
+                    {
+                        typedIndexes[setKeyIndexInventory].Add(index);
+                        if (currentPriority)
+                            priorityTypes.Add(setKeyIndexInventory);
+                        emptyLoadout = currentDefinition.Settings.loadout.Count == 0 && !currentDefinition.Settings.manual;
+                        if (IsGun(currentDefinition) || currentBlock is IMyReactor)
+                        {
+                            blockDef = BlockSubtype(currentBlock);
+                            if (currentDefinition.Input.ItemCount > 0)
+                                oneItemBlockDictionary[blockDef] = ((MyInventoryItem)currentDefinition.Input.GetItemAt(0)).Type;
+                            if (!isClone && emptyLoadout && oneItemBlockDictionary.ContainsKey(blockDef))
+                                currentDefinition.Settings.loadout.AddItem(oneItemBlockDictionary[blockDef], new VariableItemCount(DefaultMax(oneItemBlockDictionary[blockDef], currentDefinition)));
+                        }
+                        if (!isClone && currentBlock is IMyParachute && emptyLoadout)
+                            currentDefinition.Settings.loadout.AddItem($"{componentType}/{canvasType}", new VariableItemCount(DefaultMax(componentType, canvasType, currentDefinition)));
+
+                        if (currentDefinition.Settings.loadout.Count > 0)
+                        {
+                            typedIndexes[setKeyIndexLoadout].Add(index);
+                            if (addLoadoutsToQuota && !currentDefinition.Settings.GetOption(BlockOptions.NoCountLoadout))
+                                itemCollectionProcessTotalLoadout.AddCollectionConverted(currentDefinition.Settings.loadout, currentDefinition.Block);
+                            if (currentPriority)
+                                priorityTypes.Add(setKeyIndexLoadout);
+                        }
+                        if (currentDefinition.Settings.limits.Count > 0)
+                        {
+                            if (currentPriority)
+                                priorityTypes.Add(setKeyIndexLimit);
+                            typedIndexes[setKeyIndexLimit].Add(index);
+                        }
+                        if ((!currentDefinition.Settings.manual || currentDefinition.Settings.GetOption(BlockOptions.RemoveInput) || currentDefinition.Settings.GetOption(BlockOptions.RemoveOutput)) && !(currentDefinition.Settings.GetOption(BlockOptions.KeepInput) && currentDefinition.Settings.GetOption(BlockOptions.KeepOutput)))
+                            for (int i = 0; i < currentDefinition.Block.InventoryCount; i++)
+                                if (Sortable(currentDefinition, i))
+                                {
+                                    typedIndexes[setKeyIndexSortable].Add(index);
+                                    if (currentPriority)
+                                        priorityTypes.Add(setKeyIndexSortable);
+                                    break;
+                                }
+                        if (conveyorControl)
+                            ConveyorControl(currentDefinition);
+                    }
+
                     if (currentBlock is IMyTextPanel || (IsPanelProvider(currentBlock) && ContainsString(currentBlock.CustomName, panelTag)))
                     {
                         provider = (IMyTextSurfaceProvider)currentBlock;
@@ -4783,7 +4796,7 @@ namespace IngameScript
 
         bool IsGravelSifter(IMyTerminalBlock block) => settingsListsStrings[setKeyGravelSifterKeys].Contains(BlockSubtype(block).ToLower());
 
-        static string PositionPrefix(string prefix, string input) => $"Position{prefix}_{input}";
+        static string PositionPrefix(string prefix, string input) => $"Position{prefix.PadLeft(4, '0')}_{input}";
 
         bool IsPanelProvider(IMyTerminalBlock block) => block is IMyTextSurfaceProvider && ((IMyTextSurfaceProvider)block).SurfaceCount > 0;
 
@@ -4805,7 +4818,8 @@ namespace IngameScript
                 IsComponent(typeID) ? componentKeyword :
                 IsIngot(typeID) ? ingotKeyword :
                 IsOre(typeID) ? oreKeyword :
-                IsTool(typeID) ? toolKeyword : typeID;
+                IsTool(typeID) ? toolKeyword :
+                IsConsumable(typeID) ? consumableKeyword : typeID;
         }
 
         string GetItemCategory(MyInventoryItem item) => GetItemCategory($"{item.Type}");
@@ -4855,7 +4869,12 @@ namespace IngameScript
             return false;
         }
 
-        string AutoMatchNormalize(string source) => source.ToLower().Replace("component", "").Replace("magazine", "").Replace("blueprint", "").Replace("tier", "t").Replace("hydrogen", "hydro").Replace("thruster", "thrust");
+        string AutoMatchNormalize(string source)
+        {
+            string normalized = source.ToLower().Replace("component", "").Replace("magazine", "").Replace("blueprint", "").Replace("tier", "t").Replace("hydrogen", "hydro").Replace("thruster", "thrust");
+            //Positionxxxx_
+            return (normalized.Length > 13 && normalized.StartsWith("position") && normalized[12] == '_') ? normalized.Substring(13) : normalized;
+        }
 
         static string Formatted(string text) => text.Length <= 1 ? text.ToUpper() : String.Join(" ", text.Split(' ').Select(x => x.Length <= 1 ? x.ToUpper() : $"{x.Substring(0, 1).ToUpper()}{x.Substring(1)}"));
 
@@ -5319,17 +5338,25 @@ namespace IngameScript
 
         bool IsComponent(string typeID) => IsWildCard(typeID) || StringsMatch(typeID, componentType) || StringsMatch(typeID, componentKeyword) || (typeID.Length > 1 && LeadsString(componentKeyword, typeID));
 
-        bool IsTool(string typeID) => IsWildCard(typeID) || StringsMatch(typeID, toolType) || IsBottle(typeID) || StringsMatch(typeID, dataPadType) || StringsMatch(typeID, consumableType) || StringsMatch(typeID, physicalObjectType) || StringsMatch(typeID, toolKeyword) ||
+        bool IsTool(string typeID) => IsWildCard(typeID) || StringsMatch(typeID, toolType) || IsBottle(typeID) || StringsMatch(typeID, dataPadType) || StringsMatch(typeID, physicalObjectType) || StringsMatch(typeID, toolKeyword) ||
                 (
                     typeID.Length > 1 &&
                     (
                         LeadsString(toolType, typeID) ||
                         LeadsString(dataPadType, typeID) ||
-                        LeadsString(consumableType, typeID) ||
                         LeadsString(physicalObjectType, typeID) ||
                         LeadsString(toolKeyword, typeID)
                     )
                 );
+
+        bool IsConsumable(string typeID) => IsWildCard(typeID) || StringsMatch(typeID, consumableType) || StringsMatch(typeID, seedItemType) ||
+            (
+                typeID.Length > 1 &&
+                (
+                    LeadsString(consumableType, typeID) ||
+                    LeadsString(seedItemType, typeID)
+                )
+            );
 
         bool EndsString(string whole, string end) => RemoveSpaces(whole, true).EndsWith(RemoveSpaces(end, true));
 
@@ -5415,20 +5442,17 @@ namespace IngameScript
 
         static string ShortNumberAbs2(double number, List<string> suffixes, int decimals)
         {
-            double divisor = 1, currentNumber = Math.Abs(number);
-            int index = -1, highestIndex = -1;
+            int highestIndex = -1;
+            for (int i = suffixes.Count - 1; i >= 0; i--)
+                if (number % Math.Pow(1000, i + 1) < number && TextHasLength(suffixes[i]))
+                {
+                    highestIndex = i;
+                    break;
+                }
 
-            while (number >= divisor * 1000.0 && index + 1 < suffixes.Count)
-            {
-                divisor *= 1000.0;
-                index++;
-                if (TextHasLength(suffixes[index]))
-                    highestIndex = index;
-            }
+            number = Math.Abs(number) / Math.Pow(1000, highestIndex + 1);
 
-            currentNumber /= Math.Pow(1000, highestIndex + 1);
-
-            return highestIndex >= 0 ? $"{TruncateNumber(currentNumber, decimals)}{suffixes[highestIndex]}" : TruncateNumber(currentNumber, decimals);
+            return highestIndex >= 0 ? $"{TruncateNumber(number, decimals)}{suffixes[highestIndex]}" : TruncateNumber(number, decimals);
         }
 
         string ShortNumber2(double number, int decimals = 2, int padding = 0, bool left = true) => ShortNumber2(number, settingsListsStrings[setKeyDefaultSuffixes], decimals, padding, left);
