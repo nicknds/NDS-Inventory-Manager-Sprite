@@ -410,7 +410,7 @@ namespace IngameScript
                 while (true)
                 {
                     // Populate temporary list
-                    PopulateClassList(items, tempManagerPanelDefinition.PanelSettings.Items.ItemList.Values.Select(b => b.ItemReference));
+                    PopulateList(items, tempManagerPanelDefinition.PanelSettings.Items.ItemList.Values.Select(b => b.ItemReference));
 
                     // Filters
                     belowQuota = tempManagerPanelDefinition.PanelSettings.Options.Contains(PanelOptions.BelowQuota);
@@ -529,7 +529,7 @@ namespace IngameScript
                         GenerateText(parent.errorFilter ? $"Errors:     {ShortNumber2(parent.currentErrorCount, suffixes, 0, 6)} of {ShortNumber2(parent.totalErrorCount, suffixes, 0, 6)}" : $"Status:  {ShortNumber2(parent.scriptHealth, suffixes, 3, 6)}%")
                     });
 
-                    PopulateClassList(tempOutputList, parent.errorFilter ? parent.outputErrorList : parent.outputList);
+                    PopulateList(tempOutputList, parent.errorFilter ? parent.outputErrorList : parent.outputList);
                     foreach (OutputObject outputObject in tempOutputList)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -581,7 +581,7 @@ namespace IngameScript
                     assemblyList.Clear();
                     disassemblyList.Clear();
                     // Check assemblers
-                    PopulateStructList(tempIndices, typedIndexes[setKeyIndexAssemblers]);
+                    PopulateList(tempIndices, typedIndexes[setKeyIndexAssemblers]);
                     foreach (long index in tempIndices)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -613,7 +613,7 @@ namespace IngameScript
                     assembling = idle = disabled = 0;
                     assemblyList.Clear();
                     // Check refineries
-                    PopulateStructList(tempIndices, typedIndexes[setKeyIndexRefinery]);
+                    PopulateList(tempIndices, typedIndexes[setKeyIndexRefinery]);
                     foreach (long index in tempIndices)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -637,7 +637,7 @@ namespace IngameScript
                     assembling = idle = disabled = 0;
                     assemblyList.Clear();
                     // Check h2/o2 generators
-                    PopulateStructList(tempIndices, typedIndexes[setKeyIndexGasGenerators]);
+                    PopulateList(tempIndices, typedIndexes[setKeyIndexGasGenerators]);
                     foreach (long index in tempIndices)
                     {
                         if (PauseTickRun) yield return stateActive;
@@ -687,20 +687,20 @@ namespace IngameScript
                 {
                     GraphicDocument document = new GraphicDocument();
                     document.GraphicObjects[leftAlignment] = new List<GraphicObject>();
-                    PopulateClassList(categories, tempManagerPanelDefinition.PanelSettings.Categories);
+                    PopulateList(categories, tempManagerPanelDefinition.PanelSettings.Categories);
 
                     // Update storage capacities
                     if (Now >= NextStorageTime)
                     {
                         StorageCurrentValues.Clear();
                         StorageMaxValues.Clear();
-                        PopulateClassList(keys, parent.indexesStorageLists.Keys);
+                        PopulateList(keys, parent.indexesStorageLists.Keys);
 
                         foreach (string key in keys)
                         {
                             if (!parent.indexesStorageLists.ContainsKey(key)) continue;
                             current = max = 0;
-                            PopulateStructList(indexes, parent.indexesStorageLists[key]);
+                            PopulateList(indexes, parent.indexesStorageLists[key]);
                             foreach (long index in indexes)
                             {
                                 if (PauseTickRun) yield return stateActive;
@@ -1260,7 +1260,7 @@ namespace IngameScript
                             Parent.Surface.Font = Font;
                         break;
                     case "categories":
-                        PopulateClassList(Categories, data.ToLower().Split('|').OrderBy(b => b));
+                        PopulateList(Categories, data.ToLower().Split('|').OrderBy(b => b));
                         break;
                     case "items":
                         ItemSearchString += $"{(TextHasLength(ItemSearchString) ? "┤" : "")}{data}";
@@ -1294,7 +1294,7 @@ namespace IngameScript
                         MaximumItemValue = Math.Max(0, Math.Max(MaximumItemValue, MinimumItemValue));
                         break;
                     case "number suffixes":
-                        PopulateClassList(Suffixes, data.Split('|'));
+                        PopulateList(Suffixes, data.Split('|'));
                         if (Suffixes.Count == 0) Suffixes = suffixesTemplate.Split('|').ToList();
                         break;
                     case "text color":
