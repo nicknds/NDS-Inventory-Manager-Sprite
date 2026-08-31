@@ -1,4 +1,5 @@
-﻿using Sandbox.ModAPI.Ingame;
+﻿using Sandbox.Graphics.GUI;
+using Sandbox.ModAPI.Ingame;
 using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
 using System.Collections.Generic;
@@ -48,8 +49,6 @@ namespace IngameScript
         double runTimeLimiter { get { return RunTimeLimiter; } set { RunTimeLimiter = value; } }
         double actionPercentage => (double)Runtime.CurrentInstructionCount / (double)Runtime.MaxInstructionCount;
         double runtimePercentage => Math.Min(1, torchAverage / runTimeLimiter);
-
-        int echoDelay => EchoDelay;
 
         static List<long> NewLongList => new List<long>();
         static LongListPlus NewLongListPlus => new LongListPlus();
@@ -536,7 +535,7 @@ namespace IngameScript
             toolKeyword, consumableKeyword, globalFilterKeyword,
             panelTag, optionBlockFilter, itemCategoryString;
 
-        static double settingVersion = 5.32, buildVersion = 292, torchAverage = 0, tickWeight = 0.005;
+        static double settingVersion = 5.32, buildVersion = 293, torchAverage = 0, tickWeight = 0.005;
 
         #endregion
 
@@ -833,7 +832,7 @@ namespace IngameScript
                 echoTicks += updateFrequency;
                 if (echoMode == EchoMode.MergeMenu)
                     MergeCommand(!handledCommand ? argument : "");
-                if (allowEcho && echoTicks >= echoDelay + (overheatTicks > 0 ? overheatTicks / 10 : 0))
+                if (allowEcho && echoTicks >= EchoDelay + (overheatTicks > 0 ? overheatTicks / 10 : 0))
                     try
                     {
                         echoTicks = 0;
@@ -921,7 +920,7 @@ namespace IngameScript
                 for (int i = 0, max = modBlueprintList.Count; i < max; i++)
                     Echo($"{i + 1} : {modBlueprintList[i]}");
 
-                if (modBlueprintList.Count == 0)
+                if (modItemDictionary.Count == 0)
                 {
                     echoMode = EchoMode.Main;
                     mergeItem = "";
@@ -4332,7 +4331,7 @@ namespace IngameScript
                     currentBlock = currentDefinition.Block;
                     currentPriority = currentDefinition.Settings.priority != 1.0;
                     prioritySystemActivated = prioritySystemActivated || currentPriority;
-                    currentDefinition.isGravelSifter = IsGravelSifter(currentBlock);
+                    currentDefinition.isGravelSifter = settingsListsStrings[setKeyGravelSifterKeys].Contains(BlockSubtype(currentBlock).ToLower());
 
                     //Index automated blocks
                     if (!currentDefinition.Settings.manual)
@@ -4794,8 +4793,6 @@ namespace IngameScript
 
         bool SpanElapsed(TimeSpan span) => scriptSpan >= span;
 
-        bool IsGravelSifter(IMyTerminalBlock block) => settingsListsStrings[setKeyGravelSifterKeys].Contains(BlockSubtype(block).ToLower());
-
         static string PositionPrefix(string prefix, string input) => $"Position{prefix.PadLeft(4, '0')}_{input}";
 
         bool IsPanelProvider(IMyTerminalBlock block) => block is IMyTextSurfaceProvider && ((IMyTextSurfaceProvider)block).SurfaceCount > 0;
@@ -4831,14 +4828,16 @@ namespace IngameScript
             if (mergeLengthTolerance < 0)
                 return false;
 
-            string itemSubtype = AutoMatchNormalize(item.Type.SubtypeId), blueprintSubtype;
+            string itemSubtype = AutoMatchNormalize(item.Type.SubtypeId), blueprintSubtype, normalizedBlueprintSubtype;
+            bool alternateBlueprint;
             for (int i = 0; i < modBlueprintList.Count; i++)
             {
                 blueprintSubtype = AutoMatchNormalize(modBlueprintList[i]);
-                if (Math.Abs(blueprintSubtype.Length - itemSubtype.Length) > mergeLengthTolerance)
+                alternateBlueprint = AlternateNormalize(blueprintSubtype, out normalizedBlueprintSubtype) && normalizedBlueprintSubtype.Length > 0;
+                if (Math.Abs(blueprintSubtype.Length - itemSubtype.Length) > mergeLengthTolerance && (!alternateBlueprint || Math.Abs(normalizedBlueprintSubtype.Length - itemSubtype.Length) > mergeLengthTolerance))
                     continue;
 
-                if (LeadsString(itemSubtype, blueprintSubtype) || EndsString(itemSubtype, blueprintSubtype) || LeadsString(blueprintSubtype, itemSubtype) || EndsString(blueprintSubtype, itemSubtype))
+                if (MatchSubtypes(itemSubtype, blueprintSubtype) || (alternateBlueprint && MatchSubtypes(itemSubtype, normalizedBlueprintSubtype)))
                 {
                     matchingKey = modBlueprintList[i];
                     return true;
@@ -4852,15 +4851,17 @@ namespace IngameScript
             if (mergeLengthTolerance < 0)
                 return false;
 
-            string itemSubtype, blueprintSubtype = AutoMatchNormalize(BlueprintSubtype(blueprint)), subtypeID, typeID;
+            string itemSubtype, blueprintSubtype = AutoMatchNormalize(BlueprintSubtype(blueprint)), normalizedBlueprintSubtype, subtypeID, typeID;
+            bool alternateBlueprint = AlternateNormalize(blueprintSubtype, out normalizedBlueprintSubtype) && normalizedBlueprintSubtype.Length > 0;
+
             for (int i = 0; i < modItemDictionary.Count; i++)
             {
                 SplitID(modItemDictionary.Keys[i], out typeID, out subtypeID);
                 itemSubtype = AutoMatchNormalize(subtypeID);
-                if (Math.Abs(blueprintSubtype.Length - itemSubtype.Length) > mergeLengthTolerance)
+                if (Math.Abs(blueprintSubtype.Length - itemSubtype.Length) > mergeLengthTolerance && (!alternateBlueprint || Math.Abs(normalizedBlueprintSubtype.Length - itemSubtype.Length) > mergeLengthTolerance))
                     continue;
 
-                if (LeadsString(itemSubtype, blueprintSubtype) || EndsString(itemSubtype, blueprintSubtype) || LeadsString(blueprintSubtype, itemSubtype) || EndsString(blueprintSubtype, itemSubtype))
+                if (MatchSubtypes(itemSubtype, blueprintSubtype) || (alternateBlueprint && MatchSubtypes(itemSubtype, normalizedBlueprintSubtype)))
                 {
                     matchingKey = modItemDictionary.Keys[i];
                     return true;
@@ -4869,11 +4870,30 @@ namespace IngameScript
             return false;
         }
 
+        bool MatchSubtypes(string subtypeA, string subtypeB)
+        {
+            return LeadsString(subtypeA, subtypeB) || EndsString(subtypeA, subtypeB) ||
+                   LeadsString(subtypeB, subtypeA) || EndsString(subtypeB, subtypeA);
+        }
+
         string AutoMatchNormalize(string source)
         {
             string normalized = source.ToLower().Replace("component", "").Replace("magazine", "").Replace("blueprint", "").Replace("tier", "t").Replace("hydrogen", "hydro").Replace("thruster", "thrust");
             //Positionxxxx_
             return (normalized.Length > 13 && normalized.StartsWith("position") && normalized[12] == '_') ? normalized.Substring(13) : normalized;
+        }
+
+        bool AlternateNormalize(string source, out string normalized)
+        {
+            int index = source.LastIndexOf("_");
+
+            if (index != -1 && source.Length > index + 1)
+            {
+                normalized = source.Substring(index + 1);
+                return true;
+            }
+            normalized = "";
+            return false;
         }
 
         static string Formatted(string text) => text.Length <= 1 ? text.ToUpper() : String.Join(" ", text.Split(' ').Select(x => x.Length <= 1 ? x.ToUpper() : $"{x.Substring(0, 1).ToUpper()}{x.Substring(1)}"));
@@ -6067,7 +6087,6 @@ namespace IngameScript
 
 
         #region Classes
-
 
         public class FunctionCollection
         {
