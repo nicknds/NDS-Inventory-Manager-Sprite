@@ -421,7 +421,7 @@ namespace IngameScript
                     for (int i = 0; i < items.Count; i += 0)
                     {
                         if (PauseTickRun) yield return stateActive;
-                        if ((belowQuota && items[i].amount >= items[i].currentQuota) ||
+                        if (!items[i].display || (belowQuota && items[i].amount >= items[i].currentQuota) ||
                             items[i].amount < minValue ||
                             items[i].amount > maxValue ||
                             (hasActivity && items[i].amountDifference == zero))
@@ -512,19 +512,22 @@ namespace IngameScript
                     document.GraphicObjects[leftAlignment] = new List<GraphicObject>();
                     document.GraphicObjects[rightAlignment] = new List<GraphicObject>();
 
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"NDS Inventory Manager v{buildVersion}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"{parent.currentMajorFunction}".Replace("_", " ")));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Runtime:    {parent.ShortMSTime(torchAverage)}"));
-                    document.GraphicObjects[leftAlignment].Add(GeneratePerformance);
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Blocks:     {ShortNumber2(parent.managedBlocks.Count, suffixes)}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Storages:   {ShortNumber2(typedIndexes[setKeyIndexStorage].Count, suffixes)}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Assemblers: {ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, suffixes)}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"H2/O2 Gens: {ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, suffixes)}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Refineries: {ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, suffixes)}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"H/O Tanks:  {ShortNumber2(typedIndexes[setKeyIndexHydrogenTank].Count, suffixes)}/{ShortNumber2(typedIndexes[setKeyIndexOxygenTank].Count, suffixes)}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Weapons:    {ShortNumber2(typedIndexes[setKeyIndexGun].Count, suffixes)}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($"Reactors:   {ShortNumber2(typedIndexes[setKeyIndexReactor].Count, suffixes)}"));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText(parent.errorFilter ? $"Errors:     {ShortNumber2(parent.currentErrorCount, suffixes, 0, 6)} of {ShortNumber2(parent.totalErrorCount, suffixes, 0, 6)}" : $"Status:  {ShortNumber2(parent.scriptHealth, suffixes, 3, 6)}%"));
+                    document.GraphicObjects[leftAlignment].AddArray(new GraphicObject[]
+                    {
+                        GenerateText($"NDS Inventory Manager v{buildVersion}"),
+                        GenerateText($"{parent.currentMajorFunction}".Replace("_", " ")),
+                        GenerateText($"Runtime:    {parent.ShortMSTime(torchAverage)}"),
+                        GeneratePerformance,
+                        GenerateText($"Blocks:     {ShortNumber2(parent.managedBlocks.Count, suffixes)}"),
+                        GenerateText($"Storages:   {ShortNumber2(typedIndexes[setKeyIndexStorage].Count, suffixes)}"),
+                        GenerateText($"Assemblers: {ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, suffixes)}"),
+                        GenerateText($"H2/O2 Gens: {ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, suffixes)}"),
+                        GenerateText($"Refineries: {ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, suffixes)}"),
+                        GenerateText($"H/O Tanks:  {ShortNumber2(typedIndexes[setKeyIndexHydrogenTank].Count, suffixes)}/{ShortNumber2(typedIndexes[setKeyIndexOxygenTank].Count, suffixes)}"),
+                        GenerateText($"Weapons:    {ShortNumber2(typedIndexes[setKeyIndexGun].Count, suffixes)}"),
+                        GenerateText($"Reactors:   {ShortNumber2(typedIndexes[setKeyIndexReactor].Count, suffixes)}"),
+                        GenerateText(parent.errorFilter ? $"Errors:     {ShortNumber2(parent.currentErrorCount, suffixes, 0, 6)} of {ShortNumber2(parent.totalErrorCount, suffixes, 0, 6)}" : $"Status:  {ShortNumber2(parent.scriptHealth, suffixes, 3, 6)}%")
+                    });
 
                     PopulateClassList(tempOutputList, parent.errorFilter ? parent.outputErrorList : parent.outputList);
                     foreach (OutputObject outputObject in tempOutputList)
@@ -585,10 +588,15 @@ namespace IngameScript
                         BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
                     }
                     // Generate assembler output
-                    document.GraphicObjects[leftAlignment].Add(GenerateText(BlockStatusTitle($"Assemblers x{ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, suffixes, decimals, 4, false)}", disabled).PadRight(nameLength)));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Assembling:    {ShortNumber2(assembling, suffixes, decimals, 4)}".PadRight(nameLength)));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Disassembling: {ShortNumber2(disassembling, suffixes, decimals, 4)}".PadRight(nameLength)));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Idle:          {ShortNumber2(idle, suffixes, decimals, 4)}".PadRight(nameLength)));
+
+                    document.GraphicObjects[leftAlignment].AddArray(new GraphicObject[]
+                    {
+                        GenerateText(BlockStatusTitle($"Assemblers x{ShortNumber2(typedIndexes[setKeyIndexAssemblers].Count, suffixes, decimals, 4, false)}", disabled).PadRight(nameLength)),
+                        GenerateText($" Assembling:    {ShortNumber2(assembling, suffixes, decimals, 4)}".PadRight(nameLength)),
+                        GenerateText($" Disassembling: {ShortNumber2(disassembling, suffixes, decimals, 4)}".PadRight(nameLength)),
+                        GenerateText($" Idle:          {ShortNumber2(idle, suffixes, decimals, 4)}".PadRight(nameLength))
+                    });
+
                     // Generate assembler details
                     foreach (KeyValuePair<string, int> kvp in assemblyList)
                     {
@@ -612,9 +620,12 @@ namespace IngameScript
                         BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
                     }
                     // Generate refinery output
-                    document.GraphicObjects[leftAlignment].Add(GenerateText(BlockStatusTitle($"Refineries x{ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, suffixes, decimals, 4, false)}", disabled).PadRight(nameLength)));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Refining:      {ShortNumber2(assembling, suffixes, decimals, 4)}".PadRight(nameLength)));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Idle:          {ShortNumber2(idle, suffixes, decimals, 4)}".PadRight(nameLength)));
+                    document.GraphicObjects[leftAlignment].AddArray(new GraphicObject[]
+                    {
+                        GenerateText(BlockStatusTitle($"Refineries x{ShortNumber2(typedIndexes[setKeyIndexRefinery].Count, suffixes, decimals, 4, false)}", disabled).PadRight(nameLength)),
+                        GenerateText($" Refining:      {ShortNumber2(assembling, suffixes, decimals, 4)}".PadRight(nameLength)),
+                        GenerateText($" Idle:          {ShortNumber2(idle, suffixes, decimals, 4)}".PadRight(nameLength))
+                    });
                     // Generate refinery details
                     foreach (KeyValuePair<string, int> kvp in assemblyList)
                     {
@@ -633,9 +644,12 @@ namespace IngameScript
                         BlockStatus(index, ref assembling, ref disassembling, ref idle, ref disabled, assemblyList, disassemblyList);
                     }
                     // Generate h2/o2 output
-                    document.GraphicObjects[leftAlignment].Add(GenerateText(BlockStatusTitle($"O2/H2 Gens x{ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, suffixes, decimals, 4, false)}", disabled).PadRight(nameLength)));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Active:        {ShortNumber2(assembling, suffixes, decimals, 4)}".PadRight(nameLength)));
-                    document.GraphicObjects[leftAlignment].Add(GenerateText($" Idle:          {ShortNumber2(idle, suffixes, decimals, 4)}".PadRight(nameLength)));
+                    document.GraphicObjects[leftAlignment].AddArray(new GraphicObject[]
+                    {
+                        GenerateText(BlockStatusTitle($"O2/H2 Gens x{ShortNumber2(typedIndexes[setKeyIndexGasGenerators].Count, suffixes, decimals, 4, false)}", disabled).PadRight(nameLength)),
+                        GenerateText($" Active:        {ShortNumber2(assembling, suffixes, decimals, 4)}".PadRight(nameLength)),
+                        GenerateText($" Idle:          {ShortNumber2(idle, suffixes, decimals, 4)}".PadRight(nameLength))
+                    });
                     // Generate h2/o2 details
                     foreach (KeyValuePair<string, int> kvp in assemblyList)
                     {
@@ -1007,7 +1021,7 @@ namespace IngameScript
             GraphicElement ProgressBarFront(float percent, float width, float height, float x, float y, bool invertColor = false) =>
                 new GraphicElement(
                     "SquareSimple",
-                    invertColor ? new Color ((int)(230.0 * Math.Min(1f, percent)), (int)(230.0 * (1f - Math.Min(1f, percent))), 0, 220) : new Color((int)(230.0 * (1f - Math.Min(1f, percent))), (int)(230.0 * Math.Min(1f, percent)), 0, 220),
+                    invertColor ? new Color((int)(230.0 * Math.Min(1f, percent)), (int)(230.0 * (1f - Math.Min(1f, percent))), 0, 220) : new Color((int)(230.0 * (1f - Math.Min(1f, percent))), (int)(230.0 * Math.Min(1f, percent)), 0, 220),
                     width * Math.Min(1f, percent),
                     height,
                     x,
